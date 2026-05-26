@@ -1,0 +1,223 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { format } from 'date-fns';
+import { AdminStackParamList } from '../../navigation/types';
+import { supabase } from '../../lib/supabase';
+import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
+import Avatar from '../../components/ui/Avatar';
+import EmptyState from '../../components/ui/EmptyState';
+
+interface UserRow {
+  id: string;
+  full_name: string | null;
+  email: string;
+  role: string;
+  avatar_url: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+type NavProp = NativeStackNavigationProp<AdminStackParamList>;
+
+export default function ManageUsersScreen() {
+  const navigation = useNavigation<NavProp>();
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [filtered, setFiltered] = useState<UserRow[]>([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [roleFilter, setRoleFilter] = useState<'all' | 'customer' | 'provider' | 'admin'>('all');
+
+  const fetchUsers = useCallback(async () => {
+    const { data } = await supabase
+      .from('users')
+      .select('id, full_name, email, role, avatar_url, is_active, created_at')
+      .order('created_at', { ascending: false });
+    setUsers(data ?? []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  useEffect(() => {
+    let list = users;
+    if (roleFilter !== 'all') list = list.filter((u) => u.role === roleFilter);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (u) => u.full_name?.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+      );
+    }
+    setFiltered(list);
+  }, [users, search, roleFilter]);
+
+  const handleToggleActive = (user: UserRow) => {
+    const action = user.is_active ? 'Deactivate' : 'Activate';
+    Alert.alert(`${action} User`, `${action} ${user.full_name ?? user.email}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: action,
+        style: user.is_active ? 'destructive' : 'default',
+        onPress: async () => {
+          await supabase.from('users').update({ is_active: !user.is_active }).eq('id', user.id);
+          fetchUsers();
+        },
+      },
+    ]);
+  };
+
+  const ROLE_FILTERS = [
+    { label: 'All', value: 'all' as const },
+    { label: 'Customers', value: 'customer' as const },
+    { label: 'Providers', value: 'provider' as const },
+    { label: 'Admins', value: 'admin' as const },
+  ];
+
+  const ROLE_COLORS: Record<string, string> = {
+    customer: COLORS.primary,
+    provider: '#8B5CF6',
+    admin: COLORS.error,
+  };
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.topBar}>
+        <Text style={styles.title}>Manage Users</Text>
+      </View>
+
+      {/* Search */}
+      <View style={styles.searchRow}>
+        <Ionicons name="search-outline" size={18} color={COLORS.textLight} style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search users..."
+          placeholderTextColor={COLORS.textLight}
+        />
+      </View>
+
+      {/* Role filter */}
+      <View style={styles.filterRow}>
+        {ROLE_FILTERS.map((f) => (
+          <TouchableOpacity
+            key={f.value}
+            style={[styles.filterTab, roleFilter === f.value && styles.filterTabActive]}
+            onPress={() => setRoleFilter(f.value)}
+          >
+            <Text style={[styles.filterText, roleFilter === f.value && styles.filterTextActive]}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator color={COLORS.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[styles.card, !item.is_active && styles.cardInactive]}
+              onPress={() => navigation.navigate('UserDetail', { userId: item.id })}
+              activeOpacity={0.8}
+            >
+              <Avatar uri={item.avatar_url} name={item.full_name} size={46} />
+              <View style={styles.userInfo}>
+                <Text style={styles.userName} numberOfLines={1}>{item.full_name ?? 'Unknown'}</Text>
+                <Text style={styles.userEmail} numberOfLines={1}>{item.email}</Text>
+                <View style={styles.metaRow}>
+                  <View style={[styles.rolePill, { backgroundColor: (ROLE_COLORS[item.role] ?? COLORS.textLight) + '20' }]}>
+                    <Text style={[styles.roleText, { color: ROLE_COLORS[item.role] ?? COLORS.textLight }]}>
+                      {item.role}
+                    </Text>
+                  </View>
+                  <Text style={styles.joinDate}>
+                    Joined {format(new Date(item.created_at), 'MMM yyyy')}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[styles.toggleBtn, !item.is_active && styles.toggleBtnOff]}
+                onPress={(e) => { e.stopPropagation(); handleToggleActive(item); }}
+              >
+                <Ionicons
+                  name={item.is_active ? 'checkmark-circle' : 'ban-outline'}
+                  size={22}
+                  color={item.is_active ? COLORS.success : COLORS.error}
+                />
+              </TouchableOpacity>
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={
+            <EmptyState
+              icon="people-outline"
+              title="No users found"
+              subtitle="Try adjusting your search or filters"
+            />
+          }
+        />
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: COLORS.background },
+  topBar: { paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
+  title: { fontSize: FONTS.sizes.xxl, fontWeight: '800', color: COLORS.text },
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
+    marginHorizontal: SPACING.md, marginBottom: SPACING.sm,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  searchIcon: { marginLeft: SPACING.md },
+  searchInput: { flex: 1, height: 44, paddingHorizontal: SPACING.sm, fontSize: FONTS.sizes.base, color: COLORS.text },
+  filterRow: { flexDirection: 'row', paddingHorizontal: SPACING.md, gap: SPACING.xs, marginBottom: SPACING.sm },
+  filterTab: {
+    paddingHorizontal: SPACING.md, paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.full, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+  },
+  filterTabActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  filterText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontWeight: '500' },
+  filterTextActive: { color: COLORS.white, fontWeight: '700' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  list: { padding: SPACING.md, gap: SPACING.sm, flexGrow: 1 },
+  card: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
+  },
+  cardInactive: { opacity: 0.6 },
+  userInfo: { flex: 1 },
+  userName: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text },
+  userEmail: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 1 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: 4 },
+  rolePill: { borderRadius: BORDER_RADIUS.full, paddingHorizontal: 8, paddingVertical: 2 },
+  roleText: { fontSize: 10, fontWeight: '700', textTransform: 'capitalize' },
+  joinDate: { fontSize: 10, color: COLORS.textLight },
+  toggleBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: '#D1FAE5', alignItems: 'center', justifyContent: 'center',
+  },
+  toggleBtnOff: { backgroundColor: '#FEE2E2' },
+});
