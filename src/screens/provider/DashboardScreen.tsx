@@ -136,10 +136,10 @@ export default function ProviderDashboard() {
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickRow}>
             {[
-              { label: 'Requests', icon: 'notifications-outline', action: () => navigation.navigate('ProviderTabs', { screen: 'Requests' }) },
-              { label: 'Schedule', icon: 'calendar-outline', action: () => navigation.navigate('ProviderTabs', { screen: 'Schedule' }) },
+              { label: 'Requests', icon: 'notifications-outline', action: () => navigation.getParent()?.navigate('Requests') },
+              { label: 'Schedule', icon: 'calendar-outline', action: () => navigation.getParent()?.navigate('Schedule') },
               { label: 'Services', icon: 'construct-outline', action: () => navigation.navigate('ManageServices') },
-              { label: 'Earnings', icon: 'wallet-outline', action: () => navigation.navigate('ProviderTabs', { screen: 'Earnings' }) },
+              { label: 'Earnings', icon: 'wallet-outline', action: () => navigation.getParent()?.navigate('Earnings') },
             ].map((q) => (
               <TouchableOpacity
                 key={q.label}
@@ -157,7 +157,7 @@ export default function ProviderDashboard() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Bookings</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('ProviderTabs', { screen: 'Requests' })}>
+            <TouchableOpacity onPress={() => navigation.getParent()?.navigate('Requests')}>
               <Text style={styles.sectionLink}>See all</Text>
             </TouchableOpacity>
           </View>
