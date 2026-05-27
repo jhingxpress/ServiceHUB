@@ -11,10 +11,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
+import { CustomerStackParamList } from '../../navigation/types';
+
+type NavProp = NativeStackNavigationProp<CustomerStackParamList>;
 
 interface MenuItem {
   icon: React.ComponentProps<typeof Ionicons>['name'];
@@ -26,7 +31,28 @@ interface MenuItem {
 
 export default function ProfileScreen() {
   const { user, signOut, updateProfile } = useAuthStore();
+  const navigation = useNavigation<NavProp>();
   const [notifications, setNotifications] = useState(true);
+
+  const kycStatus = (user as any)?.kyc_status ?? 'not_submitted';
+  const kycColors: Record<string, string> = {
+    not_submitted: '#F59E0B',
+    pending: '#3B82F6',
+    approved: COLORS.success,
+    rejected: COLORS.error,
+  };
+  const kycIcons: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
+    not_submitted: 'alert-circle-outline',
+    pending: 'time-outline',
+    approved: 'shield-checkmark',
+    rejected: 'close-circle-outline',
+  };
+  const kycLabels: Record<string, string> = {
+    not_submitted: 'Verify your identity to unlock bookings',
+    pending: 'KYC under review — we\'ll notify you once verified',
+    approved: 'Identity verified',
+    rejected: 'KYC rejected — tap to resubmit',
+  };
 
   const handleChangePhoto = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -105,6 +131,19 @@ export default function ProfileScreen() {
           <Text style={styles.title}>Profile</Text>
         </View>
 
+        {/* KYC Banner */}
+        {kycStatus !== 'approved' && (
+          <TouchableOpacity
+            style={[styles.kycBanner, { backgroundColor: kycColors[kycStatus] + '15', borderColor: kycColors[kycStatus] + '40' }]}
+            onPress={() => navigation.navigate('CustomerKYC')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name={kycIcons[kycStatus]} size={20} color={kycColors[kycStatus]} />
+            <Text style={[styles.kycBannerText, { color: kycColors[kycStatus] }]}>{kycLabels[kycStatus]}</Text>
+            <Ionicons name="chevron-forward" size={16} color={kycColors[kycStatus]} />
+          </TouchableOpacity>
+        )}
+
         {/* Profile card */}
         <View style={styles.profileCard}>
           <TouchableOpacity style={styles.avatarWrap} onPress={handleChangePhoto}>
@@ -182,6 +221,8 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
+  kycBanner: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginHorizontal: SPACING.md, marginBottom: SPACING.sm, padding: SPACING.md, borderRadius: BORDER_RADIUS.xl, borderWidth: 1 },
+  kycBannerText: { flex: 1, fontSize: FONTS.sizes.sm, fontWeight: '600' },
   topBar: { paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
   title: { fontSize: FONTS.sizes.xxl, fontWeight: '800', color: COLORS.text },
   profileCard: {

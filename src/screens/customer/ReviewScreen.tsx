@@ -8,11 +8,14 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
@@ -25,6 +28,8 @@ import { useErrorHandler } from '../../utils/errorHandler';
 type NavProp = NativeStackNavigationProp<CustomerStackParamList>;
 type RouteType = RouteProp<CustomerStackParamList, 'ReviewService'>;
 
+const MAX_PHOTOS = 3;
+
 export default function ReviewScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RouteType>();
@@ -32,7 +37,9 @@ export default function ReviewScreen() {
   const { user } = useAuthStore();
 
   const [rating, setRating] = useState(0);
+  const [title, setTitle] = useState('');
   const [comment, setComment] = useState('');
+  const [photos, setPhotos] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const { showError, showSuccess, showWarning } = useErrorHandler();
 
@@ -50,6 +57,36 @@ export default function ReviewScreen() {
     );
   };
 
+  const pickPhoto = async () => {
+    if (photos.length >= MAX_PHOTOS) {
+      Alert.alert('Limit reached', `You can attach up to ${MAX_PHOTOS} photos.`);
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets[0]?.uri) {
+      setPhotos((prev) => [...prev, result.assets[0].uri]);
+    }
+  };
+
+  const removePhoto = (uri: string) => {
+    setPhotos((prev) => prev.filter((p) => p !== uri));
+  };
+
+  const uploadPhotoAndRecord = async (reviewId: string, uri: string) => {
+    const ext = uri.split('.').pop() ?? 'jpg';
+    const path = `reviews/${reviewId}/${Date.now()}.${ext}`;
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const { error: upErr } = await supabase.storage.from('review-media').upload(path, blob, { contentType: `image/${ext}` });
+    if (upErr) return;
+    const { data } = supabase.storage.from('review-media').getPublicUrl(path);
+    await supabase.from('review_media').insert({ review_id: reviewId, url: data.publicUrl, media_type: 'image' });
+  };
+
   const handleSubmit = async () => {
     if (rating === 0) {
       showWarning('Please select a star rating before submitting.');
@@ -58,14 +95,24 @@ export default function ReviewScreen() {
     if (!user) return;
     setSubmitting(true);
     try {
-      const { error } = await supabase.from('reviews').insert({
-        booking_id: bookingId,
-        provider_id: providerId,
-        customer_id: user.id,
-        rating,
-        comment: comment.trim() || null,
-      });
+      const { data, error } = await supabase
+        .from('reviews')
+        .insert({
+          booking_id: bookingId,
+          provider_id: providerId,
+          customer_id: user.id,
+          rating,
+          title: title.trim() || null,
+          comment: comment.trim() || null,
+        })
+        .select('id')
+        .single();
       if (error) throw error;
+
+      if (data?.id && photos.length > 0) {
+        await Promise.allSettled(photos.map((uri) => uploadPhotoAndRecord(data.id, uri)));
+      }
+
       showSuccess('Review submitted! Thank you for your feedback.');
       navigation.goBack();
     } catch (err) {
@@ -75,12 +122,11 @@ export default function ReviewScreen() {
     }
   };
 
+  const ratingLabels = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent!'];
+
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -101,20 +147,8 @@ export default function ReviewScreen() {
             {/* Star rating */}
             <View style={styles.ratingSection}>
               <Text style={styles.sectionLabel}>Overall Rating</Text>
-              <StarRating
-                rating={rating}
-                size={40}
-                interactive
-                onRate={setRating}
-              />
-              <Text style={styles.ratingLabel}>
-                {rating === 0 && 'Tap to rate'}
-                {rating === 1 && 'Poor'}
-                {rating === 2 && 'Fair'}
-                {rating === 3 && 'Good'}
-                {rating === 4 && 'Very Good'}
-                {rating === 5 && 'Excellent!'}
-              </Text>
+              <StarRating rating={rating} size={40} interactive onRate={setRating} />
+              <Text style={styles.ratingLabel}>{ratingLabels[rating] || 'Tap to rate'}</Text>
             </View>
 
             {/* Aspects */}
@@ -135,8 +169,21 @@ export default function ReviewScreen() {
               </View>
             </View>
 
+            {/* Review title */}
+            <View style={styles.fieldSection}>
+              <Text style={styles.sectionLabel}>Review Title (optional)</Text>
+              <TextInput
+                style={styles.titleInput}
+                value={title}
+                onChangeText={setTitle}
+                placeholder="Sum up your experience in a few words"
+                placeholderTextColor={COLORS.textLight}
+                maxLength={100}
+              />
+            </View>
+
             {/* Comment */}
-            <View style={styles.commentSection}>
+            <View style={styles.fieldSection}>
               <Text style={styles.sectionLabel}>Your Review (optional)</Text>
               <TextInput
                 style={styles.commentInput}
@@ -148,6 +195,30 @@ export default function ReviewScreen() {
                 numberOfLines={5}
                 textAlignVertical="top"
               />
+            </View>
+
+            {/* Photo upload */}
+            <View style={styles.fieldSection}>
+              <View style={styles.photoLabelRow}>
+                <Text style={styles.sectionLabel}>Add Photos (optional)</Text>
+                <Text style={styles.photoCount}>{photos.length}/{MAX_PHOTOS}</Text>
+              </View>
+              <View style={styles.photoRow}>
+                {photos.map((uri) => (
+                  <View key={uri} style={styles.photoThumb}>
+                    <Image source={{ uri }} style={styles.thumbImage} />
+                    <TouchableOpacity style={styles.removeBtn} onPress={() => removePhoto(uri)}>
+                      <Ionicons name="close-circle" size={20} color={COLORS.error} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                {photos.length < MAX_PHOTOS && (
+                  <TouchableOpacity style={styles.addPhotoBtn} onPress={pickPhoto}>
+                    <Ionicons name="camera-outline" size={24} color={COLORS.primary} />
+                    <Text style={styles.addPhotoText}>Add Photo</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
             <Button
@@ -189,7 +260,7 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.xl, padding: SPACING.lg, marginBottom: SPACING.md,
     borderWidth: 1, borderColor: COLORS.border,
   },
-  sectionLabel: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text, marginBottom: SPACING.md },
+  sectionLabel: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text, marginBottom: SPACING.sm },
   ratingLabel: { marginTop: SPACING.sm, fontSize: FONTS.sizes.base, color: COLORS.textSecondary, fontWeight: '500' },
   aspectSection: { marginBottom: SPACING.md },
   aspectRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
@@ -201,11 +272,28 @@ const styles = StyleSheet.create({
   aspectChipActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primaryLight },
   aspectText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, fontWeight: '500' },
   aspectTextActive: { color: COLORS.primary, fontWeight: '700' },
-  commentSection: { marginBottom: SPACING.md },
+  fieldSection: { marginBottom: SPACING.md },
+  titleInput: {
+    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1.5, borderColor: COLORS.border, padding: SPACING.md,
+    fontSize: FONTS.sizes.base, color: COLORS.text, height: 48,
+  },
   commentInput: {
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
     borderWidth: 1.5, borderColor: COLORS.border, padding: SPACING.md,
     fontSize: FONTS.sizes.base, color: COLORS.text, minHeight: 120,
   },
+  photoLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.sm },
+  photoCount: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
+  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  photoThumb: { width: 90, height: 90, borderRadius: BORDER_RADIUS.md, overflow: 'visible' },
+  thumbImage: { width: 90, height: 90, borderRadius: BORDER_RADIUS.md },
+  removeBtn: { position: 'absolute', top: -8, right: -8, backgroundColor: COLORS.background, borderRadius: 10 },
+  addPhotoBtn: {
+    width: 90, height: 90, borderRadius: BORDER_RADIUS.md, borderWidth: 2, borderColor: COLORS.primary,
+    borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primaryLight,
+    gap: 4,
+  },
+  addPhotoText: { fontSize: FONTS.sizes.xs, color: COLORS.primary, fontWeight: '600' },
   submitBtn: { marginBottom: SPACING.xl },
 });

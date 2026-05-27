@@ -95,7 +95,7 @@ export default function BookingHistoryScreen() {
               {item.total_amount && (
                 <>
                   <Text style={styles.dot}>•</Text>
-                  <Text style={styles.amountText}>${item.total_amount}</Text>
+                  <Text style={styles.amountText}>₱{item.total_amount}</Text>
                 </>
               )}
             </View>

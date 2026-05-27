@@ -96,7 +96,7 @@ export default function SearchScreen() {
       </View>
       {item.hourly_rate && (
         <View style={styles.priceCol}>
-          <Text style={styles.price}>${item.hourly_rate}</Text>
+          <Text style={styles.price}>₱{item.hourly_rate}</Text>
           <Text style={styles.priceUnit}>/hr</Text>
         </View>
       )}

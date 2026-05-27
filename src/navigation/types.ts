@@ -20,6 +20,7 @@ export type CustomerStackParamList = {
   BookService: {
     providerId: string;
     serviceId?: string;
+    serviceOptionId?: string;
     serviceName?: string;
     price?: number;
   };
@@ -36,6 +37,7 @@ export type CustomerStackParamList = {
   };
   CategoryList: { categoryId: string; categoryName: string; icon?: string };
   ProviderList: { categoryId?: string; categoryName?: string; search?: string };
+  CustomerKYC: undefined;
 };
 
 export type CustomerTabParamList = {
@@ -56,7 +58,9 @@ export type ProviderStackParamList = {
   };
   ProfileSetup: undefined;
   ManageServices: undefined;
-  AddService: { serviceId?: string };
+  ServiceOptions: { serviceId: string; serviceName: string };
+  ProviderOnboarding: undefined;
+  PendingApproval: undefined;
 };
 
 export type ProviderTabParamList = {
@@ -70,11 +74,14 @@ export type ProviderTabParamList = {
 
 export type AdminStackParamList = {
   AdminTabs: NavigatorScreenParams<AdminTabParamList>;
+  PendingProviders: undefined;
+  ManageUsers: undefined;
   ProviderDetail: { providerId: string };
   UserDetail: { userId: string };
   BookingDetail: { bookingId: string };
   BookingManagement: undefined;
   DisputeDetail: { disputeId: string };
+  CustomerKYCDetail: { userId: string };
 };
 
 export type AdminTabParamList = {
@@ -84,4 +91,5 @@ export type AdminTabParamList = {
   Users: undefined;
   Analytics: undefined;
   Disputes: undefined;
+  KYC: undefined;
 };

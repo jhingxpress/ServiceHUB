@@ -30,7 +30,11 @@ export default function RoleSelectionScreen({ route, navigation }: Props) {
     }
 
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName, role: selected } },
+    });
 
     if (error || !data.user) {
       Alert.alert('Sign Up Failed', error?.message ?? 'Unknown error');

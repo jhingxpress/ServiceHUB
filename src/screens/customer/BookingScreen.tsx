@@ -57,6 +57,12 @@ export default function BookingScreen() {
   };
 
   const handleSubmit = async () => {
+    const kycStatus = (user as any)?.kyc_status ?? 'not_submitted';
+    if (kycStatus !== 'approved') {
+      showError('Identity verification required. Please complete KYC in your Profile before booking.');
+      return;
+    }
+
     const validation = validateForm(
       { location },
       {
@@ -124,7 +130,7 @@ export default function BookingScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.serviceName}>{serviceName}</Text>
-                {price && <Text style={styles.servicePrice}>${price}</Text>}
+                {price && <Text style={styles.servicePrice}>₱{price}</Text>}
               </View>
             </View>
           )}
@@ -236,7 +242,7 @@ export default function BookingScreen() {
             {price && (
               <View style={[styles.summaryRow, styles.summaryTotal]}>
                 <Text style={styles.summaryTotalLabel}>Total</Text>
-                <Text style={styles.summaryTotalValue}>${price}</Text>
+                <Text style={styles.summaryTotalValue}>₱{price}</Text>
               </View>
             )}
           </View>

@@ -199,7 +199,7 @@ export default function HomeScreen() {
                   <Text style={styles.ratingText}>{Number(item.rating).toFixed(1)}</Text>
                 </View>
                 {item.hourly_rate && (
-                  <Text style={styles.providerRate}>${item.hourly_rate}/hr</Text>
+                  <Text style={styles.providerRate}>₱{item.hourly_rate}/hr</Text>
                 )}
               </TouchableOpacity>
             )}

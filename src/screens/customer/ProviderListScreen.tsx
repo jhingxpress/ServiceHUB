@@ -104,7 +104,7 @@ export default function ProviderListScreen({ route, navigation }: Props) {
       </View>
       <View style={styles.listCardRight}>
         {item.hourly_rate && (
-          <Text style={styles.rateText}>${item.hourly_rate}</Text>
+          <Text style={styles.rateText}>₱{item.hourly_rate}</Text>
         )}
         {item.hourly_rate && <Text style={styles.rateUnit}>/hr</Text>}
         <Ionicons name="chevron-forward" size={16} color={COLORS.textLight} />
@@ -128,7 +128,7 @@ export default function ProviderListScreen({ route, navigation }: Props) {
         </View>
       )}
       {item.hourly_rate && (
-        <Text style={styles.gridRate}>${item.hourly_rate}/hr</Text>
+        <Text style={styles.gridRate}>₱{item.hourly_rate}/hr</Text>
       )}
     </TouchableOpacity>
   );

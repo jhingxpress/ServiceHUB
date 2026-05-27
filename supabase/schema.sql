@@ -15,6 +15,9 @@ CREATE TABLE public.users (
   phone TEXT,
   avatar_url TEXT,
   role TEXT NOT NULL DEFAULT 'customer' CHECK (role IN ('customer', 'provider', 'admin')),
+  kyc_status TEXT DEFAULT 'not_submitted' CHECK (kyc_status IN ('not_submitted', 'pending', 'approved', 'rejected')),
+  kyc_documents JSONB DEFAULT '{}'::JSONB,
+  kyc_rejection_reason TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -36,37 +39,112 @@ CREATE TABLE public.categories (
 -- ============================================================
 CREATE TABLE public.providers (
   id UUID REFERENCES public.users(id) ON DELETE CASCADE PRIMARY KEY,
+  -- Business information
+  business_name TEXT,
+  owner_name TEXT,
+  business_address TEXT,
+  city TEXT,
+  province TEXT,
+  business_email TEXT,
+  business_phone TEXT,
+  service_description TEXT,
+  service_area TEXT,
+  years_of_experience INTEGER DEFAULT 0,
+  -- Legacy bio field (kept for compatibility)
   bio TEXT,
+  -- Single service category per provider
   category_id UUID REFERENCES public.categories(id) ON DELETE SET NULL,
   hourly_rate DECIMAL(10,2),
   location TEXT,
   latitude DECIMAL(10,7),
   longitude DECIMAL(10,7),
+  -- Onboarding & verification status
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'pending_review', 'approved', 'rejected', 'suspended')),
   is_verified BOOLEAN DEFAULT FALSE,
   is_available BOOLEAN DEFAULT TRUE,
-  kyc_status TEXT DEFAULT 'pending' CHECK (kyc_status IN ('pending', 'approved', 'rejected')),
-  kyc_documents JSONB,
+  approved_at TIMESTAMPTZ,
+  approved_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  rejection_reason TEXT,
+  -- Legacy KYC (kept for compatibility)
+  kyc_status TEXT DEFAULT 'not_submitted' CHECK (kyc_status IN ('not_submitted', 'pending', 'approved', 'rejected')),
+  kyc_documents JSONB DEFAULT '{}'::JSONB,
+  kyc_rejection_reason TEXT,
+  -- Stats
   rating DECIMAL(3,2) DEFAULT 0.00,
   total_reviews INTEGER DEFAULT 0,
+  completed_jobs INTEGER DEFAULT 0,
   total_earnings DECIMAL(10,2) DEFAULT 0.00,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ============================================================
--- SERVICES
+-- SERVICES (Sub-services under a provider's single category)
+-- Each provider has ONE category; multiple sub-services under it
 -- ============================================================
 CREATE TABLE public.services (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
-  category_id UUID REFERENCES public.categories(id) ON DELETE SET NULL,
   name TEXT NOT NULL,
   description TEXT,
-  price DECIMAL(10,2) NOT NULL,
+  -- Base price; detailed pricing is in service_options
+  base_price DECIMAL(10,2) DEFAULT 0.00,
   duration_minutes INTEGER DEFAULT 60,
   is_active BOOLEAN DEFAULT TRUE,
+  sort_order INTEGER DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================
+-- SERVICE OPTIONS (Price variants per sub-service)
+-- e.g. Aircon Cleaning → Window Type ₱500, Split Type ₱1200
+-- ============================================================
+CREATE TABLE public.service_options (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  service_id UUID REFERENCES public.services(id) ON DELETE CASCADE NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  price DECIMAL(10,2) NOT NULL CHECK (price >= 0),
+  is_active BOOLEAN DEFAULT TRUE,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================
+-- PROVIDER DOCUMENTS (Onboarding verification documents)
+-- ============================================================
+CREATE TABLE public.provider_documents (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
+  document_type TEXT NOT NULL CHECK (document_type IN (
+    'valid_id', 'government_id',
+    'barangay_clearance', 'business_permit',
+    'dti_registration', 'bir_registration', 'tesda_certificate',
+    'professional_cert', 'other_supporting'
+  )),
+  category_type TEXT NOT NULL DEFAULT 'permit_certificate'
+    CHECK (category_type IN ('valid_id', 'permit_certificate')),
+  id_type TEXT,
+  side TEXT CHECK (side IN ('front', 'back')),
+  file_url TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  uploaded_at TIMESTAMPTZ DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ,
+  reviewed_by UUID REFERENCES public.users(id) ON DELETE SET NULL
+);
+
+-- ============================================================
+-- PROVIDER VERIFICATION LOGS (Admin action audit trail)
+-- ============================================================
+CREATE TABLE public.provider_verification_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
+  action TEXT NOT NULL,
+  performed_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ============================================================
@@ -77,6 +155,8 @@ CREATE TABLE public.bookings (
   customer_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
   service_id UUID REFERENCES public.services(id) ON DELETE SET NULL,
+  service_option_id UUID REFERENCES public.service_options(id) ON DELETE SET NULL,
+  service_option_name TEXT,
   status TEXT DEFAULT 'pending' CHECK (
     status IN ('pending','accepted','rejected','in_progress','completed','cancelled','disputed')
   ),
@@ -101,7 +181,20 @@ CREATE TABLE public.reviews (
   customer_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
   rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  title TEXT,
   comment TEXT,
+  is_visible BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================
+-- REVIEW MEDIA (Photos and videos attached to reviews)
+-- ============================================================
+CREATE TABLE public.review_media (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  review_id UUID REFERENCES public.reviews(id) ON DELETE CASCADE NOT NULL,
+  media_type TEXT NOT NULL CHECK (media_type IN ('photo', 'video')),
+  file_url TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -172,8 +265,14 @@ CREATE INDEX idx_messages_booking ON public.messages(booking_id);
 CREATE INDEX idx_messages_sender ON public.messages(sender_id);
 CREATE INDEX idx_reviews_provider ON public.reviews(provider_id);
 CREATE INDEX idx_services_provider ON public.services(provider_id);
+CREATE INDEX idx_service_options_service ON public.service_options(service_id);
+CREATE INDEX idx_review_media_review ON public.review_media(review_id);
 CREATE INDEX idx_providers_category ON public.providers(category_id);
 CREATE INDEX idx_providers_kyc ON public.providers(kyc_status);
+CREATE INDEX idx_providers_status ON public.providers(status);
+CREATE INDEX idx_provider_documents_provider ON public.provider_documents(provider_id);
+CREATE INDEX idx_provider_documents_status ON public.provider_documents(status);
+CREATE INDEX idx_verification_logs_provider ON public.provider_verification_logs(provider_id);
 
 -- ============================================================
 -- ROW LEVEL SECURITY
@@ -182,12 +281,16 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.providers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.service_options ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.review_media ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.availability ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.disputes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.provider_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.provider_verification_logs ENABLE ROW LEVEL SECURITY;
 
 -- Users: read own profile; update own profile
 CREATE POLICY "Users read own profile" ON public.users FOR SELECT USING (auth.uid() = id);
@@ -197,16 +300,49 @@ CREATE POLICY "Users insert own profile" ON public.users FOR INSERT WITH CHECK (
 -- Categories: public read
 CREATE POLICY "Categories public read" ON public.categories FOR SELECT USING (true);
 
--- Providers: public read approved; provider edits own
+-- Providers: public read approved; provider edits own; admin can update all
 CREATE POLICY "Providers public read" ON public.providers FOR SELECT USING (true);
 CREATE POLICY "Providers insert own" ON public.providers FOR INSERT WITH CHECK (auth.uid() = id);
 CREATE POLICY "Providers update own" ON public.providers FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Providers admin update" ON public.providers FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+) WITH CHECK (
+  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
+
+-- Provider documents: provider manages own; admin reads all
+CREATE POLICY "Provider docs read own" ON public.provider_documents
+  FOR SELECT USING (auth.uid() = provider_id);
+CREATE POLICY "Provider docs insert own" ON public.provider_documents
+  FOR INSERT WITH CHECK (auth.uid() = provider_id);
+CREATE POLICY "Provider docs update own" ON public.provider_documents
+  FOR UPDATE USING (auth.uid() = provider_id);
+CREATE POLICY "Provider docs delete own" ON public.provider_documents
+  FOR DELETE USING (auth.uid() = provider_id);
+
+-- Verification logs: provider reads own; admin inserts
+CREATE POLICY "Verification logs read" ON public.provider_verification_logs
+  FOR SELECT USING (auth.uid() = provider_id OR
+    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'));
+CREATE POLICY "Verification logs insert" ON public.provider_verification_logs
+  FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  );
 
 -- Services: public read active; provider manages own
-CREATE POLICY "Services public read" ON public.services FOR SELECT USING (is_active = true);
+CREATE POLICY "Services public read" ON public.services FOR SELECT USING (true);
 CREATE POLICY "Services provider insert" ON public.services FOR INSERT WITH CHECK (auth.uid() = provider_id);
 CREATE POLICY "Services provider update" ON public.services FOR UPDATE USING (auth.uid() = provider_id);
 CREATE POLICY "Services provider delete" ON public.services FOR DELETE USING (auth.uid() = provider_id);
+
+-- Service Options: public read; provider manages own via service
+CREATE POLICY "Service options public read" ON public.service_options FOR SELECT USING (true);
+CREATE POLICY "Service options provider insert" ON public.service_options FOR INSERT
+  WITH CHECK (auth.uid() = (SELECT provider_id FROM public.services WHERE id = service_id));
+CREATE POLICY "Service options provider update" ON public.service_options FOR UPDATE
+  USING (auth.uid() = (SELECT provider_id FROM public.services WHERE id = service_id));
+CREATE POLICY "Service options provider delete" ON public.service_options FOR DELETE
+  USING (auth.uid() = (SELECT provider_id FROM public.services WHERE id = service_id));
 
 -- Bookings: customer sees own; provider sees own; admin sees all
 CREATE POLICY "Bookings customer read" ON public.bookings FOR SELECT USING (auth.uid() = customer_id);
@@ -215,9 +351,19 @@ CREATE POLICY "Bookings customer insert" ON public.bookings FOR INSERT WITH CHEC
 CREATE POLICY "Bookings customer cancel" ON public.bookings FOR UPDATE USING (auth.uid() = customer_id);
 CREATE POLICY "Bookings provider update" ON public.bookings FOR UPDATE USING (auth.uid() = provider_id);
 
--- Reviews: public read; customer inserts own
-CREATE POLICY "Reviews public read" ON public.reviews FOR SELECT USING (true);
+-- Reviews: public read visible; customer inserts own
+CREATE POLICY "Reviews public read" ON public.reviews FOR SELECT USING (is_visible = true);
 CREATE POLICY "Reviews customer insert" ON public.reviews FOR INSERT WITH CHECK (auth.uid() = customer_id);
+CREATE POLICY "Reviews customer update" ON public.reviews FOR UPDATE USING (auth.uid() = customer_id);
+
+-- Review Media: public read; customer manages own
+CREATE POLICY "Review media public read" ON public.review_media FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.reviews WHERE id = review_id AND is_visible = true)
+);
+CREATE POLICY "Review media customer insert" ON public.review_media FOR INSERT
+  WITH CHECK (auth.uid() = (SELECT customer_id FROM public.reviews WHERE id = review_id));
+CREATE POLICY "Review media customer delete" ON public.review_media FOR DELETE
+  USING (auth.uid() = (SELECT customer_id FROM public.reviews WHERE id = review_id));
 
 -- Messages: only sender or receiver can read
 CREATE POLICY "Messages read" ON public.messages FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
@@ -288,6 +434,24 @@ CREATE TRIGGER reviews_update_rating
   AFTER INSERT ON public.reviews
   FOR EACH ROW EXECUTE FUNCTION public.update_provider_rating();
 
+-- Auto-set is_verified and approved_at when provider status changes to approved
+CREATE OR REPLACE FUNCTION public.handle_provider_status_change()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.status = 'approved' AND OLD.status != 'approved' THEN
+    NEW.is_verified = TRUE;
+    NEW.approved_at = NOW();
+  ELSIF NEW.status != 'approved' THEN
+    NEW.is_verified = FALSE;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER providers_status_change
+  BEFORE UPDATE ON public.providers
+  FOR EACH ROW EXECUTE FUNCTION public.handle_provider_status_change();
+
 -- Auto-send welcome message when booking is accepted
 CREATE OR REPLACE FUNCTION public.send_welcome_message()
 RETURNS TRIGGER AS $$
@@ -354,16 +518,16 @@ CREATE TRIGGER booking_completed_payment
 -- SEED DATA: Categories
 -- ============================================================
 INSERT INTO public.categories (name, description, icon, color) VALUES
-  ('Cleaning', 'Home and office cleaning services', 'sparkles-outline', '#3B82F6'),
-  ('Plumbing', 'Pipe, drainage and water system repairs', 'water-outline', '#06B6D4'),
-  ('Electrical', 'Wiring, installations and repairs', 'flash-outline', '#F59E0B'),
-  ('Carpentry', 'Furniture, woodwork and repairs', 'hammer-outline', '#8B5CF6'),
-  ('Painting', 'Interior and exterior painting', 'color-palette-outline', '#EC4899'),
-  ('Landscaping', 'Garden and lawn maintenance', 'leaf-outline', '#10B981'),
-  ('AC Repair', 'Air conditioning service and repair', 'thermometer-outline', '#0EA5E9'),
-  ('Moving', 'Packing and moving services', 'cube-outline', '#F97316'),
-  ('Tutoring', 'Academic and skill tutoring', 'school-outline', '#6366F1'),
-  ('Pet Care', 'Pet grooming and sitting', 'paw-outline', '#EF4444');
+  ('Aircon Services',    'Air conditioning installation, cleaning, repair and maintenance', 'thermometer-outline',   '#0EA5E9'),
+  ('Plumbing Services',  'Pipe, drainage, water heater and fixture repairs',              'water-outline',          '#06B6D4'),
+  ('Electrical Services','Wiring, panel upgrades, outlet and lighting installations',     'flash-outline',          '#F59E0B'),
+  ('Cleaning Services',  'Home, office and deep-cleaning services',                       'sparkles-outline',       '#3B82F6'),
+  ('Mechanic Services',  'Vehicle repair, diagnostics and maintenance',                   'car-outline',            '#6366F1'),
+  ('Rider Services',     'Motorcycle delivery and courier services',                      'bicycle-outline',        '#10B981'),
+  ('Car Rental Services','Self-drive and chauffeured vehicle rental',                     'car-sport-outline',      '#F97316'),
+  ('Carpentry',          'Furniture making, woodwork and repairs',                        'hammer-outline',         '#8B5CF6'),
+  ('Painting Services',  'Interior and exterior residential painting',                    'color-palette-outline',  '#EC4899'),
+  ('Landscaping',        'Garden design, lawn care and maintenance',                      'leaf-outline',           '#059669');
 
 -- ============================================================
 -- SEED DATA: Test Users (requires auth.users entries first)
@@ -386,9 +550,9 @@ INSERT INTO public.categories (name, description, icon, color) VALUES
 -- ============================================================
 -- SEED DATA: Test Services
 -- ============================================================
--- INSERT INTO public.services (provider_id, category_id, name, description, price, duration_minutes) VALUES
---   ('<uuid-3>', (SELECT id FROM categories WHERE name = 'Plumbing'), 'Pipe Repair', 'Fix leaking pipes and drainage issues', 450.00, 60),
---   ('<uuid-3>', (SELECT id FROM categories WHERE name = 'Plumbing'), 'Water Heater Installation', 'Install and set up water heaters', 800.00, 120);
+-- INSERT INTO public.services (provider_id, name, description, base_price, duration_minutes) VALUES
+--   ('<uuid-3>', 'Pipe Repair', 'Fix leaking pipes and drainage issues', 450.00, 60),
+--   ('<uuid-3>', 'Water Heater Installation', 'Install and set up water heaters', 800.00, 120);
 
 -- ============================================================
 -- SEED DATA: Test Bookings
@@ -400,46 +564,77 @@ INSERT INTO public.categories (name, description, icon, color) VALUES
 -- ============================================================
 -- STORAGE BUCKETS
 -- ============================================================
--- Run these in Supabase Dashboard > Storage or via SQL:
--- Note: Storage policies are managed separately in the Storage tab
 
--- Create buckets (run in Supabase Dashboard Storage tab):
--- 1. bucket: 'avatars' - public: false
--- 2. bucket: 'booking-photos' - public: false
--- 3. bucket: 'kyc-documents' - public: false
+-- Create provider-documents bucket (if not exists)
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('provider-documents', 'provider-documents', false)
+ON CONFLICT (id) DO NOTHING;
 
--- Storage policies (run in Storage tab policy editor):
--- avatars bucket:
---   - SELECT: public read (true)
---   - INSERT: authenticated users can upload to their own folder
---   - UPDATE: authenticated users can update their own files
---   - DELETE: authenticated users can delete their own files
+-- Storage policies for provider-documents bucket
 
--- booking-photos bucket:
---   - SELECT: only customer and provider of the booking
---   - INSERT: customer and provider of the booking
---   - UPDATE: customer and provider of the booking
---   - DELETE: customer and provider of the booking
+-- Policy: Authenticated users can upload to their own folder
+CREATE POLICY "Providers can upload to their own folder"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (
+  bucket_id = 'provider-documents'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
 
--- kyc-documents bucket:
---   - SELECT: admin and the provider
---   - INSERT: provider to their own folder
---   - UPDATE: provider to their own folder
---   - DELETE: admin only
+-- Policy: Providers can read their own files
+CREATE POLICY "Providers can read their own files"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (
+  bucket_id = 'provider-documents'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
 
--- Example storage folder structure:
--- avatars/
---   {user_id}/
---     profile.jpg
--- booking-photos/
---   {booking_id}/
---     photo1.jpg
---     photo2.jpg
--- kyc-documents/
---   {provider_id}/
---     id-front.jpg
---     id-back.jpg
---     business-permit.pdf
+-- Policy: Admins can read all provider documents
+CREATE POLICY "Admins can read all provider documents"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (
+  bucket_id = 'provider-documents'
+  AND EXISTS (
+    SELECT 1 FROM users
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
+
+-- Policy: Providers can update their own files
+CREATE POLICY "Providers can update their own files"
+ON storage.objects FOR UPDATE
+TO authenticated
+USING (
+  bucket_id = 'provider-documents'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+)
+WITH CHECK (
+  bucket_id = 'provider-documents'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+-- Policy: Providers can delete their own files
+CREATE POLICY "Providers can delete their own files"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (
+  bucket_id = 'provider-documents'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
+
+-- Policy: Admins can delete any provider document
+CREATE POLICY "Admins can delete any provider document"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (
+  bucket_id = 'provider-documents'
+  AND EXISTS (
+    SELECT 1 FROM users
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
 
 -- ============================================================
 -- EXAMPLE QUERIES
@@ -519,13 +714,13 @@ WHERE r.provider_id = '<provider-uuid>'
 ORDER BY r.created_at DESC;
 
 -- Admin: Get pending provider applications
-SELECT 
-  p.id, u.full_name, u.email, p.bio, p.location, p.kyc_status, p.created_at,
+SELECT
+  p.id, u.full_name, u.email, p.business_name, p.city, p.province, p.status, p.created_at,
   c.name as category_name
 FROM providers p
 JOIN users u ON u.id = p.id
 LEFT JOIN categories c ON p.category_id = c.id
-WHERE p.kyc_status = 'pending'
+WHERE p.status = 'pending_review'
 ORDER BY p.created_at DESC;
 
 -- Admin: Get platform statistics

@@ -119,7 +119,7 @@ export default function ProviderDashboard() {
             { label: 'Pending', value: stats.pending, icon: 'time-outline', color: COLORS.warning },
             { label: 'Active', value: stats.active, icon: 'play-circle-outline', color: COLORS.primary },
             { label: 'Completed', value: stats.completed, icon: 'checkmark-circle-outline', color: COLORS.success },
-            { label: 'Earnings', value: `$${stats.earnings}`, icon: 'cash-outline', color: '#8B5CF6' },
+            { label: 'Earnings', value: `₱${stats.earnings}`, icon: 'cash-outline', color: '#8B5CF6' },
           ].map((s) => (
             <View key={s.label} style={styles.statCard}>
               <View style={[styles.statIconWrap, { backgroundColor: s.color + '20' }]}>
@@ -136,15 +136,15 @@ export default function ProviderDashboard() {
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickRow}>
             {[
-              { label: 'Requests', icon: 'notifications-outline', screen: 'BookingRequests' as const },
-              { label: 'Schedule', icon: 'calendar-outline', screen: 'Schedule' as const },
-              { label: 'Services', icon: 'construct-outline', screen: 'ManageServices' as const },
-              { label: 'Earnings', icon: 'wallet-outline', screen: 'Earnings' as const },
+              { label: 'Requests', icon: 'notifications-outline', action: () => navigation.navigate('ProviderTabs', { screen: 'Requests' }) },
+              { label: 'Schedule', icon: 'calendar-outline', action: () => navigation.navigate('ProviderTabs', { screen: 'Schedule' }) },
+              { label: 'Services', icon: 'construct-outline', action: () => navigation.navigate('ManageServices') },
+              { label: 'Earnings', icon: 'wallet-outline', action: () => navigation.navigate('ProviderTabs', { screen: 'Earnings' }) },
             ].map((q) => (
               <TouchableOpacity
                 key={q.label}
                 style={styles.quickCard}
-                onPress={() => navigation.navigate(q.screen)}
+                onPress={q.action}
               >
                 <Ionicons name={q.icon as React.ComponentProps<typeof Ionicons>['name']} size={24} color={COLORS.primary} />
                 <Text style={styles.quickLabel}>{q.label}</Text>
@@ -157,7 +157,7 @@ export default function ProviderDashboard() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Bookings</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('BookingRequests')}>
+            <TouchableOpacity onPress={() => navigation.navigate('ProviderTabs', { screen: 'Requests' })}>
               <Text style={styles.sectionLink}>See all</Text>
             </TouchableOpacity>
           </View>

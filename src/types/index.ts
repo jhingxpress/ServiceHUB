@@ -1,5 +1,19 @@
 export type UserRole = 'customer' | 'provider' | 'admin';
-export type KycStatus = 'pending' | 'approved' | 'rejected';
+export type KycStatus = 'not_submitted' | 'pending' | 'approved' | 'rejected';
+export type ProviderStatus = 'draft' | 'pending_review' | 'approved' | 'rejected' | 'suspended';
+export type DocumentStatus = 'pending' | 'approved' | 'rejected';
+export type DocumentCategoryType = 'valid_id' | 'permit_certificate';
+export type DocumentSide = 'front' | 'back';
+export type DocumentType =
+  | 'valid_id'
+  | 'government_id'
+  | 'barangay_clearance'
+  | 'business_permit'
+  | 'dti_registration'
+  | 'bir_registration'
+  | 'tesda_certificate'
+  | 'professional_cert'
+  | 'other_supporting';
 export type BookingStatus =
   | 'pending'
   | 'accepted'
@@ -10,6 +24,7 @@ export type BookingStatus =
   | 'disputed';
 export type PaymentStatus = 'pending' | 'completed' | 'refunded' | 'failed';
 export type DisputeStatus = 'open' | 'investigating' | 'resolved' | 'closed';
+export type MediaType = 'photo' | 'video';
 
 export interface User {
   id: string;
@@ -18,6 +33,9 @@ export interface User {
   phone: string | null;
   avatar_url: string | null;
   role: UserRole;
+  kyc_status: KycStatus;
+  kyc_documents: Record<string, string> | null;
+  kyc_rejection_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -33,38 +51,97 @@ export interface Category {
 
 export interface Provider {
   id: string;
+  // Business info
+  business_name: string | null;
+  owner_name: string | null;
+  business_address: string | null;
+  city: string | null;
+  province: string | null;
+  business_email: string | null;
+  business_phone: string | null;
+  service_description: string | null;
+  service_area: string | null;
+  years_of_experience: number | null;
   bio: string | null;
   category_id: string | null;
   hourly_rate: number | null;
   location: string | null;
   latitude: number | null;
   longitude: number | null;
+  // Onboarding & verification
+  status: ProviderStatus;
   is_verified: boolean;
   is_available: boolean;
+  approved_at: string | null;
+  approved_by: string | null;
+  rejection_reason: string | null;
+  // Legacy KYC
   kyc_status: KycStatus;
-  kyc_documents: Record<string, unknown> | null;
+  kyc_documents: Record<string, string> | null;
+  kyc_rejection_reason: string | null;
+  // Stats
   rating: number;
   total_reviews: number;
+  completed_jobs: number;
   total_earnings: number;
   created_at: string;
   updated_at: string;
+  // Relations
   users?: User;
   categories?: Category;
   services?: Service[];
 }
 
+export interface ProviderDocument {
+  id: string;
+  provider_id: string;
+  document_type: DocumentType;
+  category_type: DocumentCategoryType;
+  id_type: string | null;
+  side: DocumentSide | null;
+  file_url: string;
+  status: DocumentStatus;
+  uploaded_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+}
+
+export interface ProviderVerificationLog {
+  id: string;
+  provider_id: string;
+  action: string;
+  performed_by: string | null;
+  notes: string | null;
+  created_at: string;
+  performer?: User;
+}
+
+/** Sub-service under a provider's single category */
 export interface Service {
   id: string;
   provider_id: string;
-  category_id: string | null;
+  name: string;
+  description: string | null;
+  base_price: number;
+  duration_minutes: number | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  service_options?: ServiceOption[];
+}
+
+/** Price variant under a sub-service */
+export interface ServiceOption {
+  id: string;
+  service_id: string;
   name: string;
   description: string | null;
   price: number;
-  duration_minutes: number | null;
   is_active: boolean;
+  sort_order: number;
   created_at: string;
   updated_at: string;
-  categories?: Category;
 }
 
 export interface Booking {
@@ -72,6 +149,8 @@ export interface Booking {
   customer_id: string;
   provider_id: string;
   service_id: string | null;
+  service_option_id: string | null;
+  service_option_name: string | null;
   status: BookingStatus;
   scheduled_date: string;
   scheduled_time: string;
@@ -86,6 +165,7 @@ export interface Booking {
   customer?: User;
   provider?: Provider & { users: User };
   service?: Service;
+  service_option?: ServiceOption;
 }
 
 export interface Review {
@@ -94,9 +174,20 @@ export interface Review {
   customer_id: string;
   provider_id: string;
   rating: number;
+  title: string | null;
   comment: string | null;
+  is_visible: boolean;
   created_at: string;
   customer?: User;
+  review_media?: ReviewMedia[];
+}
+
+export interface ReviewMedia {
+  id: string;
+  review_id: string;
+  media_type: MediaType;
+  file_url: string;
+  created_at: string;
 }
 
 export interface Message {

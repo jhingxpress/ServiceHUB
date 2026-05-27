@@ -8,10 +8,11 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { format } from 'date-fns';
 import { AdminStackParamList } from '../../navigation/types';
@@ -26,7 +27,6 @@ interface UserRow {
   email: string;
   role: string;
   avatar_url: string | null;
-  is_active: boolean;
   created_at: string;
 }
 
@@ -38,18 +38,39 @@ export default function ManageUsersScreen() {
   const [filtered, setFiltered] = useState<UserRow[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [roleFilter, setRoleFilter] = useState<'all' | 'customer' | 'provider' | 'admin'>('all');
 
   const fetchUsers = useCallback(async () => {
-    const { data } = await supabase
-      .from('users')
-      .select('id, full_name, email, role, avatar_url, is_active, created_at')
-      .order('created_at', { ascending: false });
-    setUsers(data ?? []);
-    setLoading(false);
+    console.log('[ManageUsersScreen] Fetching users...');
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, full_name, email, role, avatar_url, created_at')
+        .order('created_at', { ascending: false });
+      
+      console.log('[ManageUsersScreen] Users data:', data);
+      console.log('[ManageUsersScreen] Users count:', data?.length ?? 0);
+      
+      if (error) {
+        console.error('[ManageUsersScreen] Fetch error:', error);
+      }
+      
+      setUsers(data ?? []);
+    } catch (err) {
+      console.error('[ManageUsersScreen] Fetch exception:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchUsers();
+    }, [fetchUsers])
+  );
 
   useEffect(() => {
     let list = users;
@@ -63,19 +84,10 @@ export default function ManageUsersScreen() {
     setFiltered(list);
   }, [users, search, roleFilter]);
 
-  const handleToggleActive = (user: UserRow) => {
-    const action = user.is_active ? 'Deactivate' : 'Activate';
-    Alert.alert(`${action} User`, `${action} ${user.full_name ?? user.email}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: action,
-        style: user.is_active ? 'destructive' : 'default',
-        onPress: async () => {
-          await supabase.from('users').update({ is_active: !user.is_active }).eq('id', user.id);
-          fetchUsers();
-        },
-      },
-    ]);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchUsers();
+    setRefreshing(false);
   };
 
   const ROLE_FILTERS = [
@@ -127,6 +139,7 @@ export default function ManageUsersScreen() {
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading users...</Text>
         </View>
       ) : (
         <FlatList
@@ -134,9 +147,16 @@ export default function ManageUsersScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={COLORS.primary}
+            />
+          }
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={[styles.card, !item.is_active && styles.cardInactive]}
+              style={styles.card}
               onPress={() => navigation.navigate('UserDetail', { userId: item.id })}
               activeOpacity={0.8}
             >
@@ -155,16 +175,7 @@ export default function ManageUsersScreen() {
                   </Text>
                 </View>
               </View>
-              <TouchableOpacity
-                style={[styles.toggleBtn, !item.is_active && styles.toggleBtnOff]}
-                onPress={(e) => { e.stopPropagation(); handleToggleActive(item); }}
-              >
-                <Ionicons
-                  name={item.is_active ? 'checkmark-circle' : 'ban-outline'}
-                  size={22}
-                  color={item.is_active ? COLORS.success : COLORS.error}
-                />
-              </TouchableOpacity>
+              <Ionicons name="chevron-forward" size={20} color={COLORS.textLight} />
             </TouchableOpacity>
           )}
           ListEmptyComponent={
@@ -200,14 +211,14 @@ const styles = StyleSheet.create({
   filterTabActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   filterText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontWeight: '500' },
   filterTextActive: { color: COLORS.white, fontWeight: '700' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: SPACING.sm },
+  loadingText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
   list: { padding: SPACING.md, gap: SPACING.sm, flexGrow: 1 },
   card: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
   },
-  cardInactive: { opacity: 0.6 },
   userInfo: { flex: 1 },
   userName: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text },
   userEmail: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 1 },
@@ -215,9 +226,4 @@ const styles = StyleSheet.create({
   rolePill: { borderRadius: BORDER_RADIUS.full, paddingHorizontal: 8, paddingVertical: 2 },
   roleText: { fontSize: 10, fontWeight: '700', textTransform: 'capitalize' },
   joinDate: { fontSize: 10, color: COLORS.textLight },
-  toggleBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#D1FAE5', alignItems: 'center', justifyContent: 'center',
-  },
-  toggleBtnOff: { backgroundColor: '#FEE2E2' },
 });

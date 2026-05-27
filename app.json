@@ -4,7 +4,6 @@
     "slug": "servicehub",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
       "resizeMode": "contain",
@@ -21,9 +20,7 @@
       },
       "package": "com.servicehub.app"
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
+    "web": {},
     "plugins": [
       [
         "expo-image-picker",

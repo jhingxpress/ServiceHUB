@@ -34,10 +34,10 @@ export default function ProviderSettingsScreen() {
     {
       section: 'Support',
       items: [
-        { label: 'Help & FAQ', icon: 'help-circle-outline', onPress: () => {} },
-        { label: 'Contact Support', icon: 'chatbubble-outline', onPress: () => {} },
-        { label: 'Terms of Service', icon: 'document-text-outline', onPress: () => {} },
-        { label: 'Privacy Policy', icon: 'shield-outline', onPress: () => {} },
+        { label: 'Help & FAQ', icon: 'help-circle-outline', onPress: () => Alert.alert('Help & FAQ', 'How can we help you?\n\n• Booking issues: Check your booking status in the Requests tab\n• Payment questions: Contact support for billing inquiries\n• Profile updates: Go to Profile Setup to edit your information\n• Technical issues: Try restarting the app or reinstalling') },
+        { label: 'Contact Support', icon: 'chatbubble-outline', onPress: () => Alert.alert('Contact Support', 'Need help? Reach out to us:\n\n📧 Email: support@servicehub.com\n📱 Phone: +63 912 345 6789\n💬 Chat: Available 9AM-6PM PH time\n\nWe typically respond within 24 hours.') },
+        { label: 'Terms of Service', icon: 'document-text-outline', onPress: () => Alert.alert('Terms of Service', 'By using ServiceHub, you agree to our Terms of Service.\n\nKey points:\n• You must be at least 18 years old\n• Provide accurate information\n• Services are provided by independent contractors\n• Payments must be made through the platform\n• No off-platform arrangements allowed\n\nFull terms available at servicehub.com/terms') },
+        { label: 'Privacy Policy', icon: 'shield-outline', onPress: () => Alert.alert('Privacy Policy', 'Your privacy matters to us.\n\nWe collect:\n• Account information (name, email, phone)\n• Location data for service matching\n• Booking and payment history\n• KYC documents for verification\n\nWe do not sell your data. Your information is shared only with matched providers and necessary service partners.\n\nFull policy available at servicehub.com/privacy') },
       ],
     },
   ];

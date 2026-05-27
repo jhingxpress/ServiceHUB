@@ -84,14 +84,14 @@ export default function EarningsScreen() {
             <View style={styles.summaryIcon}>
               <Ionicons name="wallet-outline" size={24} color={COLORS.primary} />
             </View>
-            <Text style={styles.summaryValue}>${Number(total).toFixed(2)}</Text>
+            <Text style={styles.summaryValue}>₱{Number(total).toFixed(2)}</Text>
             <Text style={styles.summaryLabel}>Total Earned</Text>
           </View>
           <View style={[styles.summaryCard, styles.summaryCardHighlight]}>
             <View style={[styles.summaryIcon, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
               <Ionicons name="trending-up-outline" size={24} color={COLORS.white} />
             </View>
-            <Text style={[styles.summaryValue, { color: COLORS.white }]}>${Number(thisMonth).toFixed(2)}</Text>
+            <Text style={[styles.summaryValue, { color: COLORS.white }]}>₱{Number(thisMonth).toFixed(2)}</Text>
             <Text style={[styles.summaryLabel, { color: 'rgba(255,255,255,0.8)' }]}>This Month</Text>
           </View>
         </View>
@@ -102,7 +102,7 @@ export default function EarningsScreen() {
             <Text style={styles.payoutTitle}>Pending Payout</Text>
             <Text style={styles.payoutSub}>Next payment in 3 days</Text>
           </View>
-          <Text style={styles.payoutAmount}>${(total * 0.1).toFixed(2)}</Text>
+          <Text style={styles.payoutAmount}>₱{(total * 0.1).toFixed(2)}</Text>
         </View>
 
         {/* Transaction history */}
@@ -128,7 +128,7 @@ export default function EarningsScreen() {
                     {format(new Date(r.created_at), 'MMM d, yyyy')}
                   </Text>
                 </View>
-                <Text style={styles.txAmount}>+${Number(r.amount).toFixed(2)}</Text>
+                <Text style={styles.txAmount}>+₱{Number(r.amount).toFixed(2)}</Text>
               </View>
             ))
           )}

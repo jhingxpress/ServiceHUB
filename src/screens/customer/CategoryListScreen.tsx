@@ -101,7 +101,7 @@ export default function CategoryListScreen({ route, navigation }: Props) {
               {item.total_reviews ? ` (${item.total_reviews})` : ''}
             </Text>
             {item.hourly_rate && (
-              <Text style={styles.rateText}> · ${item.hourly_rate}/hr</Text>
+              <Text style={styles.rateText}> · ₱{item.hourly_rate}/hr</Text>
             )}
           </View>
         </View>

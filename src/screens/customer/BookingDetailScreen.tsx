@@ -243,7 +243,7 @@ export default function BookingDetailScreen() {
               <Ionicons name="cash-outline" size={16} color={COLORS.textSecondary} />
               <Text style={styles.infoLabel}>Total</Text>
               <Text style={[styles.infoValue, { color: COLORS.primary, fontWeight: '800' }]}>
-                ${booking.total_amount}
+                ₱{booking.total_amount}
               </Text>
             </View>
           )}

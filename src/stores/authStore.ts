@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
-import { User } from '../types';
+import { User, Provider } from '../types';
 
 interface SignUpData {
   email: string;
@@ -12,6 +12,7 @@ interface SignUpData {
 
 interface AuthState {
   user: User | null;
+  providerProfile: Provider | null;
   isLoading: boolean;
   isInitialized: boolean;
   initialize: () => Promise<void>;
@@ -20,10 +21,21 @@ interface AuthState {
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<Omit<User, 'id' | 'created_at'>>) => Promise<void>;
   refreshProfile: () => Promise<void>;
+  refreshProviderProfile: () => Promise<void>;
+}
+
+async function fetchProviderProfile(userId: string): Promise<Provider | null> {
+  const { data } = await supabase
+    .from('providers')
+    .select('*')
+    .eq('id', userId)
+    .single();
+  return data as Provider | null;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
+  providerProfile: null,
   isLoading: false,
   isInitialized: false,
 
@@ -39,7 +51,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           .select('*')
           .eq('id', session.user.id)
           .single();
-        set({ user: profile ?? null, isInitialized: true });
+        const providerProfile =
+          profile?.role === 'provider'
+            ? await fetchProviderProfile(session.user.id)
+            : null;
+        set({ user: profile ?? null, providerProfile, isInitialized: true });
       } else {
         set({ isInitialized: true });
       }
@@ -54,9 +70,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           .select('*')
           .eq('id', session.user.id)
           .single();
-        set({ user: profile ?? null });
+        const providerProfile =
+          profile?.role === 'provider'
+            ? await fetchProviderProfile(session.user.id)
+            : null;
+        set({ user: profile ?? null, providerProfile });
       } else if (event === 'SIGNED_OUT') {
-        set({ user: null });
+        set({ user: null, providerProfile: null });
       }
     });
   },
@@ -70,13 +90,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
       if (error) throw error;
       if (data.user) {
+        // Refresh session to ensure JWT includes latest role from database
+        await supabase.auth.refreshSession();
+        
         const { data: profile, error: profileError } = await supabase
           .from('users')
           .select('*')
           .eq('id', data.user.id)
           .single();
         if (profileError) throw profileError;
-        set({ user: profile });
+        const providerProfile =
+          profile?.role === 'provider'
+            ? await fetchProviderProfile(data.user.id)
+            : null;
+        set({ user: profile, providerProfile });
       }
     } finally {
       set({ isLoading: false });
@@ -114,7 +141,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           .select('*')
           .eq('id', data.user.id)
           .single();
-        set({ user: profile ?? null });
+        const providerProfile =
+          role === 'provider' ? await fetchProviderProfile(data.user.id) : null;
+        set({ user: profile ?? null, providerProfile });
       }
     } finally {
       set({ isLoading: false });
@@ -123,7 +152,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     await supabase.auth.signOut();
-    set({ user: null });
+    set({ user: null, providerProfile: null });
   },
 
   updateProfile: async (updates) => {
@@ -148,5 +177,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .eq('id', user.id)
       .single();
     if (data) set({ user: data });
+  },
+
+  refreshProviderProfile: async () => {
+    const { user } = get();
+    if (!user || user.role !== 'provider') return;
+    const providerProfile = await fetchProviderProfile(user.id);
+    set({ providerProfile });
   },
 }));

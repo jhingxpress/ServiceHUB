@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,7 +31,7 @@ interface PlatformStats {
 
 export default function AdminDashboardScreen() {
   const navigation = useNavigation<NavProp>();
-  const { user } = useAuthStore();
+  const { user, signOut } = useAuthStore();
   const [stats, setStats] = useState<PlatformStats>({
     totalUsers: 0,
     totalProviders: 0,
@@ -41,6 +42,17 @@ export default function AdminDashboardScreen() {
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: () => signOut(),
+      },
+    ]);
+  };
 
   const loadStats = async () => {
     const [usersRes, provRes, pendingRes, bookingsRes, completedRes, revenueRes] =
@@ -82,10 +94,10 @@ export default function AdminDashboardScreen() {
   ];
 
   const QUICK_LINKS = [
-    { label: 'Pending Providers', icon: 'shield-checkmark-outline', screen: 'PendingProviders' as const, badge: stats.pendingProviders },
-    { label: 'Manage Users', icon: 'people-outline', screen: 'ManageUsers' as const },
-    { label: 'Disputes', icon: 'alert-circle-outline', screen: 'Disputes' as const },
-    { label: 'Analytics', icon: 'bar-chart-outline', screen: 'Analytics' as const },
+    { label: 'Pending Providers', icon: 'shield-checkmark-outline', screen: 'PendingProviders' as const, badge: stats.pendingProviders, isTab: false as const },
+    { label: 'Manage Users', icon: 'people-outline', screen: 'Users' as const, isTab: true as const },
+    { label: 'Disputes', icon: 'alert-circle-outline', screen: 'Disputes' as const, isTab: true as const },
+    { label: 'Analytics', icon: 'bar-chart-outline', screen: 'Analytics' as const, isTab: true as const },
   ];
 
   if (loading) {
@@ -116,8 +128,13 @@ export default function AdminDashboardScreen() {
             <Text style={styles.greeting}>Admin Panel</Text>
             <Text style={styles.userName}>Welcome, {user?.full_name?.split(' ')[0] ?? 'Admin'}</Text>
           </View>
-          <View style={styles.adminBadge}>
-            <Ionicons name="shield-checkmark" size={20} color={COLORS.white} />
+          <View style={styles.headerRight}>
+            <View style={styles.adminBadge}>
+              <Ionicons name="shield-checkmark" size={20} color={COLORS.white} />
+            </View>
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={22} color={COLORS.error} />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -147,7 +164,13 @@ export default function AdminDashboardScreen() {
             <TouchableOpacity
               key={q.label}
               style={styles.linkCard}
-              onPress={() => navigation.navigate(q.screen)}
+              onPress={() => {
+                if (q.isTab) {
+                  (navigation as any).navigate('AdminTabs', { screen: q.screen });
+                } else {
+                  navigation.navigate(q.screen);
+                }
+              }}
               activeOpacity={0.8}
             >
               <View style={styles.linkIcon}>
@@ -181,9 +204,15 @@ const styles = StyleSheet.create({
   },
   greeting: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
   userName: { fontSize: FONTS.sizes.xl, fontWeight: '800', color: COLORS.text },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   adminBadge: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center',
+  },
+  logoutBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+    alignItems: 'center', justifyContent: 'center',
   },
   statsGrid: {
     flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: SPACING.md, gap: SPACING.sm, marginBottom: SPACING.md,

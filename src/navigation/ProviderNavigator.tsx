@@ -15,8 +15,11 @@ import ProviderSettingsScreen from '../screens/provider/ProviderSettingsScreen';
 import BookingDetailScreen from '../screens/provider/ProviderBookingDetailScreen';
 import ChatScreen from '../screens/customer/ChatScreen';
 import ProviderProfileSetupScreen from '../screens/provider/ProviderProfileSetupScreen';
-import ServicesScreen from '../screens/provider/ServicesScreen';
-import AddServiceScreen from '../screens/provider/AddServiceScreen';
+import ManageServicesScreen from '../screens/provider/ManageServicesScreen';
+import ServiceOptionsScreen from '../screens/provider/ServiceOptionsScreen';
+import ProviderOnboardingScreen from '../screens/provider/ProviderOnboardingScreen';
+import PendingApprovalScreen from '../screens/provider/PendingApprovalScreen';
+import { useAuthStore } from '../stores/authStore';
 
 const Stack = createNativeStackNavigator<ProviderStackParamList>();
 const Tab = createBottomTabNavigator<ProviderTabParamList>();
@@ -66,21 +69,34 @@ function ProviderTabs() {
 }
 
 export default function ProviderNavigator() {
+  const { providerProfile } = useAuthStore();
+  const status = providerProfile?.status ?? 'draft';
+  const isApproved = status === 'approved';
+  const isPending = status === 'pending_review' || status === 'rejected' || status === 'suspended';
+
   return (
-    <Stack.Navigator 
-      screenOptions={{ 
+    <Stack.Navigator
+      screenOptions={{
         headerShown: false,
         animation: 'slide_from_right',
         gestureEnabled: true,
         gestureDirection: 'horizontal',
       }}
     >
-      <Stack.Screen name="ProviderTabs" component={ProviderTabs} />
-      <Stack.Screen name="BookingDetail" component={BookingDetailScreen} />
-      <Stack.Screen name="ChatRoom" component={ChatScreen} />
-      <Stack.Screen name="ProfileSetup" component={ProviderProfileSetupScreen} />
-      <Stack.Screen name="ManageServices" component={ServicesScreen} />
-      <Stack.Screen name="AddService" component={AddServiceScreen} />
+      {isApproved ? (
+        <>
+          <Stack.Screen name="ProviderTabs" component={ProviderTabs} />
+          <Stack.Screen name="BookingDetail" component={BookingDetailScreen} />
+          <Stack.Screen name="ChatRoom" component={ChatScreen} />
+          <Stack.Screen name="ProfileSetup" component={ProviderProfileSetupScreen} />
+          <Stack.Screen name="ManageServices" component={ManageServicesScreen} />
+          <Stack.Screen name="ServiceOptions" component={ServiceOptionsScreen} />
+        </>
+      ) : isPending ? (
+        <Stack.Screen name="PendingApproval" component={PendingApprovalScreen} />
+      ) : (
+        <Stack.Screen name="ProviderOnboarding" component={ProviderOnboardingScreen} />
+      )}
     </Stack.Navigator>
   );
 }

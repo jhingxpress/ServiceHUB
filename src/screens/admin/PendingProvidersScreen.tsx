@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { format } from 'date-fns';
 import { AdminStackParamList } from '../../navigation/types';
@@ -18,12 +18,16 @@ import { supabase } from '../../lib/supabase';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 import EmptyState from '../../components/ui/EmptyState';
+import { useAuthStore } from '../../stores/authStore';
 
 interface PendingProvider {
   id: string;
-  bio: string | null;
-  location: string | null;
+  business_name: string | null;
+  city: string | null;
+  province: string | null;
+  status: string;
   created_at: string;
+  updated_at: string;
   category: { name: string; icon: string } | null;
   users: { full_name: string | null; email: string; avatar_url: string | null };
 }
@@ -32,24 +36,47 @@ type NavProp = NativeStackNavigationProp<AdminStackParamList>;
 
 export default function PendingProvidersScreen() {
   const navigation = useNavigation<NavProp>();
+  const { user } = useAuthStore();
   const [providers, setProviders] = useState<PendingProvider[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchPending = useCallback(async () => {
-    const { data } = await supabase
-      .from('providers')
-      .select(`
-        id, bio, location, created_at,
-        category:categories(name, icon),
-        users!providers_id_fkey(full_name, email, avatar_url)
-      `)
-      .eq('is_verified', false)
-      .order('created_at', { ascending: true });
-    setProviders((data ?? []) as unknown as PendingProvider[]);
-    setLoading(false);
+    console.log('[PendingProvidersScreen] Fetching pending providers...');
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('providers')
+        .select(`
+          id, business_name, city, province, status, created_at, updated_at,
+          category:categories(name, icon),
+          users!providers_id_fkey(full_name, email, avatar_url)
+        `)
+        .eq('status', 'pending_review')
+        .order('updated_at', { ascending: true });
+      
+      console.log('[PendingProvidersScreen] Data received:', data);
+      console.log('[PendingProvidersScreen] Providers count:', data?.length ?? 0);
+      
+      if (error) {
+        console.error('[PendingProvidersScreen] Fetch error:', error);
+      }
+      
+      setProviders((data ?? []) as unknown as PendingProvider[]);
+    } catch (err) {
+      console.error('[PendingProvidersScreen] Fetch exception:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchPending(); }, [fetchPending]);
+
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[PendingProvidersScreen] Screen focused, refetching...');
+      fetchPending();
+    }, [fetchPending])
+  );
 
   const handleApprove = (id: string, name: string | null) => {
     Alert.alert('Approve Provider', `Approve ${name ?? 'this provider'}?`, [
@@ -57,25 +84,137 @@ export default function PendingProvidersScreen() {
       {
         text: 'Approve',
         onPress: async () => {
-          await supabase.from('providers').update({ is_verified: true }).eq('id', id);
-          fetchPending();
+          console.log('[PendingProvidersScreen] === STARTING APPROVE ===');
+          console.log('[PendingProvidersScreen] Provider ID:', id);
+          console.log('[PendingProvidersScreen] Provider Name:', name);
+          console.log('[PendingProvidersScreen] Admin User ID:', user?.id);
+          
+          try {
+            const updateData = {
+              status: 'approved' as const,
+              is_verified: true,
+              approved_at: new Date().toISOString(),
+              approved_by: user?.id ?? null,
+            };
+            console.log('[PendingProvidersScreen] Update payload:', updateData);
+            
+            const { data: updateDataResponse, error: updateError } = await supabase
+              .from('providers')
+              .update(updateData)
+              .eq('id', id)
+              .select();
+            
+            console.log('[PendingProvidersScreen] Update response data:', updateDataResponse);
+            
+            if (updateError) {
+              console.error('[PendingProvidersScreen] === UPDATE FAILED ===');
+              console.error('[PendingProvidersScreen] Error details:', JSON.stringify(updateError, null, 2));
+              console.error('[PendingProvidersScreen] Error code:', updateError.code);
+              console.error('[PendingProvidersScreen] Error message:', updateError.message);
+              console.error('[PendingProvidersScreen] Error hint:', updateError.hint);
+              console.error('[PendingProvidersScreen] Error details:', updateError.details);
+              Alert.alert('Error', `Failed to approve provider: ${updateError.message}`);
+              return;
+            }
+            
+            console.log('[PendingProvidersScreen] === UPDATE SUCCESS ===');
+            console.log('[PendingProvidersScreen] Rows affected:', updateDataResponse?.length ?? 0);
+            
+            const { error: logError } = await supabase.from('provider_verification_logs').insert({
+              provider_id: id,
+              action: 'approved',
+              performed_by: user?.id ?? null,
+            });
+            
+            if (logError) {
+              console.error('[PendingProvidersScreen] Log error:', logError);
+            } else {
+              console.log('[PendingProvidersScreen] Verification log inserted successfully');
+            }
+            
+            console.log('[PendingProvidersScreen] === REFRESHING LIST ===');
+            await fetchPending();
+            console.log('[PendingProvidersScreen] === APPROVE COMPLETE ===');
+          } catch (err) {
+            console.error('[PendingProvidersScreen] === APPROVE EXCEPTION ===');
+            console.error('[PendingProvidersScreen] Exception:', err);
+            Alert.alert('Error', 'Failed to approve provider');
+          }
         },
       },
     ]);
   };
 
   const handleReject = (id: string, name: string | null) => {
-    Alert.alert('Reject Provider', `Reject and remove ${name ?? 'this provider'}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Reject',
-        style: 'destructive',
-        onPress: async () => {
-          await supabase.from('providers').delete().eq('id', id);
-          fetchPending();
-        },
+    Alert.prompt(
+      'Reject Provider',
+      `Enter rejection reason for ${name ?? 'this provider'}:`,
+      async (reason) => {
+        if (!reason?.trim()) {
+          console.log('[PendingProvidersScreen] Reject cancelled - no reason provided');
+          return;
+        }
+        
+        console.log('[PendingProvidersScreen] === STARTING REJECT ===');
+        console.log('[PendingProvidersScreen] Provider ID:', id);
+        console.log('[PendingProvidersScreen] Provider Name:', name);
+        console.log('[PendingProvidersScreen] Admin User ID:', user?.id);
+        console.log('[PendingProvidersScreen] Rejection Reason:', reason.trim());
+        
+        try {
+          const updateData = {
+            status: 'rejected' as const,
+            is_verified: false,
+            rejection_reason: reason.trim(),
+          };
+          console.log('[PendingProvidersScreen] Update payload:', updateData);
+          
+          const { data: updateDataResponse, error: updateError } = await supabase
+            .from('providers')
+            .update(updateData)
+            .eq('id', id)
+            .select();
+          
+          console.log('[PendingProvidersScreen] Update response data:', updateDataResponse);
+          
+          if (updateError) {
+            console.error('[PendingProvidersScreen] === UPDATE FAILED ===');
+            console.error('[PendingProvidersScreen] Error details:', JSON.stringify(updateError, null, 2));
+            console.error('[PendingProvidersScreen] Error code:', updateError.code);
+            console.error('[PendingProvidersScreen] Error message:', updateError.message);
+            console.error('[PendingProvidersScreen] Error hint:', updateError.hint);
+            console.error('[PendingProvidersScreen] Error details:', updateError.details);
+            Alert.alert('Error', `Failed to reject provider: ${updateError.message}`);
+            return;
+          }
+          
+          console.log('[PendingProvidersScreen] === UPDATE SUCCESS ===');
+          console.log('[PendingProvidersScreen] Rows affected:', updateDataResponse?.length ?? 0);
+          
+          const { error: logError } = await supabase.from('provider_verification_logs').insert({
+            provider_id: id,
+            action: 'rejected',
+            performed_by: user?.id ?? null,
+            notes: reason.trim(),
+          });
+          
+          if (logError) {
+            console.error('[PendingProvidersScreen] Log error:', logError);
+          } else {
+            console.log('[PendingProvidersScreen] Verification log inserted successfully');
+          }
+          
+          console.log('[PendingProvidersScreen] === REFRESHING LIST ===');
+          await fetchPending();
+          console.log('[PendingProvidersScreen] === REJECT COMPLETE ===');
+        } catch (err) {
+          console.error('[PendingProvidersScreen] === REJECT EXCEPTION ===');
+          console.error('[PendingProvidersScreen] Exception:', err);
+          Alert.alert('Error', 'Failed to reject provider');
+        }
       },
-    ]);
+      'plain-text'
+    );
   };
 
   if (loading) {
@@ -110,28 +249,25 @@ export default function PendingProvidersScreen() {
             <View style={styles.cardTop}>
               <Avatar uri={item.users?.avatar_url} name={item.users?.full_name} size={52} />
               <View style={styles.info}>
-                <Text style={styles.name}>{item.users?.full_name ?? 'Unknown'}</Text>
-                <Text style={styles.email}>{item.users?.email}</Text>
+                <Text style={styles.name}>{item.business_name ?? item.users?.full_name ?? 'Unknown'}</Text>
+                <Text style={styles.email}>{item.users?.full_name} · {item.users?.email}</Text>
                 <View style={styles.metaRow}>
                   {item.category && (
                     <View style={styles.catBadge}>
                       <Text style={styles.catText}>{item.category.name}</Text>
                     </View>
                   )}
-                  {item.location && (
+                  {(item.city || item.province) && (
                     <View style={styles.locRow}>
                       <Ionicons name="location-outline" size={12} color={COLORS.textLight} />
-                      <Text style={styles.locText}>{item.location}</Text>
+                      <Text style={styles.locText}>{[item.city, item.province].filter(Boolean).join(', ')}</Text>
                     </View>
                   )}
                 </View>
               </View>
             </View>
-            {item.bio && (
-              <Text style={styles.bio} numberOfLines={3}>{item.bio}</Text>
-            )}
             <Text style={styles.appliedDate}>
-              Applied {format(new Date(item.created_at), 'MMM d, yyyy')}
+              Submitted {format(new Date(item.updated_at), 'MMM d, yyyy h:mm a')}
             </Text>
             <View style={styles.actions}>
               <TouchableOpacity
