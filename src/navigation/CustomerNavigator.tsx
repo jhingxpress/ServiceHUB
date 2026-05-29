@@ -12,6 +12,7 @@ import BookingHistoryScreen from '../screens/customer/BookingHistoryScreen';
 import ChatListScreen from '../screens/customer/ChatListScreen';
 import CustomerProfileScreen from '../screens/customer/CustomerProfileScreen';
 import ProviderProfileScreen from '../screens/customer/ProviderProfileScreen';
+import ProviderStorefrontScreen from '../screens/customer/ProviderStorefrontScreen';
 import BookingScreen from '../screens/customer/BookingScreen';
 import BookingDetailScreen from '../screens/customer/BookingDetailScreen';
 import ChatScreen from '../screens/customer/ChatScreen';
@@ -79,6 +80,7 @@ export default function CustomerNavigator() {
     >
       <Stack.Screen name="CustomerTabs" component={CustomerTabs} />
       <Stack.Screen name="ProviderProfile" component={ProviderProfileScreen} />
+      <Stack.Screen name="ProviderStorefront" component={ProviderStorefrontScreen} />
       <Stack.Screen name="BookService" component={BookingScreen} />
       <Stack.Screen name="BookingDetail" component={BookingDetailScreen} />
       <Stack.Screen name="ChatRoom" component={ChatScreen} />

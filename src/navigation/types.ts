@@ -17,6 +17,7 @@ export type AuthStackParamList = {
 export type CustomerStackParamList = {
   CustomerTabs: NavigatorScreenParams<CustomerTabParamList>;
   ProviderProfile: { providerId: string };
+  ProviderStorefront: { providerId: string };
   BookService: {
     providerId: string;
     serviceId?: string;

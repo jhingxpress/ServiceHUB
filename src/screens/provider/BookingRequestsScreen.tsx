@@ -86,6 +86,20 @@ export default function BookingRequestsScreen() {
     ]);
   };
 
+  const handleOnTheWay = (id: string) => {
+    Alert.alert('On The Way', 'Let the customer know you are on your way?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Confirm', onPress: () => updateStatus(id, 'on_the_way') },
+    ]);
+  };
+
+  const handleArrived = (id: string) => {
+    Alert.alert('Arrived', 'Confirm you have arrived at the service location?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Confirm', onPress: () => updateStatus(id, 'arrived') },
+    ]);
+  };
+
   const handleComplete = (id: string) => {
     Alert.alert('Mark Complete', 'Mark this booking as completed?', [
       { text: 'Cancel', style: 'cancel' },
@@ -134,6 +148,20 @@ export default function BookingRequestsScreen() {
         )}
 
         {item.status === 'accepted' && (
+          <TouchableOpacity style={styles.onTheWayBtn} onPress={() => handleOnTheWay(item.id)}>
+            <Ionicons name="navigate-circle" size={16} color={COLORS.white} />
+            <Text style={styles.onTheWayText}>On The Way</Text>
+          </TouchableOpacity>
+        )}
+
+        {item.status === 'on_the_way' && (
+          <TouchableOpacity style={styles.arrivedBtn} onPress={() => handleArrived(item.id)}>
+            <Ionicons name="location" size={16} color={COLORS.white} />
+            <Text style={styles.arrivedText}>Arrived</Text>
+          </TouchableOpacity>
+        )}
+
+        {item.status === 'arrived' && (
           <TouchableOpacity style={styles.startBtn} onPress={() => handleStart(item.id)}>
             <Ionicons name="play-circle" size={16} color={COLORS.white} />
             <Text style={styles.startText}>Start Job</Text>
@@ -243,6 +271,18 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.success,
   },
   acceptText: { fontSize: FONTS.sizes.sm, fontWeight: '700', color: COLORS.white },
+  onTheWayBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 4, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md,
+    backgroundColor: '#3B82F6',
+  },
+  onTheWayText: { fontSize: FONTS.sizes.sm, fontWeight: '700', color: COLORS.white },
+  arrivedBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 4, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md,
+    backgroundColor: '#8B5CF6',
+  },
+  arrivedText: { fontSize: FONTS.sizes.sm, fontWeight: '700', color: COLORS.white },
   startBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 4, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md,

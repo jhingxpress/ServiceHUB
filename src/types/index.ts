@@ -14,13 +14,17 @@ export type DocumentType =
   | 'tesda_certificate'
   | 'professional_cert'
   | 'other_supporting';
+export type ProviderType = 'individual' | 'business';
+
 export type BookingStatus =
   | 'pending'
   | 'accepted'
-  | 'rejected'
+  | 'on_the_way'
+  | 'arrived'
   | 'in_progress'
   | 'completed'
   | 'cancelled'
+  | 'rejected'
   | 'disputed';
 export type PaymentStatus = 'pending' | 'completed' | 'refunded' | 'failed';
 export type DisputeStatus = 'open' | 'investigating' | 'resolved' | 'closed';
@@ -68,6 +72,13 @@ export interface Provider {
   location: string | null;
   latitude: number | null;
   longitude: number | null;
+  // Storefront
+  provider_type: ProviderType;
+  cover_photo: string | null;
+  business_logo: string | null;
+  member_since: string;
+  response_rate: number;
+  service_radius_km: number;
   // Onboarding & verification
   status: ProviderStatus;
   is_verified: boolean;
@@ -90,6 +101,8 @@ export interface Provider {
   users?: User;
   categories?: Category;
   services?: Service[];
+  provider_badges?: ProviderBadge[];
+  provider_gallery?: ProviderGallery[];
 }
 
 export interface ProviderDocument {
@@ -129,6 +142,40 @@ export interface Service {
   created_at: string;
   updated_at: string;
   service_options?: ServiceOption[];
+  service_images?: ServiceImage[];
+}
+
+export interface ServiceImage {
+  id: string;
+  service_id: string;
+  image_url: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface ProviderGallery {
+  id: string;
+  provider_id: string;
+  image_url: string;
+  caption: string | null;
+  is_before_after: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface ProviderBadge {
+  id: string;
+  provider_id: string;
+  badge_type: 'verified_provider' | 'fast_responder' | 'top_rated' | '100_plus_jobs' | '50_plus_jobs' | 'new_provider';
+  awarded_at: string;
+}
+
+export interface FavoriteProvider {
+  id: string;
+  customer_id: string;
+  provider_id: string;
+  created_at: string;
+  provider?: Provider;
 }
 
 /** Price variant under a sub-service */

@@ -69,6 +69,13 @@ CREATE TABLE public.providers (
   kyc_status TEXT DEFAULT 'not_submitted' CHECK (kyc_status IN ('not_submitted', 'pending', 'approved', 'rejected')),
   kyc_documents JSONB DEFAULT '{}'::JSONB,
   kyc_rejection_reason TEXT,
+  -- Storefront
+  provider_type TEXT NOT NULL DEFAULT 'individual' CHECK (provider_type IN ('individual', 'business')),
+  cover_photo TEXT,
+  business_logo TEXT,
+  member_since TIMESTAMPTZ DEFAULT NOW(),
+  response_rate INTEGER DEFAULT 0 CHECK (response_rate >= 0 AND response_rate <= 100),
+  service_radius_km INTEGER DEFAULT 10 CHECK (service_radius_km > 0 AND service_radius_km <= 100),
   -- Stats
   rating DECIMAL(3,2) DEFAULT 0.00,
   total_reviews INTEGER DEFAULT 0,
@@ -136,6 +143,59 @@ CREATE TABLE public.provider_documents (
 );
 
 -- ============================================================
+-- SERVICE IMAGES
+-- ============================================================
+CREATE TABLE public.service_images (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  service_id UUID REFERENCES public.services(id) ON DELETE CASCADE NOT NULL,
+  image_url TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================
+-- PROVIDER GALLERY
+-- ============================================================
+CREATE TABLE public.provider_gallery (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
+  image_url TEXT NOT NULL,
+  caption TEXT,
+  is_before_after BOOLEAN DEFAULT FALSE,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================
+-- PROVIDER BADGES
+-- ============================================================
+CREATE TABLE public.provider_badges (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
+  badge_type TEXT NOT NULL CHECK (badge_type IN (
+    'verified_provider',
+    'fast_responder',
+    'top_rated',
+    '100_plus_jobs',
+    '50_plus_jobs',
+    'new_provider'
+  )),
+  awarded_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (provider_id, badge_type)
+);
+
+-- ============================================================
+-- FAVORITE PROVIDERS
+-- ============================================================
+CREATE TABLE public.favorite_providers (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  customer_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (customer_id, provider_id)
+);
+
+-- ============================================================
 -- PROVIDER VERIFICATION LOGS (Admin action audit trail)
 -- ============================================================
 CREATE TABLE public.provider_verification_logs (
@@ -158,13 +218,15 @@ CREATE TABLE public.bookings (
   service_option_id UUID REFERENCES public.service_options(id) ON DELETE SET NULL,
   service_option_name TEXT,
   status TEXT DEFAULT 'pending' CHECK (
-    status IN ('pending','accepted','rejected','in_progress','completed','cancelled','disputed')
+    status IN ('pending','accepted','on_the_way','arrived','in_progress','completed','cancelled','rejected','disputed')
   ),
   scheduled_date DATE NOT NULL,
   scheduled_time TIME NOT NULL,
   location TEXT NOT NULL,
   latitude DECIMAL(10,7),
   longitude DECIMAL(10,7),
+  provider_latitude DECIMAL(10,7),
+  provider_longitude DECIMAL(10,7),
   notes TEXT,
   photo_urls JSONB DEFAULT '[]'::JSONB,
   total_amount DECIMAL(10,2),
@@ -273,6 +335,13 @@ CREATE INDEX idx_providers_status ON public.providers(status);
 CREATE INDEX idx_provider_documents_provider ON public.provider_documents(provider_id);
 CREATE INDEX idx_provider_documents_status ON public.provider_documents(status);
 CREATE INDEX idx_verification_logs_provider ON public.provider_verification_logs(provider_id);
+CREATE INDEX idx_service_images_service ON public.service_images(service_id);
+CREATE INDEX idx_provider_gallery_provider ON public.provider_gallery(provider_id);
+CREATE INDEX idx_provider_badges_provider ON public.provider_badges(provider_id);
+CREATE INDEX idx_favorites_customer ON public.favorite_providers(customer_id);
+CREATE INDEX idx_favorites_provider ON public.favorite_providers(provider_id);
+CREATE INDEX idx_providers_location ON public.providers USING btree (latitude, longitude)
+WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND status = 'approved';
 
 -- ============================================================
 -- ROW LEVEL SECURITY
@@ -291,6 +360,10 @@ ALTER TABLE public.availability ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.disputes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.provider_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.provider_verification_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.service_images ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.provider_gallery ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.provider_badges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.favorite_providers ENABLE ROW LEVEL SECURITY;
 
 -- Users: read own profile; update own profile
 CREATE POLICY "Users read own profile" ON public.users FOR SELECT USING (auth.uid() = id);
@@ -369,6 +442,31 @@ CREATE POLICY "Review media customer delete" ON public.review_media FOR DELETE
 CREATE POLICY "Messages read" ON public.messages FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
 CREATE POLICY "Messages insert" ON public.messages FOR INSERT WITH CHECK (auth.uid() = sender_id);
 CREATE POLICY "Messages update read" ON public.messages FOR UPDATE USING (auth.uid() = receiver_id);
+
+-- Service Images: public read; provider manages own
+CREATE POLICY "Service images public read" ON public.service_images FOR SELECT USING (true);
+CREATE POLICY "Service images provider insert" ON public.service_images FOR INSERT
+  WITH CHECK (auth.uid() = (SELECT provider_id FROM public.services WHERE id = service_id));
+CREATE POLICY "Service images provider delete" ON public.service_images FOR DELETE
+  USING (auth.uid() = (SELECT provider_id FROM public.services WHERE id = service_id));
+
+-- Provider Gallery: public read; provider manages own
+CREATE POLICY "Provider gallery public read" ON public.provider_gallery FOR SELECT USING (true);
+CREATE POLICY "Provider gallery provider insert" ON public.provider_gallery FOR INSERT
+  WITH CHECK (auth.uid() = provider_id);
+CREATE POLICY "Provider gallery provider delete" ON public.provider_gallery FOR DELETE
+  USING (auth.uid() = provider_id);
+
+-- Provider Badges: public read; admin manages
+CREATE POLICY "Provider badges public read" ON public.provider_badges FOR SELECT USING (true);
+CREATE POLICY "Provider badges admin manage" ON public.provider_badges FOR ALL
+  USING (EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'));
+
+-- Favorite Providers: customer manages own; provider reads own
+CREATE POLICY "Favorites customer manage" ON public.favorite_providers FOR ALL
+  USING (auth.uid() = customer_id);
+CREATE POLICY "Favorites provider read" ON public.favorite_providers FOR SELECT
+  USING (auth.uid() = provider_id);
 
 -- Availability: public read; provider manages own
 CREATE POLICY "Availability public read" ON public.availability FOR SELECT USING (true);
@@ -514,6 +612,103 @@ CREATE TRIGGER booking_completed_payment
   AFTER UPDATE ON public.bookings
   FOR EACH ROW EXECUTE FUNCTION public.create_payment_on_completion();
 
+-- Enforce: only completed bookings can be reviewed
+CREATE OR REPLACE FUNCTION public.validate_review_booking_status()
+RETURNS TRIGGER AS $$
+DECLARE
+  booking_status TEXT;
+BEGIN
+  SELECT status INTO booking_status
+  FROM public.bookings
+  WHERE id = NEW.booking_id;
+
+  IF booking_status != 'completed' THEN
+    RAISE EXCEPTION 'Reviews can only be created for completed bookings. Booking status: %', booking_status;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER reviews_validate_booking_status
+  BEFORE INSERT ON public.reviews
+  FOR EACH ROW EXECUTE FUNCTION public.validate_review_booking_status();
+
+-- Update provider badges after provider stats change
+CREATE OR REPLACE FUNCTION public.update_provider_badges()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.is_verified = TRUE THEN
+    INSERT INTO public.provider_badges (provider_id, badge_type)
+    VALUES (NEW.id, 'verified_provider')
+    ON CONFLICT (provider_id, badge_type) DO NOTHING;
+  END IF;
+
+  IF NEW.completed_jobs >= 100 THEN
+    INSERT INTO public.provider_badges (provider_id, badge_type)
+    VALUES (NEW.id, '100_plus_jobs')
+    ON CONFLICT (provider_id, badge_type) DO NOTHING;
+  END IF;
+
+  IF NEW.completed_jobs >= 50 THEN
+    INSERT INTO public.provider_badges (provider_id, badge_type)
+    VALUES (NEW.id, '50_plus_jobs')
+    ON CONFLICT (provider_id, badge_type) DO NOTHING;
+  END IF;
+
+  IF NEW.rating >= 4.5 AND NEW.total_reviews >= 10 THEN
+    INSERT INTO public.provider_badges (provider_id, badge_type)
+    VALUES (NEW.id, 'top_rated')
+    ON CONFLICT (provider_id, badge_type) DO NOTHING;
+  END IF;
+
+  IF NEW.response_rate >= 90 THEN
+    INSERT INTO public.provider_badges (provider_id, badge_type)
+    VALUES (NEW.id, 'fast_responder')
+    ON CONFLICT (provider_id, badge_type) DO NOTHING;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER providers_update_badges
+  AFTER UPDATE ON public.providers
+  FOR EACH ROW EXECUTE FUNCTION public.update_provider_badges();
+
+-- Update provider response rate when booking status changes
+CREATE OR REPLACE FUNCTION public.update_provider_response_rate()
+RETURNS TRIGGER AS $$
+DECLARE
+  total_requests INTEGER;
+  accepted_count INTEGER;
+  new_rate INTEGER;
+BEGIN
+  IF OLD.status = 'pending' AND NEW.status != 'pending' THEN
+    SELECT COUNT(*) INTO total_requests
+    FROM public.bookings
+    WHERE provider_id = NEW.provider_id;
+
+    SELECT COUNT(*) INTO accepted_count
+    FROM public.bookings
+    WHERE provider_id = NEW.provider_id AND status IN ('accepted', 'on_the_way', 'arrived', 'in_progress', 'completed');
+
+    IF total_requests > 0 THEN
+      new_rate := (accepted_count::FLOAT / total_requests::FLOAT * 100)::INTEGER;
+      UPDATE public.providers
+      SET response_rate = new_rate
+      WHERE id = NEW.provider_id;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER bookings_update_response_rate
+  AFTER UPDATE ON public.bookings
+  FOR EACH ROW EXECUTE FUNCTION public.update_provider_response_rate();
+
 -- ============================================================
 -- SEED DATA: Categories
 -- ============================================================
@@ -527,7 +722,13 @@ INSERT INTO public.categories (name, description, icon, color) VALUES
   ('Car Rental Services','Self-drive and chauffeured vehicle rental',                     'car-sport-outline',      '#F97316'),
   ('Carpentry',          'Furniture making, woodwork and repairs',                        'hammer-outline',         '#8B5CF6'),
   ('Painting Services',  'Interior and exterior residential painting',                    'color-palette-outline',  '#EC4899'),
-  ('Landscaping',        'Garden design, lawn care and maintenance',                      'leaf-outline',           '#059669');
+  ('Landscaping',        'Garden design, lawn care and maintenance',                      'leaf-outline',           '#059669'),
+  ('LPG Delivery',       'Propane and LPG tank delivery and refilling services',          'flame-outline',          '#F97316'),
+  ('Water Delivery',     'Drinking water and bulk water delivery services',               'water-outline',          '#0EA5E9'),
+  ('Towing Services',    'Vehicle towing, roadside assistance and recovery',              'trail-sign-outline',     '#EF4444'),
+  ('Welding Services',   'Metal fabrication, repair and welding work',                    'construct-outline',      '#F59E0B'),
+  ('Construction',       'General construction, renovation and repair services',          'business-outline',       '#6366F1'),
+  ('Courier Services',   'Package delivery, document courier and logistics',              'cube-outline',           '#10B981');
 
 -- ============================================================
 -- SEED DATA: Test Users (requires auth.users entries first)
