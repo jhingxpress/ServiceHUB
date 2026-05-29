@@ -588,7 +588,120 @@ FROM public.providers
 ON CONFLICT (provider_id) DO NOTHING;
 
 -- ============================================================
--- 22. VERIFY MIGRATION
+-- 22. REPORTS & MODERATION TABLE
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.reports (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  reporter_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  reported_user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  booking_id UUID REFERENCES public.bookings(id) ON DELETE SET NULL,
+  report_type TEXT NOT NULL CHECK (report_type IN (
+    'fake_provider', 'fake_customer', 'spam', 'harassment', 'fraud',
+    'no_show', 'inappropriate_content', 'other'
+  )),
+  description TEXT NOT NULL,
+  evidence_url TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'investigating', 'resolved', 'dismissed')),
+  admin_notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  resolved_at TIMESTAMPTZ,
+  resolved_by UUID REFERENCES public.users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_reports_status ON public.reports(status);
+CREATE INDEX IF NOT EXISTS idx_reports_reporter ON public.reports(reporter_id);
+CREATE INDEX IF NOT EXISTS idx_reports_reported_user ON public.reports(reported_user_id);
+CREATE INDEX IF NOT EXISTS idx_reports_created_at ON public.reports(created_at DESC);
+
+ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Reports reporter read" ON public.reports;
+CREATE POLICY "Reports reporter read" ON public.reports FOR SELECT USING (auth.uid() = reporter_id);
+DROP POLICY IF EXISTS "Reports admin read" ON public.reports;
+CREATE POLICY "Reports admin read" ON public.reports FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
+DROP POLICY IF EXISTS "Reports reporter insert" ON public.reports;
+CREATE POLICY "Reports reporter insert" ON public.reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
+DROP POLICY IF EXISTS "Reports admin update" ON public.reports;
+CREATE POLICY "Reports admin update" ON public.reports FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
+
+-- ============================================================
+-- 23. SOFT DELETE COLUMNS + PROVIDER STATUS + RESPONSE METRICS
+-- ============================================================
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.providers ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.providers ADD COLUMN IF NOT EXISTS current_status TEXT NOT NULL DEFAULT 'offline' CHECK (current_status IN ('online', 'busy', 'offline'));
+ALTER TABLE public.services ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.provider_stats ADD COLUMN IF NOT EXISTS average_response_minutes INTEGER DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_providers_current_status ON public.providers(current_status);
+CREATE INDEX IF NOT EXISTS idx_providers_deleted_at ON public.providers(deleted_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON public.users(deleted_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_services_deleted_at ON public.services(deleted_at) WHERE deleted_at IS NULL;
+
+-- ============================================================
+-- 24. RESPONSE TIME CALCULATION FUNCTION
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.calculate_provider_response_time(p_provider_id UUID)
+RETURNS INTEGER AS $$
+DECLARE
+  avg_minutes INTEGER;
+BEGIN
+  SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (provider_reply.created_at - customer_first.created_at)) / 60), 0)::INTEGER
+  INTO avg_minutes
+  FROM public.bookings b
+  JOIN LATERAL (
+    SELECT m.created_at
+    FROM public.messages m
+    WHERE m.booking_id = b.id
+      AND m.sender_id = b.customer_id
+      AND LENGTH(TRIM(m.content)) > 0
+    ORDER BY m.created_at ASC
+    LIMIT 1
+  ) customer_first ON true
+  JOIN LATERAL (
+    SELECT m.created_at
+    FROM public.messages m
+    WHERE m.booking_id = b.id
+      AND m.sender_id = b.provider_id
+      AND m.created_at > customer_first.created_at
+      AND LENGTH(TRIM(m.content)) > 0
+    ORDER BY m.created_at ASC
+    LIMIT 1
+  ) provider_reply ON true
+  WHERE b.provider_id = p_provider_id
+    AND b.status IN ('accepted', 'on_the_way', 'arrived', 'in_progress', 'completed');
+
+  RETURN avg_minutes;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.update_provider_response_time()
+RETURNS TRIGGER AS $$
+DECLARE
+  target_provider_id UUID;
+  new_avg INTEGER;
+BEGIN
+  IF NEW.sender_id = (SELECT customer_id FROM public.bookings WHERE id = NEW.booking_id) THEN
+    target_provider_id := (SELECT provider_id FROM public.bookings WHERE id = NEW.booking_id);
+    new_avg := public.calculate_provider_response_time(target_provider_id);
+    UPDATE public.provider_stats
+    SET average_response_minutes = new_avg, updated_at = NOW()
+    WHERE provider_id = target_provider_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS messages_update_response_time ON public.messages;
+CREATE TRIGGER messages_update_response_time
+  AFTER INSERT ON public.messages
+  FOR EACH ROW EXECUTE FUNCTION public.update_provider_response_time();
+
+-- ============================================================
+-- 25. VERIFY MIGRATION
 -- ============================================================
 
 SELECT 'Migration complete' AS status;

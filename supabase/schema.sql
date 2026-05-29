@@ -109,6 +109,15 @@ CREATE TABLE IF NOT EXISTS public.services (
 );
 
 -- ============================================================
+-- SCHEMA EVOLUTION: Soft deletes + Provider status + Response metrics
+-- ============================================================
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.providers ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.providers ADD COLUMN IF NOT EXISTS current_status TEXT NOT NULL DEFAULT 'offline' CHECK (current_status IN ('online', 'busy', 'offline'));
+ALTER TABLE public.services ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.provider_stats ADD COLUMN IF NOT EXISTS average_response_minutes INTEGER DEFAULT 0;
+
+-- ============================================================
 -- SERVICE OPTIONS (Price variants per sub-service)
 -- e.g. Aircon Cleaning → Window Type ₱500, Split Type ₱1200
 -- ============================================================
@@ -366,6 +375,27 @@ CREATE TABLE IF NOT EXISTS public.disputes (
 );
 
 -- ============================================================
+-- REPORTS & MODERATION
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.reports (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  reporter_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  reported_user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  booking_id UUID REFERENCES public.bookings(id) ON DELETE SET NULL,
+  report_type TEXT NOT NULL CHECK (report_type IN (
+    'fake_provider', 'fake_customer', 'spam', 'harassment', 'fraud',
+    'no_show', 'inappropriate_content', 'other'
+  )),
+  description TEXT NOT NULL,
+  evidence_url TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'investigating', 'resolved', 'dismissed')),
+  admin_notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  resolved_at TIMESTAMPTZ,
+  resolved_by UUID REFERENCES public.users(id) ON DELETE SET NULL
+);
+
+-- ============================================================
 -- INDEXES
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_bookings_customer ON public.bookings(customer_id);
@@ -392,9 +422,17 @@ CREATE INDEX IF NOT EXISTS idx_favorites_customer ON public.favorite_providers(c
 CREATE INDEX IF NOT EXISTS idx_favorites_provider ON public.favorite_providers(provider_id);
 CREATE INDEX IF NOT EXISTS idx_providers_location ON public.providers USING btree (latitude, longitude)
 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND status = 'approved';
+CREATE INDEX IF NOT EXISTS idx_providers_current_status ON public.providers(current_status);
+CREATE INDEX IF NOT EXISTS idx_providers_deleted_at ON public.providers(deleted_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON public.users(deleted_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_services_deleted_at ON public.services(deleted_at) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON public.notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_unread ON public.notifications(user_id, is_read) WHERE is_read = FALSE;
 CREATE INDEX IF NOT EXISTS idx_provider_stats_rating ON public.provider_stats(average_rating DESC);
+CREATE INDEX IF NOT EXISTS idx_reports_status ON public.reports(status);
+CREATE INDEX IF NOT EXISTS idx_reports_reporter ON public.reports(reporter_id);
+CREATE INDEX IF NOT EXISTS idx_reports_reported_user ON public.reports(reported_user_id);
+CREATE INDEX IF NOT EXISTS idx_reports_created_at ON public.reports(created_at DESC);
 
 -- ============================================================
 -- FUNCTIONS: Haversine distance for GPS discovery
@@ -443,6 +481,7 @@ ALTER TABLE public.provider_badges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.favorite_providers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.provider_stats ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
 
 -- Users: read own profile; update own profile
 DROP POLICY IF EXISTS "Users read own profile" ON public.users;
@@ -632,6 +671,20 @@ DROP POLICY IF EXISTS "Disputes read" ON public.disputes;
 CREATE POLICY "Disputes read" ON public.disputes FOR SELECT USING (auth.uid() = raised_by);
 DROP POLICY IF EXISTS "Disputes insert" ON public.disputes;
 CREATE POLICY "Disputes insert" ON public.disputes FOR INSERT WITH CHECK (auth.uid() = raised_by);
+
+-- Reports: reporter can read own reports; admin manages all
+DROP POLICY IF EXISTS "Reports reporter read" ON public.reports;
+CREATE POLICY "Reports reporter read" ON public.reports FOR SELECT USING (auth.uid() = reporter_id);
+DROP POLICY IF EXISTS "Reports admin read" ON public.reports;
+CREATE POLICY "Reports admin read" ON public.reports FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
+DROP POLICY IF EXISTS "Reports reporter insert" ON public.reports;
+CREATE POLICY "Reports reporter insert" ON public.reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
+DROP POLICY IF EXISTS "Reports admin update" ON public.reports;
+CREATE POLICY "Reports admin update" ON public.reports FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
 
 -- ============================================================
 -- FUNCTIONS & TRIGGERS
@@ -1041,6 +1094,64 @@ DROP TRIGGER IF EXISTS bookings_create_notification ON public.bookings;
 CREATE TRIGGER bookings_create_notification
   AFTER INSERT OR UPDATE ON public.bookings
   FOR EACH ROW EXECUTE FUNCTION public.create_booking_notification();
+
+-- Calculate provider average response time from booking messages
+CREATE OR REPLACE FUNCTION public.calculate_provider_response_time(p_provider_id UUID)
+RETURNS INTEGER AS $$
+DECLARE
+  avg_minutes INTEGER;
+BEGIN
+  SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (provider_reply.created_at - customer_first.created_at)) / 60), 0)::INTEGER
+  INTO avg_minutes
+  FROM public.bookings b
+  JOIN LATERAL (
+    SELECT m.created_at
+    FROM public.messages m
+    WHERE m.booking_id = b.id
+      AND m.sender_id = b.customer_id
+      AND LENGTH(TRIM(m.content)) > 0
+    ORDER BY m.created_at ASC
+    LIMIT 1
+  ) customer_first ON true
+  JOIN LATERAL (
+    SELECT m.created_at
+    FROM public.messages m
+    WHERE m.booking_id = b.id
+      AND m.sender_id = b.provider_id
+      AND m.created_at > customer_first.created_at
+      AND LENGTH(TRIM(m.content)) > 0
+    ORDER BY m.created_at ASC
+    LIMIT 1
+  ) provider_reply ON true
+  WHERE b.provider_id = p_provider_id
+    AND b.status IN ('accepted', 'on_the_way', 'arrived', 'in_progress', 'completed');
+
+  RETURN avg_minutes;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Update provider_stats response time after new message
+CREATE OR REPLACE FUNCTION public.update_provider_response_time()
+RETURNS TRIGGER AS $$
+DECLARE
+  target_provider_id UUID;
+  new_avg INTEGER;
+BEGIN
+  IF NEW.sender_id = (SELECT customer_id FROM public.bookings WHERE id = NEW.booking_id) THEN
+    target_provider_id := (SELECT provider_id FROM public.bookings WHERE id = NEW.booking_id);
+    new_avg := public.calculate_provider_response_time(target_provider_id);
+    UPDATE public.provider_stats
+    SET average_response_minutes = new_avg, updated_at = NOW()
+    WHERE provider_id = target_provider_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS messages_update_response_time ON public.messages;
+CREATE TRIGGER messages_update_response_time
+  AFTER INSERT ON public.messages
+  FOR EACH ROW EXECUTE FUNCTION public.update_provider_response_time();
 
 -- ============================================================
 -- SEED DATA: Categories

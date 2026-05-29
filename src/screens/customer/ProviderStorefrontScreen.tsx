@@ -159,6 +159,29 @@ export default function ProviderStorefrontScreen() {
           <Text style={styles.providerName}>{provider.business_name ?? userInfo?.full_name ?? 'Provider'}</Text>
           <Text style={styles.categoryName}>{cat?.name ?? 'Service Provider'}</Text>
 
+          {/* Online Status + Response Time */}
+          <View style={styles.statusRow}>
+            <View style={styles.statusDotWrap}>
+              <View style={[
+                styles.statusDot,
+                provider.current_status === 'online' && styles.statusDotOnline,
+                provider.current_status === 'busy' && styles.statusDotBusy,
+              ]} />
+              <Text style={styles.statusText}>
+                {provider.current_status === 'online' ? 'Online' :
+                 provider.current_status === 'busy' ? 'Busy' : 'Offline'}
+              </Text>
+            </View>
+            {(provider as any).provider_stats?.average_response_minutes > 0 && (
+              <View style={styles.responseTimeWrap}>
+                <Ionicons name="timer-outline" size={12} color={COLORS.textLight} />
+                <Text style={styles.responseTimeText}>
+                  Responds in {Math.ceil((provider as any).provider_stats.average_response_minutes / 5) * 5} mins
+                </Text>
+              </View>
+            )}
+          </View>
+
           {/* Trust Metrics */}
           <View style={styles.metricsRow}>
             <View style={styles.metric}>
@@ -310,6 +333,9 @@ export default function ProviderStorefrontScreen() {
 
       {/* Floating Book Button */}
       <View style={styles.floatingBar}>
+        <TouchableOpacity style={styles.reportBtn} onPress={() => navigation.navigate('ReportScreen', { reportedUserId: provider.id, reportedUserName: (provider.business_name ?? userInfo?.full_name) ?? undefined })}>
+          <Ionicons name="flag-outline" size={18} color={COLORS.textLight} />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.chatBtn} onPress={() => Alert.alert('Chat', 'Chat feature coming soon')}>
           <Ionicons name="chatbubble-outline" size={20} color={COLORS.primary} />
           <Text style={styles.chatBtnText}>Chat</Text>
@@ -348,6 +374,14 @@ const styles = StyleSheet.create({
   verifiedBadge: { position: 'absolute', bottom: -2, right: -2, backgroundColor: COLORS.white, borderRadius: 10 },
   providerName: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.xl, color: COLORS.text, marginTop: SPACING.sm },
   categoryName: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginTop: SPACING.sm },
+  statusDotWrap: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
+  statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.textMuted },
+  statusDotOnline: { backgroundColor: COLORS.success },
+  statusDotBusy: { backgroundColor: COLORS.warning },
+  statusText: { fontFamily: FONTS.medium, fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
+  responseTimeWrap: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
+  responseTimeText: { fontFamily: FONTS.regular, fontSize: FONTS.sizes.xs, color: COLORS.textLight },
   metricsRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     marginTop: SPACING.md, gap: SPACING.md,
@@ -417,6 +451,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.md,
     backgroundColor: COLORS.surface,
     borderTopWidth: 1, borderTopColor: COLORS.border,
+  },
+  reportBtn: {
+    width: 44, height: 48, borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.surfaceSecondary, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: COLORS.border,
   },
   chatBtn: {
     width: 60, height: 48, borderRadius: BORDER_RADIUS.lg,

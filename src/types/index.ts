@@ -14,6 +14,7 @@ export type DocumentType =
   | 'professional_cert'
   | 'other_supporting';
 export type ProviderType = 'individual' | 'business';
+export type ProviderCurrentStatus = 'online' | 'busy' | 'offline';
 
 export type BookingStatus =
   | 'pending'
@@ -28,6 +29,16 @@ export type BookingStatus =
 export type PaymentStatus = 'pending' | 'completed' | 'refunded' | 'failed';
 export type DisputeStatus = 'open' | 'investigating' | 'resolved' | 'closed';
 export type MediaType = 'photo' | 'video';
+export type ReportType =
+  | 'fake_provider'
+  | 'fake_customer'
+  | 'spam'
+  | 'harassment'
+  | 'fraud'
+  | 'no_show'
+  | 'inappropriate_content'
+  | 'other';
+export type ReportStatus = 'pending' | 'investigating' | 'resolved' | 'dismissed';
 
 export interface User {
   id: string;
@@ -39,6 +50,7 @@ export interface User {
   status: 'active' | 'suspended' | 'banned';
   city: string | null;
   province: string | null;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -87,6 +99,8 @@ export interface Provider {
   rejected_at: string | null;
   rejected_by: string | null;
   rejection_reason: string | null;
+  // Availability
+  current_status: ProviderCurrentStatus;
   // Stats
   rating: number;
   total_reviews: number;
@@ -94,6 +108,7 @@ export interface Provider {
   total_earnings: number;
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
   // Relations
   users?: User;
   categories?: Category;
@@ -138,6 +153,7 @@ export interface Service {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
   service_options?: ServiceOption[];
   service_images?: ServiceImage[];
 }
@@ -298,7 +314,27 @@ export interface ProviderStats {
   average_rating: number;
   response_rate: number;
   favorite_count: number;
+  average_response_minutes: number;
   updated_at: string;
+}
+
+export interface Report {
+  id: string;
+  reporter_id: string;
+  reported_user_id: string;
+  booking_id: string | null;
+  report_type: ReportType;
+  description: string;
+  evidence_url: string | null;
+  status: ReportStatus;
+  admin_notes: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  reporter?: User;
+  reported_user?: User;
+  resolver?: User;
+  booking?: Booking;
 }
 
 export interface ChatRoom {

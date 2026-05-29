@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet } from 'react-native';
 import { ProviderStackParamList, ProviderTabParamList } from './types';
-import { COLORS } from '../constants/theme';
+import { COLORS, FONTS } from '../constants/theme';
 
 import ProviderDashboardScreen from '../screens/provider/ProviderDashboardScreen';
 import ActiveJobsScreen from '../screens/provider/ActiveJobsScreen';
@@ -19,6 +19,7 @@ import ManageServicesScreen from '../screens/provider/ManageServicesScreen';
 import ServiceOptionsScreen from '../screens/provider/ServiceOptionsScreen';
 import ProviderOnboardingScreen from '../screens/provider/ProviderOnboardingScreen';
 import PendingApprovalScreen from '../screens/provider/PendingApprovalScreen';
+import ReportScreen from '../screens/shared/ReportScreen';
 import { useAuthStore } from '../stores/authStore';
 
 const Stack = createNativeStackNavigator<ProviderStackParamList>();
@@ -91,6 +92,7 @@ export default function ProviderNavigator() {
           <Stack.Screen name="ProfileSetup" component={ProviderProfileSetupScreen} />
           <Stack.Screen name="ManageServices" component={ManageServicesScreen} />
           <Stack.Screen name="ServiceOptions" component={ServiceOptionsScreen} />
+          <Stack.Screen name="ReportScreen" component={ReportScreen} />
         </>
       ) : isPending ? (
         <Stack.Screen name="PendingApproval" component={PendingApprovalScreen} />

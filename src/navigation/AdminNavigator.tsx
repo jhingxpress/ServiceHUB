@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet } from 'react-native';
 import { AdminStackParamList, AdminTabParamList } from './types';
-import { COLORS } from '../constants/theme';
+import { COLORS, FONTS } from '../constants/theme';
 
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
 import PendingProvidersScreen from '../screens/admin/PendingProvidersScreen';
@@ -15,6 +15,7 @@ import UserDetailScreen from '../screens/admin/UserDetailScreen';
 import BookingManagementScreen from '../screens/admin/BookingManagementScreen';
 import DisputesScreen from '../screens/admin/DisputesScreen';
 import AdminKYCScreen from '../screens/admin/AdminKYCScreen';
+import AdminReportsScreen from '../screens/admin/AdminReportsScreen';
 
 const Stack = createNativeStackNavigator<AdminStackParamList>();
 const Tab = createBottomTabNavigator<AdminTabParamList>();
@@ -79,6 +80,7 @@ export default function AdminNavigator() {
       <Stack.Screen name="ProviderDetail" component={ProviderDetailScreen} />
       <Stack.Screen name="UserDetail" component={UserDetailScreen} />
       <Stack.Screen name="BookingManagement" component={BookingManagementScreen} />
+      <Stack.Screen name="AdminReports" component={AdminReportsScreen} />
     </Stack.Navigator>
   );
 }

@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { View, StyleSheet } from 'react-native';
 import { CustomerStackParamList, CustomerTabParamList } from './types';
-import { COLORS } from '../constants/theme';
+import { COLORS, FONTS } from '../constants/theme';
 
 import HomeScreen from '../screens/customer/HomeScreen';
 import SearchScreen from '../screens/customer/SearchScreen';
@@ -21,6 +21,7 @@ import CategoryListScreen from '../screens/customer/CategoryListScreen';
 import ProviderListScreen from '../screens/customer/ProviderListScreen';
 import NotificationCenterScreen from '../screens/customer/NotificationCenterScreen';
 import MyReviewsScreen from '../screens/customer/MyReviewsScreen';
+import ReportScreen from '../screens/shared/ReportScreen';
 
 const Stack = createNativeStackNavigator<CustomerStackParamList>();
 const Tab = createBottomTabNavigator<CustomerTabParamList>();
@@ -90,6 +91,7 @@ export default function CustomerNavigator() {
       <Stack.Screen name="ProviderList" component={ProviderListScreen} />
       <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} />
       <Stack.Screen name="MyReviews" component={MyReviewsScreen} />
+      <Stack.Screen name="ReportScreen" component={ReportScreen} />
     </Stack.Navigator>
   );
 }

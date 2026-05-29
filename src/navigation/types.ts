@@ -41,6 +41,7 @@ export type CustomerStackParamList = {
   NotificationCenter: undefined;
   MyReviews: undefined;
   MyFavorites: undefined;
+  ReportScreen: { reportedUserId: string; bookingId?: string; reportedUserName?: string };
 };
 
 export type CustomerTabParamList = {
@@ -64,6 +65,7 @@ export type ProviderStackParamList = {
   ServiceOptions: { serviceId: string; serviceName: string };
   ProviderOnboarding: undefined;
   PendingApproval: undefined;
+  ReportScreen: { reportedUserId: string; bookingId?: string; reportedUserName?: string };
 };
 
 export type ProviderTabParamList = {
@@ -84,6 +86,7 @@ export type AdminStackParamList = {
   BookingDetail: { bookingId: string };
   BookingManagement: undefined;
   DisputeDetail: { disputeId: string };
+  AdminReports: undefined;
 };
 
 export type AdminTabParamList = {
