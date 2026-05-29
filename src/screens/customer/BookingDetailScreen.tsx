@@ -25,7 +25,7 @@ import { CustomerStackParamList } from '../../navigation/types';
 type NavProp = NativeStackNavigationProp<CustomerStackParamList>;
 type RouteType = RouteProp<CustomerStackParamList, 'BookingDetail'>;
 
-const STEPS = ['pending', 'accepted', 'in_progress', 'completed'];
+const STEPS = ['pending', 'accepted', 'on_the_way', 'arrived', 'in_progress', 'completed'];
 
 export default function BookingDetailScreen() {
   const navigation = useNavigation<NavProp>();
@@ -123,7 +123,7 @@ export default function BookingDetailScreen() {
   const providerUser = (booking.provider as unknown as { users: { full_name: string | null; avatar_url: string | null; phone: string | null } })?.users;
   const currentStep = STEPS.indexOf(booking.status);
   const isCompleted = booking.status === 'completed';
-  const isCancellable = ['pending', 'accepted'].includes(booking.status);
+  const isCancellable = ['pending', 'accepted', 'on_the_way', 'arrived'].includes(booking.status);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -145,6 +145,8 @@ export default function BookingDetailScreen() {
           <Text style={[styles.statusSubtext, { color: STATUS_COLORS[booking.status]?.text ?? COLORS.primary }]}>
             {booking.status === 'pending' && 'Waiting for provider confirmation'}
             {booking.status === 'accepted' && 'Provider accepted your booking'}
+            {booking.status === 'on_the_way' && 'Provider is on the way'}
+            {booking.status === 'arrived' && 'Provider has arrived'}
             {booking.status === 'in_progress' && 'Service is in progress'}
             {booking.status === 'completed' && 'Service completed successfully'}
             {booking.status === 'cancelled' && 'This booking was cancelled'}

@@ -112,6 +112,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
   const [actionNotes, setActionNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [processingDoc, setProcessingDoc] = useState<string | null>(null);
 
   const loadData = async () => {
     const [provRes, docsRes, logsRes] = await Promise.all([
@@ -137,6 +138,28 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
 
   useEffect(() => { loadData(); }, [providerId]);
 
+  const handleDocAction = async (docId: string, action: 'approved' | 'rejected' | 'pending') => {
+    setProcessingDoc(docId);
+    try {
+      const { error } = await supabase
+        .from('provider_documents')
+        .update({ status: action, reviewed_at: new Date().toISOString(), reviewed_by: user?.id })
+        .eq('id', docId);
+      if (error) throw error;
+      // Insert notification log
+      await supabase.from('provider_verification_logs').insert({
+        provider_id: providerId,
+        action: `doc_${action}`,
+        performed_by: user?.id ?? null,
+      });
+      await loadData();
+    } catch (err) {
+      console.error('[ProviderDetail] Doc action error:', err);
+      Alert.alert('Error', 'Failed to update document status');
+    }
+    setProcessingDoc(null);
+  };
+
   const performAction = async () => {
     if (!actionMode) return;
     if ((actionMode === 'reject' || actionMode === 'suspend') && !actionNotes.trim()) {
@@ -158,9 +181,11 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
         updates.rejection_reason = null;
       } else if (actionMode === 'reject') {
         updates.status = 'rejected'; updates.is_verified = false;
+        updates.rejected_by = user?.id;
         updates.rejection_reason = actionNotes.trim();
       } else if (actionMode === 'suspend') {
         updates.status = 'suspended'; updates.is_verified = false;
+        updates.rejected_by = user?.id;
         updates.rejection_reason = actionNotes.trim();
       }
       console.log('[ProviderDetail] Update payload:', updates);
@@ -297,25 +322,60 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           {documents.length === 0
             ? <Text style={styles.emptyText}>No documents uploaded yet.</Text>
             : documents.map(doc => (
-              <TouchableOpacity key={doc.id} style={styles.docRow} onPress={() => setPreviewImage(getStorageUrl(doc.file_url))}>
-                <Image
-                  source={{ uri: getStorageUrl(doc.file_url) }}
-                  style={styles.docThumbnail}
-                  resizeMode="cover"
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.docType}>{getDocumentLabel(doc)}</Text>
-                  <Text style={styles.docDate}>Uploaded {format(new Date(doc.uploaded_at), 'MMM d, yyyy')}</Text>
-                </View>
-                <View style={[styles.docStatus, {
-                  backgroundColor: doc.status === 'approved' ? COLORS.successLight : doc.status === 'rejected' ? COLORS.errorLight : COLORS.warningLight,
-                }]}>
-                  <Text style={[styles.docStatusText, {
-                    color: doc.status === 'approved' ? '#065F46' : doc.status === 'rejected' ? '#991B1B' : '#92400E',
-                  }]}>{doc.status}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={COLORS.textLight} />
-              </TouchableOpacity>
+              <View key={doc.id} style={styles.docCard}>
+                <TouchableOpacity style={styles.docRow} onPress={() => setPreviewImage(getStorageUrl(doc.file_url))}>
+                  <Image
+                    source={{ uri: getStorageUrl(doc.file_url) }}
+                    style={styles.docThumbnail}
+                    resizeMode="cover"
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.docType}>{getDocumentLabel(doc)}</Text>
+                    <Text style={styles.docDate}>Uploaded {format(new Date(doc.uploaded_at), 'MMM d, yyyy')}</Text>
+                  </View>
+                  <View style={[styles.docStatus, {
+                    backgroundColor: doc.status === 'approved' ? COLORS.successLight : doc.status === 'rejected' ? COLORS.errorLight : COLORS.warningLight,
+                  }]}>
+                    <Text style={[styles.docStatusText, {
+                      color: doc.status === 'approved' ? '#065F46' : doc.status === 'rejected' ? '#991B1B' : '#92400E',
+                    }]}>{doc.status}</Text>
+                  </View>
+                  <Ionicons name="expand-outline" size={18} color={COLORS.primary} />
+                </TouchableOpacity>
+                {processingDoc === doc.id ? (
+                  <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.sm }} />
+                ) : (
+                  <View style={styles.docActions}>
+                    {doc.status !== 'approved' && (
+                      <TouchableOpacity
+                        style={[styles.docActionBtn, { backgroundColor: COLORS.successLight, borderColor: COLORS.success }]}
+                        onPress={() => handleDocAction(doc.id, 'approved')}
+                      >
+                        <Ionicons name="checkmark" size={14} color={COLORS.success} />
+                        <Text style={[styles.docActionText, { color: COLORS.success }]}>Approve</Text>
+                      </TouchableOpacity>
+                    )}
+                    {doc.status !== 'rejected' && (
+                      <TouchableOpacity
+                        style={[styles.docActionBtn, { backgroundColor: COLORS.errorLight, borderColor: COLORS.error }]}
+                        onPress={() => handleDocAction(doc.id, 'rejected')}
+                      >
+                        <Ionicons name="close" size={14} color={COLORS.error} />
+                        <Text style={[styles.docActionText, { color: COLORS.error }]}>Reject</Text>
+                      </TouchableOpacity>
+                    )}
+                    {doc.status !== 'pending' && (
+                      <TouchableOpacity
+                        style={[styles.docActionBtn, { backgroundColor: COLORS.warningLight, borderColor: COLORS.warning }]}
+                        onPress={() => handleDocAction(doc.id, 'pending')}
+                      >
+                        <Ionicons name="refresh" size={14} color={COLORS.warning} />
+                        <Text style={[styles.docActionText, { color: COLORS.warning }]}>Resubmit</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+              </View>
             ))
           }
         </View>
@@ -517,6 +577,21 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.errorLight, borderWidth: 1, borderColor: '#FECACA',
   },
   rejectBtnText: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.error },
+  docCard: {
+    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md, marginBottom: SPACING.sm,
+    borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
+  },
+  docActions: {
+    flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm,
+    paddingTop: SPACING.sm, borderTopWidth: 1, borderTopColor: COLORS.border,
+  },
+  docActionBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 4, paddingVertical: SPACING.xs + 2, borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+  },
+  docActionText: { fontSize: FONTS.sizes.sm, fontWeight: '700' },
   logRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.md, paddingVertical: SPACING.sm },
   logDot: { width: 10, height: 10, borderRadius: 5, marginTop: 5 },
   logAction: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text },

@@ -25,7 +25,7 @@ interface ProviderItem {
   bio: string | null;
   location: string | null;
   hourly_rate: number | null;
-  avg_rating: number | null;
+  rating: number | null;
   total_reviews: number | null;
   users: { full_name: string | null; avatar_url: string | null };
   category: { name: string; icon: string } | null;
@@ -44,14 +44,14 @@ export default function ProviderListScreen({ route, navigation }: Props) {
     let q = supabase
       .from('providers')
       .select(`
-        id, bio, location, hourly_rate, avg_rating, total_reviews,
+        id, bio, location, hourly_rate, rating, total_reviews,
         users!providers_id_fkey(full_name, avatar_url),
         category:categories(name, icon),
         services(name)
       `)
       .eq('is_verified', true)
       .eq('is_available', true)
-      .order('avg_rating', { ascending: false });
+      .order('rating', { ascending: false });
 
     if (categoryId) q = q.eq('category_id', categoryId);
 
@@ -80,7 +80,7 @@ export default function ProviderListScreen({ route, navigation }: Props) {
   const renderListItem = ({ item }: { item: ProviderItem }) => (
     <TouchableOpacity
       style={styles.listCard}
-      onPress={() => navigation.navigate('ProviderProfile', { providerId: item.id })}
+      onPress={() => navigation.navigate('ProviderStorefront', { providerId: item.id })}
       activeOpacity={0.85}
     >
       <Avatar uri={item.users?.avatar_url} name={item.users?.full_name} size={56} borderColor={COLORS.primary} />
@@ -88,10 +88,10 @@ export default function ProviderListScreen({ route, navigation }: Props) {
         <Text style={styles.providerName}>{item.users?.full_name ?? 'Provider'}</Text>
         <Text style={styles.categoryText}>{item.category?.name ?? ''}</Text>
         <View style={styles.metaRow}>
-          {item.avg_rating && (
+          {item.rating && (
             <View style={styles.ratingPill}>
               <Ionicons name="star" size={11} color="#F59E0B" />
-              <Text style={styles.ratingPillText}>{item.avg_rating.toFixed(1)}</Text>
+              <Text style={styles.ratingPillText}>{Number(item.rating).toFixed(1)}</Text>
             </View>
           )}
           {item.location && (
@@ -115,16 +115,16 @@ export default function ProviderListScreen({ route, navigation }: Props) {
   const renderGridItem = ({ item }: { item: ProviderItem }) => (
     <TouchableOpacity
       style={styles.gridCard}
-      onPress={() => navigation.navigate('ProviderProfile', { providerId: item.id })}
+      onPress={() => navigation.navigate('ProviderStorefront', { providerId: item.id })}
       activeOpacity={0.85}
     >
       <Avatar uri={item.users?.avatar_url} name={item.users?.full_name} size={64} />
       <Text style={styles.gridName} numberOfLines={1}>{item.users?.full_name?.split(' ')[0] ?? 'Pro'}</Text>
       <Text style={styles.gridCategory} numberOfLines={1}>{item.category?.name ?? ''}</Text>
-      {item.avg_rating && (
+      {item.rating && (
         <View style={styles.gridRating}>
           <Ionicons name="star" size={11} color="#F59E0B" />
-          <Text style={styles.gridRatingText}>{item.avg_rating.toFixed(1)}</Text>
+          <Text style={styles.gridRatingText}>{Number(item.rating).toFixed(1)}</Text>
         </View>
       )}
       {item.hourly_rate && (

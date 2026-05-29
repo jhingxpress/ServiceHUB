@@ -64,6 +64,8 @@ CREATE TABLE public.providers (
   is_available BOOLEAN DEFAULT TRUE,
   approved_at TIMESTAMPTZ,
   approved_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  rejected_at TIMESTAMPTZ,
+  rejected_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
   rejection_reason TEXT,
   -- Legacy KYC (kept for compatibility)
   kyc_status TEXT DEFAULT 'not_submitted' CHECK (kyc_status IN ('not_submitted', 'pending', 'approved', 'rejected')),
@@ -193,6 +195,45 @@ CREATE TABLE public.favorite_providers (
   provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (customer_id, provider_id)
+);
+
+-- ============================================================
+-- NOTIFICATIONS
+-- ============================================================
+CREATE TABLE public.notifications (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  type TEXT NOT NULL CHECK (type IN (
+    'booking_submitted',
+    'booking_accepted',
+    'booking_rejected',
+    'provider_on_the_way',
+    'provider_arrived',
+    'service_completed',
+    'review_reminder',
+    'document_approved',
+    'document_rejected',
+    'verification_approved',
+    'verification_rejected'
+  )),
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  data JSONB DEFAULT '{}'::JSONB,
+  is_read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================
+-- PROVIDER STATS (denormalized for fast reads)
+-- ============================================================
+CREATE TABLE public.provider_stats (
+  provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE PRIMARY KEY,
+  completed_jobs INTEGER DEFAULT 0,
+  total_reviews INTEGER DEFAULT 0,
+  average_rating DECIMAL(3,2) DEFAULT 0.00,
+  response_rate INTEGER DEFAULT 0 CHECK (response_rate >= 0 AND response_rate <= 100),
+  favorite_count INTEGER DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ============================================================
@@ -342,6 +383,33 @@ CREATE INDEX idx_favorites_customer ON public.favorite_providers(customer_id);
 CREATE INDEX idx_favorites_provider ON public.favorite_providers(provider_id);
 CREATE INDEX idx_providers_location ON public.providers USING btree (latitude, longitude)
 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND status = 'approved';
+CREATE INDEX idx_notifications_user ON public.notifications(user_id);
+CREATE INDEX idx_notifications_unread ON public.notifications(user_id, is_read) WHERE is_read = FALSE;
+CREATE INDEX idx_provider_stats_rating ON public.provider_stats(average_rating DESC);
+
+-- ============================================================
+-- FUNCTIONS: Haversine distance for GPS discovery
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.haversine_distance(
+  lat1 DECIMAL, lon1 DECIMAL, lat2 DECIMAL, lon2 DECIMAL
+)
+RETURNS DECIMAL AS $$
+DECLARE
+  R DECIMAL := 6371; -- Earth radius in km
+  dLat DECIMAL;
+  dLon DECIMAL;
+  a DECIMAL;
+  c DECIMAL;
+BEGIN
+  dLat := RADIANS(lat2 - lat1);
+  dLon := RADIANS(lon2 - lon1);
+  a := SIN(dLat/2) * SIN(dLat/2) +
+       COS(RADIANS(lat1)) * COS(RADIANS(lat2)) *
+       SIN(dLon/2) * SIN(dLon/2);
+  c := 2 * ATAN2(SQRT(a), SQRT(1-a));
+  RETURN R * c;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
 
 -- ============================================================
 -- ROW LEVEL SECURITY
@@ -364,6 +432,8 @@ ALTER TABLE public.service_images ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.provider_gallery ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.provider_badges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.favorite_providers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.provider_stats ENABLE ROW LEVEL SECURITY;
 
 -- Users: read own profile; update own profile
 CREATE POLICY "Users read own profile" ON public.users FOR SELECT USING (auth.uid() = id);
@@ -468,6 +538,17 @@ CREATE POLICY "Favorites customer manage" ON public.favorite_providers FOR ALL
 CREATE POLICY "Favorites provider read" ON public.favorite_providers FOR SELECT
   USING (auth.uid() = provider_id);
 
+-- Notifications: user manages own
+CREATE POLICY "Notifications user read" ON public.notifications FOR SELECT
+  USING (auth.uid() = user_id);
+CREATE POLICY "Notifications user update" ON public.notifications FOR UPDATE
+  USING (auth.uid() = user_id);
+CREATE POLICY "Notifications system insert" ON public.notifications FOR INSERT
+  WITH CHECK (true);
+
+-- Provider Stats: public read; provider read own
+CREATE POLICY "Provider stats public read" ON public.provider_stats FOR SELECT USING (true);
+
 -- Availability: public read; provider manages own
 CREATE POLICY "Availability public read" ON public.availability FOR SELECT USING (true);
 CREATE POLICY "Availability provider manage" ON public.availability FOR ALL USING (auth.uid() = provider_id);
@@ -532,15 +613,22 @@ CREATE TRIGGER reviews_update_rating
   AFTER INSERT ON public.reviews
   FOR EACH ROW EXECUTE FUNCTION public.update_provider_rating();
 
--- Auto-set is_verified and approved_at when provider status changes to approved
+-- Auto-set timestamps and is_verified on provider status transitions
 CREATE OR REPLACE FUNCTION public.handle_provider_status_change()
 RETURNS TRIGGER AS $$
 BEGIN
   IF NEW.status = 'approved' AND OLD.status != 'approved' THEN
     NEW.is_verified = TRUE;
     NEW.approved_at = NOW();
-  ELSIF NEW.status != 'approved' THEN
+    NEW.rejected_at = NULL;
+    NEW.rejection_reason = NULL;
+  ELSIF NEW.status = 'rejected' AND OLD.status != 'rejected' THEN
     NEW.is_verified = FALSE;
+    NEW.rejected_at = NOW();
+    NEW.approved_at = NULL;
+  ELSIF NEW.status = 'suspended' AND OLD.status != 'suspended' THEN
+    NEW.is_verified = FALSE;
+    NEW.approved_at = NULL;
   END IF;
   RETURN NEW;
 END;
@@ -708,6 +796,134 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER bookings_update_response_rate
   AFTER UPDATE ON public.bookings
   FOR EACH ROW EXECUTE FUNCTION public.update_provider_response_rate();
+
+-- Sync provider_stats when provider main fields change
+CREATE OR REPLACE FUNCTION public.sync_provider_stats()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.provider_stats (
+    provider_id, completed_jobs, total_reviews, average_rating, response_rate
+  )
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.completed_jobs, 0),
+    COALESCE(NEW.total_reviews, 0),
+    COALESCE(NEW.rating, 0.00),
+    COALESCE(NEW.response_rate, 0)
+  )
+  ON CONFLICT (provider_id) DO UPDATE SET
+    completed_jobs = EXCLUDED.completed_jobs,
+    total_reviews = EXCLUDED.total_reviews,
+    average_rating = EXCLUDED.average_rating,
+    response_rate = EXCLUDED.response_rate,
+    updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER providers_sync_stats
+  AFTER INSERT OR UPDATE ON public.providers
+  FOR EACH ROW EXECUTE FUNCTION public.sync_provider_stats();
+
+-- Sync favorite_count on provider_stats when favorites change
+CREATE OR REPLACE FUNCTION public.sync_favorite_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE public.provider_stats
+    SET favorite_count = (
+      SELECT COUNT(*) FROM public.favorite_providers WHERE provider_id = NEW.provider_id
+    ), updated_at = NOW()
+    WHERE provider_id = NEW.provider_id;
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE public.provider_stats
+    SET favorite_count = (
+      SELECT COUNT(*) FROM public.favorite_providers WHERE provider_id = OLD.provider_id
+    ), updated_at = NOW()
+    WHERE provider_id = OLD.provider_id;
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER favorites_sync_count
+  AFTER INSERT OR DELETE ON public.favorite_providers
+  FOR EACH ROW EXECUTE FUNCTION public.sync_favorite_count();
+
+-- Create notifications on booking status changes
+CREATE OR REPLACE FUNCTION public.create_booking_notification()
+RETURNS TRIGGER AS $$
+DECLARE
+  cust_name TEXT;
+  prov_name TEXT;
+BEGIN
+  -- Get names
+  SELECT full_name INTO cust_name FROM public.users WHERE id = NEW.customer_id;
+  SELECT COALESCE(business_name, u.full_name) INTO prov_name
+  FROM public.providers p LEFT JOIN public.users u ON p.id = u.id
+  WHERE p.id = NEW.provider_id;
+
+  IF TG_OP = 'INSERT' THEN
+    -- Notify provider: new booking
+    INSERT INTO public.notifications (user_id, type, title, body, data)
+    VALUES (
+      NEW.provider_id, 'booking_submitted',
+      'New Booking Request',
+      cust_name || ' requested a booking for ' || NEW.scheduled_date,
+      jsonb_build_object('booking_id', NEW.id, 'status', NEW.status)
+    );
+  ELSIF TG_OP = 'UPDATE' AND NEW.status != OLD.status THEN
+    IF NEW.status = 'accepted' THEN
+      INSERT INTO public.notifications (user_id, type, title, body, data)
+      VALUES (
+        NEW.customer_id, 'booking_accepted',
+        'Booking Accepted',
+        prov_name || ' accepted your booking request',
+        jsonb_build_object('booking_id', NEW.id)
+      );
+    ELSIF NEW.status = 'rejected' THEN
+      INSERT INTO public.notifications (user_id, type, title, body, data)
+      VALUES (
+        NEW.customer_id, 'booking_rejected',
+        'Booking Rejected',
+        'Your booking request was declined',
+        jsonb_build_object('booking_id', NEW.id)
+      );
+    ELSIF NEW.status = 'on_the_way' THEN
+      INSERT INTO public.notifications (user_id, type, title, body, data)
+      VALUES (
+        NEW.customer_id, 'provider_on_the_way',
+        'Provider On The Way',
+        prov_name || ' is on the way to your location',
+        jsonb_build_object('booking_id', NEW.id)
+      );
+    ELSIF NEW.status = 'arrived' THEN
+      INSERT INTO public.notifications (user_id, type, title, body, data)
+      VALUES (
+        NEW.customer_id, 'provider_arrived',
+        'Provider Arrived',
+        prov_name || ' has arrived at your location',
+        jsonb_build_object('booking_id', NEW.id)
+      );
+    ELSIF NEW.status = 'completed' THEN
+      INSERT INTO public.notifications (user_id, type, title, body, data)
+      VALUES (
+        NEW.customer_id, 'service_completed',
+        'Service Completed',
+        'Your service is complete. Please leave a review!',
+        jsonb_build_object('booking_id', NEW.id)
+      );
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER bookings_create_notification
+  AFTER INSERT OR UPDATE ON public.bookings
+  FOR EACH ROW EXECUTE FUNCTION public.create_booking_notification();
 
 -- ============================================================
 -- SEED DATA: Categories

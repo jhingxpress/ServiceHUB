@@ -40,10 +40,10 @@ interface KYCUser {
 
 interface KYCProvider {
   id: string;
-  kyc_status: string;
-  kyc_documents: Record<string, string>;
+  status: string;
   created_at: string;
   users: { full_name: string | null; email: string; avatar_url: string | null };
+  categories: { name: string; icon: string } | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -72,8 +72,8 @@ export default function AdminKYCScreen() {
         .order('created_at', { ascending: false }),
       supabase
         .from('providers')
-        .select('id, kyc_status, kyc_documents, created_at, users!providers_id_fkey(full_name, email, avatar_url)')
-        .neq('kyc_status', 'not_submitted')
+        .select('id, status, created_at, users!providers_id_fkey(full_name, email, avatar_url), categories(name, icon)')
+        .eq('status', 'pending_review')
         .order('created_at', { ascending: false }),
     ]);
     setCustomers((custRes.data ?? []) as KYCUser[]);
@@ -84,7 +84,7 @@ export default function AdminKYCScreen() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const filteredCustomers = filter === 'pending' ? customers.filter((c) => c.kyc_status === 'pending') : customers;
-  const filteredProviders = filter === 'pending' ? providers.filter((p) => p.kyc_status === 'pending') : providers;
+  const filteredProviders = providers;
 
   const renderCustomer = ({ item }: { item: KYCUser }) => (
     <TouchableOpacity
@@ -114,10 +114,12 @@ export default function AdminKYCScreen() {
       <View style={styles.cardInfo}>
         <Text style={styles.cardName}>{item.users?.full_name ?? 'Unknown'}</Text>
         <Text style={styles.cardEmail}>{item.users?.email}</Text>
-        <Text style={styles.cardDate}>Applied {format(new Date(item.created_at), 'MMM d, yyyy')}</Text>
+        {item.categories && (
+          <Text style={styles.cardDate}>{item.categories.name}</Text>
+        )}
       </View>
-      <View style={[styles.statusDot, { backgroundColor: STATUS_COLORS[item.kyc_status] ?? COLORS.textLight }]}>
-        <Text style={styles.statusText}>{item.kyc_status}</Text>
+      <View style={[styles.statusDot, { backgroundColor: STATUS_COLORS[item.status] ?? COLORS.textLight }]}>
+        <Text style={styles.statusText}>{item.status.replace('_', ' ')}</Text>
       </View>
     </TouchableOpacity>
   );

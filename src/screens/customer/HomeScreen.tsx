@@ -53,7 +53,8 @@ export default function HomeScreen() {
           .select('*, users!providers_id_fkey(full_name, avatar_url), categories(name, icon, color)')
           .eq('is_verified', true)
           .eq('is_available', true)
-          .order('avg_rating', { ascending: false })
+          .eq('status', 'approved')
+          .order('rating', { ascending: false })
           .limit(8),
         user
           ? supabase
@@ -180,7 +181,7 @@ export default function HomeScreen() {
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.providerCard}
-                onPress={() => navigation.navigate('ProviderProfile', { providerId: item.id })}
+                onPress={() => navigation.navigate('ProviderStorefront', { providerId: item.id })}
                 activeOpacity={0.8}
               >
                 <Avatar

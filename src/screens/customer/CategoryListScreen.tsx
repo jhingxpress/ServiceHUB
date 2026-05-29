@@ -25,7 +25,7 @@ interface ProviderItem {
   bio: string | null;
   location: string | null;
   hourly_rate: number | null;
-  avg_rating: number | null;
+  rating: number | null;
   total_reviews: number | null;
   users: { full_name: string | null; avatar_url: string | null };
   services: { name: string; price: number }[];
@@ -45,7 +45,7 @@ export default function CategoryListScreen({ route, navigation }: Props) {
     supabase
       .from('providers')
       .select(`
-        id, bio, location, hourly_rate, avg_rating, total_reviews,
+        id, bio, location, hourly_rate, rating, total_reviews,
         users!providers_id_fkey(full_name, avatar_url),
         services(name, price)
       `)
@@ -71,7 +71,7 @@ export default function CategoryListScreen({ route, navigation }: Props) {
       );
     }
     switch (sortIdx) {
-      case 0: list = [...list].sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0)); break;
+      case 0: list = [...list].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)); break;
       case 2: list = [...list].sort((a, b) => (a.hourly_rate ?? 0) - (b.hourly_rate ?? 0)); break;
       case 3: list = [...list].sort((a, b) => (b.total_reviews ?? 0) - (a.total_reviews ?? 0)); break;
     }
@@ -81,7 +81,7 @@ export default function CategoryListScreen({ route, navigation }: Props) {
   const renderProvider = ({ item }: { item: ProviderItem }) => (
     <TouchableOpacity
       style={styles.card}
-      onPress={() => navigation.navigate('ProviderProfile', { providerId: item.id })}
+      onPress={() => navigation.navigate('ProviderStorefront', { providerId: item.id })}
       activeOpacity={0.85}
     >
       <View style={styles.cardTop}>
@@ -97,7 +97,7 @@ export default function CategoryListScreen({ route, navigation }: Props) {
           <View style={styles.ratingRow}>
             <Ionicons name="star" size={13} color="#F59E0B" />
             <Text style={styles.ratingText}>
-              {item.avg_rating?.toFixed(1) ?? 'New'}
+              {item.rating ? Number(item.rating).toFixed(1) : 'New'}
               {item.total_reviews ? ` (${item.total_reviews})` : ''}
             </Text>
             {item.hourly_rate && (

@@ -85,6 +85,8 @@ export interface Provider {
   is_available: boolean;
   approved_at: string | null;
   approved_by: string | null;
+  rejected_at: string | null;
+  rejected_by: string | null;
   rejection_reason: string | null;
   // Legacy KYC
   kyc_status: KycStatus;
@@ -281,6 +283,27 @@ export interface Dispute {
   updated_at: string;
   booking?: Booking;
   raiser?: User;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: 'booking_submitted' | 'booking_accepted' | 'booking_rejected' | 'provider_on_the_way' | 'provider_arrived' | 'service_completed' | 'review_reminder' | 'document_approved' | 'document_rejected' | 'verification_approved' | 'verification_rejected';
+  title: string;
+  body: string;
+  data: Record<string, unknown>;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface ProviderStats {
+  provider_id: string;
+  completed_jobs: number;
+  total_reviews: number;
+  average_rating: number;
+  response_rate: number;
+  favorite_count: number;
+  updated_at: string;
 }
 
 export interface ChatRoom {

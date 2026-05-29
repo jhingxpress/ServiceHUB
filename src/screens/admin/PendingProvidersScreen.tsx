@@ -165,6 +165,7 @@ export default function PendingProvidersScreen() {
           const updateData = {
             status: 'rejected' as const,
             is_verified: false,
+            rejected_by: user?.id ?? null,
             rejection_reason: reason.trim(),
           };
           console.log('[PendingProvidersScreen] Update payload:', updateData);

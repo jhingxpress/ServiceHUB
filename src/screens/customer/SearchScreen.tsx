@@ -66,7 +66,7 @@ export default function SearchScreen() {
   const renderProvider = ({ item }: { item: Provider }) => (
     <TouchableOpacity
       style={styles.card}
-      onPress={() => navigation.navigate('ProviderProfile', { providerId: item.id })}
+      onPress={() => navigation.navigate('ProviderStorefront', { providerId: item.id })}
       activeOpacity={0.8}
     >
       <Avatar uri={item.users?.avatar_url} name={item.users?.full_name} size={56} />

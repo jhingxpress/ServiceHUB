@@ -28,6 +28,8 @@ export const COLORS = {
   // Booking status
   pending: '#F59E0B',
   accepted: '#3B82F6',
+  on_the_way: '#3B82F6',
+  arrived: '#8B5CF6',
   in_progress: '#8B5CF6',
   completed: '#10B981',
   cancelled: '#EF4444',
@@ -101,6 +103,8 @@ export const SHADOWS = {
 export const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   pending: { bg: '#FEF3C7', text: '#92400E' },
   accepted: { bg: '#DBEAFE', text: '#1E40AF' },
+  on_the_way: { bg: '#DBEAFE', text: '#1E40AF' },
+  arrived: { bg: '#EDE9FE', text: '#4C1D95' },
   in_progress: { bg: '#EDE9FE', text: '#4C1D95' },
   completed: { bg: '#D1FAE5', text: '#065F46' },
   cancelled: { bg: '#FEE2E2', text: '#991B1B' },

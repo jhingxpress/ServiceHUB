@@ -57,7 +57,7 @@ export default function ProviderStorefrontScreen() {
     setLoading(true);
     const { data: prov } = await supabase
       .from('providers')
-      .select('*, users(full_name, avatar_url, phone), categories(name, icon, color), provider_badges(*), provider_gallery(*)')
+      .select('*, users(full_name, avatar_url, phone), categories(name, icon, color), provider_badges(*), provider_gallery(*), provider_stats(*)')
       .eq('id', providerId)
       .eq('status', 'approved')
       .single();
@@ -180,9 +180,9 @@ export default function ProviderStorefrontScreen() {
             </View>
             <View style={styles.metricDivider} />
             <View style={styles.metric}>
-              <Ionicons name="time" size={16} color={COLORS.textSecondary} />
-              <Text style={styles.metricValue}>{format(new Date(provider.member_since ?? provider.created_at), 'yyyy')}</Text>
-              <Text style={styles.metricLabel}>Member</Text>
+              <Ionicons name="heart" size={16} color={COLORS.error} />
+              <Text style={styles.metricValue}>{(provider as any).provider_stats?.favorite_count ?? 0}</Text>
+              <Text style={styles.metricLabel}>Favorites</Text>
             </View>
           </View>
 

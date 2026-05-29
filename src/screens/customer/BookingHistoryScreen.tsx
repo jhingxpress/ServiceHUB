@@ -28,6 +28,7 @@ const FILTERS: { label: string; value: BookingStatus | 'all' }[] = [
   { label: 'All', value: 'all' },
   { label: 'Pending', value: 'pending' },
   { label: 'Active', value: 'accepted' },
+  { label: 'In Progress', value: 'in_progress' },
   { label: 'Completed', value: 'completed' },
   { label: 'Cancelled', value: 'cancelled' },
 ];
@@ -56,7 +57,11 @@ export default function BookingHistoryScreen() {
       .order('created_at', { ascending: false });
 
     if (filter !== 'all') {
-      q = q.eq('status', filter);
+      if (filter === 'accepted') {
+        q = q.in('status', ['accepted', 'on_the_way', 'arrived', 'in_progress']);
+      } else {
+        q = q.eq('status', filter);
+      }
     }
 
     const { data, error } = await q;
