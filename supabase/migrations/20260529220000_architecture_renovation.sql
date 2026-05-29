@@ -3,6 +3,20 @@
 -- Date: 2026-05-29
 -- ============================================================
 
+-- Helper: check if current user is admin (SECURITY DEFINER to avoid RLS recursion)
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid() AND role = 'admin'
+  );
+END;
+$$;
+
 -- ============================================================
 -- 1. PROVIDER TYPE & STOREFRONT FIELDS
 -- ============================================================
@@ -287,7 +301,7 @@ DROP POLICY IF EXISTS "Provider badges public read" ON public.provider_badges;
 CREATE POLICY "Provider badges public read" ON public.provider_badges FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Provider badges admin manage" ON public.provider_badges;
 CREATE POLICY "Provider badges admin manage" ON public.provider_badges FOR ALL
-  USING (EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'));
+  USING (public.is_admin());
 
 -- Favorite Providers: customer manages own; provider reads own
 ALTER TABLE public.favorite_providers ENABLE ROW LEVEL SECURITY;
@@ -619,13 +633,13 @@ DROP POLICY IF EXISTS "Reports reporter read" ON public.reports;
 CREATE POLICY "Reports reporter read" ON public.reports FOR SELECT USING (auth.uid() = reporter_id);
 DROP POLICY IF EXISTS "Reports admin read" ON public.reports;
 CREATE POLICY "Reports admin read" ON public.reports FOR SELECT USING (
-  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  public.is_admin()
 );
 DROP POLICY IF EXISTS "Reports reporter insert" ON public.reports;
 CREATE POLICY "Reports reporter insert" ON public.reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
 DROP POLICY IF EXISTS "Reports admin update" ON public.reports;
 CREATE POLICY "Reports admin update" ON public.reports FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  public.is_admin()
 );
 
 -- ============================================================
@@ -711,7 +725,7 @@ CREATE POLICY "Users read own profile" ON public.users FOR SELECT USING (
 );
 DROP POLICY IF EXISTS "Admins read all users" ON public.users;
 CREATE POLICY "Admins read all users" ON public.users FOR SELECT USING (
-  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  public.is_admin()
 );
 
 -- Providers: enforce soft delete for public reads; self and admin exempt
@@ -719,12 +733,7 @@ DROP POLICY IF EXISTS "Providers public read" ON public.providers;
 CREATE POLICY "Providers public read" ON public.providers FOR SELECT USING (
     (status = 'approved' AND deleted_at IS NULL)
     OR auth.uid() = id
-    OR EXISTS (
-        SELECT 1
-        FROM public.users
-        WHERE id = auth.uid()
-        AND role = 'admin'
-    )
+    OR public.is_admin()
 );
 
 -- Services: enforce soft delete for public reads; self and admin exempt
@@ -733,35 +742,35 @@ CREATE POLICY "Services public read" ON public.services FOR SELECT USING (
   deleted_at IS NULL AND (
     EXISTS (SELECT 1 FROM public.providers WHERE id = provider_id AND deleted_at IS NULL)
     OR auth.uid() = provider_id
-    OR EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+    OR public.is_admin()
   )
 );
 
 -- Bookings: add admin read
 DROP POLICY IF EXISTS "Bookings admin read" ON public.bookings;
 CREATE POLICY "Bookings admin read" ON public.bookings FOR SELECT USING (
-  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  public.is_admin()
 );
 
 -- Payments: add admin read
 DROP POLICY IF EXISTS "Payments read" ON public.payments;
 CREATE POLICY "Payments read" ON public.payments FOR SELECT USING (
   auth.uid() = customer_id OR auth.uid() = provider_id
-  OR EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  OR public.is_admin()
 );
 
 -- Messages: add admin read
 DROP POLICY IF EXISTS "Messages read" ON public.messages;
 CREATE POLICY "Messages read" ON public.messages FOR SELECT USING (
   auth.uid() = sender_id OR auth.uid() = receiver_id
-  OR EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  OR public.is_admin()
 );
 
 -- Disputes: add admin read
 DROP POLICY IF EXISTS "Disputes read" ON public.disputes;
 CREATE POLICY "Disputes read" ON public.disputes FOR SELECT USING (
   auth.uid() = raised_by
-  OR EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  OR public.is_admin()
 );
 
 -- ============================================================

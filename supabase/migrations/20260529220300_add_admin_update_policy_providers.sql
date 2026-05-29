@@ -5,14 +5,28 @@
 -- Date: 2026-05-27
 -- ============================================================
 
+-- Helper: check if current user is admin (SECURITY DEFINER to avoid RLS recursion)
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid() AND role = 'admin'
+  );
+END;
+$$;
+
 -- Drop existing policy if it exists (for idempotency)
 DROP POLICY IF EXISTS "Providers admin update" ON public.providers;
 
 -- Create new policy allowing admins to update any provider record
 CREATE POLICY "Providers admin update" ON public.providers FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  public.is_admin()
 ) WITH CHECK (
-  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  public.is_admin()
 );
 
 -- Verify policy was created

@@ -490,7 +490,7 @@ CREATE POLICY "Users read own profile" ON public.users FOR SELECT USING (
 );
 DROP POLICY IF EXISTS "Admins read all users" ON public.users;
 CREATE POLICY "Admins read all users" ON public.users FOR SELECT USING (
-  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  public.is_admin()
 );
 DROP POLICY IF EXISTS "Users update own profile" ON public.users;
 CREATE POLICY "Users update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
@@ -506,12 +506,7 @@ DROP POLICY IF EXISTS "Providers public read" ON public.providers;
 CREATE POLICY "Providers public read" ON public.providers FOR SELECT USING (
     (status = 'approved' AND deleted_at IS NULL)
     OR auth.uid() = id
-    OR EXISTS (
-        SELECT 1
-        FROM public.users
-        WHERE id = auth.uid()
-        AND role = 'admin'
-    )
+    OR public.is_admin()
 );
 DROP POLICY IF EXISTS "Providers insert own" ON public.providers;
 CREATE POLICY "Providers insert own" ON public.providers FOR INSERT WITH CHECK (auth.uid() = id);
@@ -519,9 +514,9 @@ DROP POLICY IF EXISTS "Providers update own" ON public.providers;
 CREATE POLICY "Providers update own" ON public.providers FOR UPDATE USING (auth.uid() = id);
 DROP POLICY IF EXISTS "Providers admin update" ON public.providers;
 CREATE POLICY "Providers admin update" ON public.providers FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  public.is_admin()
 ) WITH CHECK (
-  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  public.is_admin()
 );
 
 -- Provider documents: provider manages own; admin reads all
@@ -542,11 +537,11 @@ CREATE POLICY "Provider docs delete own" ON public.provider_documents
 DROP POLICY IF EXISTS "Verification logs read" ON public.provider_verification_logs;
 CREATE POLICY "Verification logs read" ON public.provider_verification_logs
   FOR SELECT USING (auth.uid() = provider_id OR
-    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'));
+    public.is_admin());
 DROP POLICY IF EXISTS "Verification logs insert" ON public.provider_verification_logs;
 CREATE POLICY "Verification logs insert" ON public.provider_verification_logs
   FOR INSERT WITH CHECK (
-    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+    public.is_admin()
   );
 
 -- Services: public read active non-deleted; provider manages own
@@ -555,7 +550,7 @@ CREATE POLICY "Services public read" ON public.services FOR SELECT USING (
   deleted_at IS NULL AND (
     EXISTS (SELECT 1 FROM public.providers WHERE id = provider_id AND deleted_at IS NULL)
     OR auth.uid() = provider_id
-    OR EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+    OR public.is_admin()
   )
 );
 DROP POLICY IF EXISTS "Services provider insert" ON public.services;
@@ -585,7 +580,7 @@ DROP POLICY IF EXISTS "Bookings provider read" ON public.bookings;
 CREATE POLICY "Bookings provider read" ON public.bookings FOR SELECT USING (auth.uid() = provider_id);
 DROP POLICY IF EXISTS "Bookings admin read" ON public.bookings;
 CREATE POLICY "Bookings admin read" ON public.bookings FOR SELECT USING (
-  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  public.is_admin()
 );
 DROP POLICY IF EXISTS "Bookings customer insert" ON public.bookings;
 CREATE POLICY "Bookings customer insert" ON public.bookings FOR INSERT WITH CHECK (auth.uid() = customer_id);
@@ -618,7 +613,7 @@ CREATE POLICY "Review media customer delete" ON public.review_media FOR DELETE
 DROP POLICY IF EXISTS "Messages read" ON public.messages;
 CREATE POLICY "Messages read" ON public.messages FOR SELECT USING (
   auth.uid() = sender_id OR auth.uid() = receiver_id
-  OR EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  OR public.is_admin()
 );
 DROP POLICY IF EXISTS "Messages insert" ON public.messages;
 CREATE POLICY "Messages insert" ON public.messages FOR INSERT WITH CHECK (auth.uid() = sender_id);
@@ -650,7 +645,7 @@ DROP POLICY IF EXISTS "Provider badges public read" ON public.provider_badges;
 CREATE POLICY "Provider badges public read" ON public.provider_badges FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Provider badges admin manage" ON public.provider_badges;
 CREATE POLICY "Provider badges admin manage" ON public.provider_badges FOR ALL
-  USING (EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'));
+  USING (public.is_admin());
 
 -- Favorite Providers: customer manages own; provider reads own
 DROP POLICY IF EXISTS "Favorites customer manage" ON public.favorite_providers;
@@ -685,14 +680,14 @@ CREATE POLICY "Availability provider manage" ON public.availability FOR ALL USIN
 DROP POLICY IF EXISTS "Payments read" ON public.payments;
 CREATE POLICY "Payments read" ON public.payments FOR SELECT USING (
   auth.uid() = customer_id OR auth.uid() = provider_id
-  OR EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  OR public.is_admin()
 );
 
 -- Disputes: involved parties + admin
 DROP POLICY IF EXISTS "Disputes read" ON public.disputes;
 CREATE POLICY "Disputes read" ON public.disputes FOR SELECT USING (
   auth.uid() = raised_by
-  OR EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  OR public.is_admin()
 );
 DROP POLICY IF EXISTS "Disputes insert" ON public.disputes;
 CREATE POLICY "Disputes insert" ON public.disputes FOR INSERT WITH CHECK (auth.uid() = raised_by);
@@ -702,13 +697,13 @@ DROP POLICY IF EXISTS "Reports reporter read" ON public.reports;
 CREATE POLICY "Reports reporter read" ON public.reports FOR SELECT USING (auth.uid() = reporter_id);
 DROP POLICY IF EXISTS "Reports admin read" ON public.reports;
 CREATE POLICY "Reports admin read" ON public.reports FOR SELECT USING (
-  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  public.is_admin()
 );
 DROP POLICY IF EXISTS "Reports reporter insert" ON public.reports;
 CREATE POLICY "Reports reporter insert" ON public.reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
 DROP POLICY IF EXISTS "Reports admin update" ON public.reports;
 CREATE POLICY "Reports admin update" ON public.reports FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  public.is_admin()
 );
 
 -- ============================================================
@@ -864,6 +859,20 @@ BEGIN
     AND is_read = false;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Helper: check if current user is admin (SECURITY DEFINER to avoid RLS recursion)
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid() AND role = 'admin'
+  );
+END;
+$$;
 
 -- Create payment record when booking is completed
 CREATE OR REPLACE FUNCTION public.create_payment_on_completion()
