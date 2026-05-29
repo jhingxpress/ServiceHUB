@@ -15,9 +15,9 @@ CREATE TABLE public.users (
   phone TEXT,
   avatar_url TEXT,
   role TEXT NOT NULL DEFAULT 'customer' CHECK (role IN ('customer', 'provider', 'admin')),
-  kyc_status TEXT DEFAULT 'not_submitted' CHECK (kyc_status IN ('not_submitted', 'pending', 'approved', 'rejected')),
-  kyc_documents JSONB DEFAULT '{}'::JSONB,
-  kyc_rejection_reason TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'banned')),
+  city TEXT,
+  province TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -371,7 +371,6 @@ CREATE INDEX idx_services_provider ON public.services(provider_id);
 CREATE INDEX idx_service_options_service ON public.service_options(service_id);
 CREATE INDEX idx_review_media_review ON public.review_media(review_id);
 CREATE INDEX idx_providers_category ON public.providers(category_id);
-CREATE INDEX idx_providers_kyc ON public.providers(kyc_status);
 CREATE INDEX idx_providers_status ON public.providers(status);
 CREATE INDEX idx_provider_documents_provider ON public.provider_documents(provider_id);
 CREATE INDEX idx_provider_documents_status ON public.provider_documents(status);

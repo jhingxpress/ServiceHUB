@@ -10,7 +10,7 @@ import HomeScreen from '../screens/customer/HomeScreen';
 import SearchScreen from '../screens/customer/SearchScreen';
 import BookingHistoryScreen from '../screens/customer/BookingHistoryScreen';
 import ChatListScreen from '../screens/customer/ChatListScreen';
-import CustomerProfileScreen from '../screens/customer/CustomerProfileScreen';
+import CustomerProfileScreen from '../screens/customer/ProfileScreen';
 import ProviderProfileScreen from '../screens/customer/ProviderProfileScreen';
 import ProviderStorefrontScreen from '../screens/customer/ProviderStorefrontScreen';
 import BookingScreen from '../screens/customer/BookingScreen';
@@ -19,7 +19,8 @@ import ChatScreen from '../screens/customer/ChatScreen';
 import ReviewScreen from '../screens/customer/ReviewScreen';
 import CategoryListScreen from '../screens/customer/CategoryListScreen';
 import ProviderListScreen from '../screens/customer/ProviderListScreen';
-import CustomerKYCScreen from '../screens/customer/CustomerKYCScreen';
+import NotificationCenterScreen from '../screens/customer/NotificationCenterScreen';
+import MyReviewsScreen from '../screens/customer/MyReviewsScreen';
 
 const Stack = createNativeStackNavigator<CustomerStackParamList>();
 const Tab = createBottomTabNavigator<CustomerTabParamList>();
@@ -87,7 +88,8 @@ export default function CustomerNavigator() {
       <Stack.Screen name="ReviewService" component={ReviewScreen} />
       <Stack.Screen name="CategoryList" component={CategoryListScreen} />
       <Stack.Screen name="ProviderList" component={ProviderListScreen} />
-      <Stack.Screen name="CustomerKYC" component={CustomerKYCScreen} />
+      <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} />
+      <Stack.Screen name="MyReviews" component={MyReviewsScreen} />
     </Stack.Navigator>
   );
 }

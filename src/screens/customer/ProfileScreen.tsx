@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,33 +25,29 @@ interface MenuItem {
   label: string;
   onPress: () => void;
   danger?: boolean;
-  badge?: string;
+  badge?: number;
 }
 
 export default function ProfileScreen() {
   const { user, signOut, updateProfile } = useAuthStore();
   const navigation = useNavigation<NavProp>();
-  const [notifications, setNotifications] = useState(true);
+  const [stats, setStats] = useState({ bookings: 0, reviews: 0, favorites: 0 });
 
-  const kycStatus = (user as any)?.kyc_status ?? 'not_submitted';
-  const kycColors: Record<string, string> = {
-    not_submitted: '#F59E0B',
-    pending: '#3B82F6',
-    approved: COLORS.success,
-    rejected: COLORS.error,
-  };
-  const kycIcons: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
-    not_submitted: 'alert-circle-outline',
-    pending: 'time-outline',
-    approved: 'shield-checkmark',
-    rejected: 'close-circle-outline',
-  };
-  const kycLabels: Record<string, string> = {
-    not_submitted: 'Verify your identity to unlock bookings',
-    pending: 'KYC under review — we\'ll notify you once verified',
-    approved: 'Identity verified',
-    rejected: 'KYC rejected — tap to resubmit',
-  };
+  const fetchStats = useCallback(async () => {
+    if (!user) return;
+    const [b, r, f] = await Promise.all([
+      supabase.from('bookings').select('id', { count: 'exact' }).eq('customer_id', user.id),
+      supabase.from('reviews').select('id', { count: 'exact' }).eq('customer_id', user.id),
+      supabase.from('favorite_providers').select('id', { count: 'exact' }).eq('customer_id', user.id),
+    ]);
+    setStats({
+      bookings: b.count ?? 0,
+      reviews: r.count ?? 0,
+      favorites: f.count ?? 0,
+    });
+  }, [user]);
+
+  useEffect(() => { fetchStats(); }, [fetchStats]);
 
   const handleChangePhoto = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -92,29 +87,32 @@ export default function ProfileScreen() {
 
   const menuItems: MenuItem[] = [
     {
-      icon: 'person-outline',
-      label: 'Edit Profile',
-      onPress: () => Alert.alert('Coming Soon', 'Edit profile is coming soon'),
+      icon: 'calendar-outline',
+      label: 'My Bookings',
+      onPress: () => navigation.navigate('CustomerTabs', { screen: 'Bookings' }),
+      badge: stats.bookings,
+    },
+    {
+      icon: 'heart-outline',
+      label: 'Saved Providers',
+      onPress: () => Alert.alert('Coming Soon', 'Favorites list is coming soon'),
+      badge: stats.favorites,
+    },
+    {
+      icon: 'star-outline',
+      label: 'My Reviews',
+      onPress: () => navigation.navigate('MyReviews'),
+      badge: stats.reviews,
     },
     {
       icon: 'notifications-outline',
       label: 'Notifications',
-      onPress: () => {},
-    },
-    {
-      icon: 'shield-checkmark-outline',
-      label: 'Privacy & Security',
-      onPress: () => {},
+      onPress: () => navigation.navigate('NotificationCenter'),
     },
     {
       icon: 'help-circle-outline',
       label: 'Help & Support',
-      onPress: () => {},
-    },
-    {
-      icon: 'document-text-outline',
-      label: 'Terms of Service',
-      onPress: () => {},
+      onPress: () => Alert.alert('Coming Soon', 'Support chat is coming soon'),
     },
     {
       icon: 'log-out-outline',
@@ -130,19 +128,6 @@ export default function ProfileScreen() {
         <View style={styles.topBar}>
           <Text style={styles.title}>Profile</Text>
         </View>
-
-        {/* KYC Banner */}
-        {kycStatus !== 'approved' && (
-          <TouchableOpacity
-            style={[styles.kycBanner, { backgroundColor: kycColors[kycStatus] + '15', borderColor: kycColors[kycStatus] + '40' }]}
-            onPress={() => navigation.navigate('CustomerKYC')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name={kycIcons[kycStatus]} size={20} color={kycColors[kycStatus]} />
-            <Text style={[styles.kycBannerText, { color: kycColors[kycStatus] }]}>{kycLabels[kycStatus]}</Text>
-            <Ionicons name="chevron-forward" size={16} color={kycColors[kycStatus]} />
-          </TouchableOpacity>
-        )}
 
         {/* Profile card */}
         <View style={styles.profileCard}>
@@ -165,17 +150,17 @@ export default function ProfileScreen() {
         {/* Stats */}
         <View style={styles.statsCard}>
           <View style={styles.stat}>
-            <Text style={styles.statValue}>0</Text>
+            <Text style={styles.statValue}>{stats.bookings}</Text>
             <Text style={styles.statLabel}>Bookings</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.stat}>
-            <Text style={styles.statValue}>0</Text>
+            <Text style={styles.statValue}>{stats.reviews}</Text>
             <Text style={styles.statLabel}>Reviews</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.stat}>
-            <Text style={styles.statValue}>0</Text>
+            <Text style={styles.statValue}>{stats.favorites}</Text>
             <Text style={styles.statLabel}>Saved</Text>
           </View>
         </View>
@@ -198,16 +183,12 @@ export default function ProfileScreen() {
               <Text style={[styles.menuLabel, item.danger && styles.menuLabelDanger]}>
                 {item.label}
               </Text>
-              {item.label === 'Notifications' ? (
-                <Switch
-                  value={notifications}
-                  onValueChange={setNotifications}
-                  trackColor={{ false: COLORS.border, true: COLORS.primary }}
-                  thumbColor={COLORS.white}
-                />
-              ) : (
-                <Ionicons name="chevron-forward" size={16} color={COLORS.textLight} />
-              )}
+              {item.badge ? (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{item.badge}</Text>
+                </View>
+              ) : null}
+              <Ionicons name="chevron-forward" size={16} color={COLORS.textLight} />
             </TouchableOpacity>
           ))}
         </View>
@@ -221,8 +202,6 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
-  kycBanner: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginHorizontal: SPACING.md, marginBottom: SPACING.sm, padding: SPACING.md, borderRadius: BORDER_RADIUS.xl, borderWidth: 1 },
-  kycBannerText: { flex: 1, fontSize: FONTS.sizes.sm, fontWeight: '600' },
   topBar: { paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
   title: { fontSize: FONTS.sizes.xxl, fontWeight: '800', color: COLORS.text },
   profileCard: {
@@ -271,5 +250,7 @@ const styles = StyleSheet.create({
   menuIconDanger: { backgroundColor: '#FEE2E2' },
   menuLabel: { flex: 1, fontSize: FONTS.sizes.base, color: COLORS.text, fontWeight: '500' },
   menuLabelDanger: { color: COLORS.error },
+  badge: { backgroundColor: COLORS.primary, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, marginRight: SPACING.xs },
+  badgeText: { fontSize: FONTS.sizes.xs, fontWeight: '700', color: COLORS.white },
   version: { textAlign: 'center', fontSize: FONTS.sizes.xs, color: COLORS.textLight, marginBottom: SPACING.sm },
 });

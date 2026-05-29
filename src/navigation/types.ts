@@ -38,7 +38,9 @@ export type CustomerStackParamList = {
   };
   CategoryList: { categoryId: string; categoryName: string; icon?: string };
   ProviderList: { categoryId?: string; categoryName?: string; search?: string };
-  CustomerKYC: undefined;
+  NotificationCenter: undefined;
+  MyReviews: undefined;
+  MyFavorites: undefined;
 };
 
 export type CustomerTabParamList = {
@@ -82,7 +84,6 @@ export type AdminStackParamList = {
   BookingDetail: { bookingId: string };
   BookingManagement: undefined;
   DisputeDetail: { disputeId: string };
-  CustomerKYCDetail: { userId: string };
 };
 
 export type AdminTabParamList = {
@@ -92,5 +93,4 @@ export type AdminTabParamList = {
   Users: undefined;
   Analytics: undefined;
   Disputes: undefined;
-  KYC: undefined;
 };

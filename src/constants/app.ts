@@ -54,12 +54,6 @@ export const USER_ROLE = {
   ADMIN: 'admin',
 } as const;
 
-export const KYC_STATUS = {
-  PENDING: 'pending',
-  APPROVED: 'approved',
-  REJECTED: 'rejected',
-} as const;
-
 export const DISPUTE_STATUS = {
   OPEN: 'open',
   IN_REVIEW: 'in_review',

@@ -57,12 +57,6 @@ export default function BookingScreen() {
   };
 
   const handleSubmit = async () => {
-    const kycStatus = (user as any)?.kyc_status ?? 'not_submitted';
-    if (kycStatus !== 'approved') {
-      showError('Identity verification required. Please complete KYC in your Profile before booking.');
-      return;
-    }
-
     const validation = validateForm(
       { location },
       {

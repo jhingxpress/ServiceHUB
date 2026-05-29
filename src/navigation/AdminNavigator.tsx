@@ -15,7 +15,6 @@ import UserDetailScreen from '../screens/admin/UserDetailScreen';
 import BookingManagementScreen from '../screens/admin/BookingManagementScreen';
 import DisputesScreen from '../screens/admin/DisputesScreen';
 import AdminKYCScreen from '../screens/admin/AdminKYCScreen';
-import CustomerKYCDetailScreen from '../screens/admin/CustomerKYCDetailScreen';
 
 const Stack = createNativeStackNavigator<AdminStackParamList>();
 const Tab = createBottomTabNavigator<AdminTabParamList>();
@@ -47,9 +46,6 @@ function AdminTabs() {
             case 'Disputes':
               iconName = focused ? 'alert-circle' : 'alert-circle-outline';
               break;
-            case 'KYC':
-              iconName = focused ? 'shield-checkmark' : 'shield-checkmark-outline';
-              break;
             default:
               iconName = focused ? 'bar-chart' : 'bar-chart-outline';
           }
@@ -62,7 +58,6 @@ function AdminTabs() {
       <Tab.Screen name="Bookings" component={BookingManagementScreen} />
       <Tab.Screen name="Users" component={UsersScreen} />
       <Tab.Screen name="Disputes" component={DisputesScreen} />
-      <Tab.Screen name="KYC" component={AdminKYCScreen} />
       <Tab.Screen name="Analytics" component={AnalyticsScreen} />
     </Tab.Navigator>
   );
@@ -84,7 +79,6 @@ export default function AdminNavigator() {
       <Stack.Screen name="ProviderDetail" component={ProviderDetailScreen} />
       <Stack.Screen name="UserDetail" component={UserDetailScreen} />
       <Stack.Screen name="BookingManagement" component={BookingManagementScreen} />
-      <Stack.Screen name="CustomerKYCDetail" component={CustomerKYCDetailScreen} />
     </Stack.Navigator>
   );
 }

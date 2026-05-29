@@ -87,7 +87,7 @@ export default function AdminDashboardScreen() {
   const STAT_CARDS = [
     { label: 'Total Users', value: stats.totalUsers, icon: 'people-outline', color: COLORS.primary },
     { label: 'Providers', value: stats.totalProviders, icon: 'briefcase-outline', color: '#8B5CF6' },
-    { label: 'Pending KYC', value: stats.pendingProviders, icon: 'shield-outline', color: COLORS.warning, action: () => navigation.navigate('PendingProviders') },
+    { label: 'Pending Providers', value: stats.pendingProviders, icon: 'shield-outline', color: COLORS.warning, action: () => navigation.navigate('PendingProviders') },
     { label: 'Total Bookings', value: stats.totalBookings, icon: 'calendar-outline', color: '#06B6D4' },
     { label: 'Completed', value: stats.completedBookings, icon: 'checkmark-circle-outline', color: COLORS.success },
     { label: 'Revenue', value: `$${Number(stats.totalRevenue).toFixed(0)}`, icon: 'cash-outline', color: '#F59E0B' },

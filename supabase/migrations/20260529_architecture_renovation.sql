@@ -109,16 +109,29 @@ CREATE INDEX IF NOT EXISTS idx_favorites_customer ON public.favorite_providers(c
 CREATE INDEX IF NOT EXISTS idx_favorites_provider ON public.favorite_providers(provider_id);
 
 -- ============================================================
--- 7. CLEAN UP DUPLICATE/LEGACY PROVIDER FIELDS
+-- 7. REMOVE CUSTOMER KYC (frictionless onboarding policy)
 -- ============================================================
 
--- Remove legacy KYC fields from providers (use users table KYC instead)
--- Note: These are kept but deprecated - we won't drop them to preserve data
--- Instead, add a comment
-COMMENT ON COLUMN public.providers.kyc_status IS 'DEPRECATED: Use users.kyc_status instead';
-COMMENT ON COLUMN public.providers.kyc_documents IS 'DEPRECATED: Use users.kyc_documents instead';
-COMMENT ON COLUMN public.providers.kyc_rejection_reason IS 'DEPRECATED: Use users.kyc_rejection_reason instead';
+-- Drop customer KYC columns from users table
+ALTER TABLE public.users
+DROP COLUMN IF EXISTS kyc_status,
+DROP COLUMN IF EXISTS kyc_documents,
+DROP COLUMN IF EXISTS kyc_rejection_reason;
+
+-- Add customer status and location fields
+ALTER TABLE public.users
+ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'banned')),
+ADD COLUMN IF NOT EXISTS city TEXT,
+ADD COLUMN IF NOT EXISTS province TEXT;
+
+-- Update provider KYC comments
+COMMENT ON COLUMN public.providers.kyc_status IS 'DEPRECATED: Provider-only legacy field';
+COMMENT ON COLUMN public.providers.kyc_documents IS 'DEPRECATED: Provider-only legacy field';
+COMMENT ON COLUMN public.providers.kyc_rejection_reason IS 'DEPRECATED: Provider-only legacy field';
 COMMENT ON COLUMN public.providers.bio IS 'DEPRECATED: Use service_description instead';
+
+-- Drop provider kyc index
+DROP INDEX IF EXISTS idx_providers_kyc;
 
 -- ============================================================
 -- 8. ENFORCE REVIEW RULE: ONLY COMPLETED BOOKINGS CAN BE REVIEWED
