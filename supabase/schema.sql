@@ -435,17 +435,25 @@ ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.provider_stats ENABLE ROW LEVEL SECURITY;
 
 -- Users: read own profile; update own profile
+DROP POLICY IF EXISTS "Users read own profile" ON public.users;
 CREATE POLICY "Users read own profile" ON public.users FOR SELECT USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Users update own profile" ON public.users;
 CREATE POLICY "Users update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Users insert own profile" ON public.users;
 CREATE POLICY "Users insert own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
 
 -- Categories: public read
+DROP POLICY IF EXISTS "Categories public read" ON public.categories;
 CREATE POLICY "Categories public read" ON public.categories FOR SELECT USING (true);
 
 -- Providers: public read approved; provider edits own; admin can update all
+DROP POLICY IF EXISTS "Providers public read" ON public.providers;
 CREATE POLICY "Providers public read" ON public.providers FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Providers insert own" ON public.providers;
 CREATE POLICY "Providers insert own" ON public.providers FOR INSERT WITH CHECK (auth.uid() = id);
+DROP POLICY IF EXISTS "Providers update own" ON public.providers;
 CREATE POLICY "Providers update own" ON public.providers FOR UPDATE USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Providers admin update" ON public.providers;
 CREATE POLICY "Providers admin update" ON public.providers FOR UPDATE USING (
   EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
 ) WITH CHECK (
@@ -453,110 +461,157 @@ CREATE POLICY "Providers admin update" ON public.providers FOR UPDATE USING (
 );
 
 -- Provider documents: provider manages own; admin reads all
+DROP POLICY IF EXISTS "Provider docs read own" ON public.provider_documents;
 CREATE POLICY "Provider docs read own" ON public.provider_documents
   FOR SELECT USING (auth.uid() = provider_id);
+DROP POLICY IF EXISTS "Provider docs insert own" ON public.provider_documents;
 CREATE POLICY "Provider docs insert own" ON public.provider_documents
   FOR INSERT WITH CHECK (auth.uid() = provider_id);
+DROP POLICY IF EXISTS "Provider docs update own" ON public.provider_documents;
 CREATE POLICY "Provider docs update own" ON public.provider_documents
   FOR UPDATE USING (auth.uid() = provider_id);
+DROP POLICY IF EXISTS "Provider docs delete own" ON public.provider_documents;
 CREATE POLICY "Provider docs delete own" ON public.provider_documents
   FOR DELETE USING (auth.uid() = provider_id);
 
 -- Verification logs: provider reads own; admin inserts
+DROP POLICY IF EXISTS "Verification logs read" ON public.provider_verification_logs;
 CREATE POLICY "Verification logs read" ON public.provider_verification_logs
   FOR SELECT USING (auth.uid() = provider_id OR
     EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'));
+DROP POLICY IF EXISTS "Verification logs insert" ON public.provider_verification_logs;
 CREATE POLICY "Verification logs insert" ON public.provider_verification_logs
   FOR INSERT WITH CHECK (
     EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
   );
 
 -- Services: public read active; provider manages own
+DROP POLICY IF EXISTS "Services public read" ON public.services;
 CREATE POLICY "Services public read" ON public.services FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Services provider insert" ON public.services;
 CREATE POLICY "Services provider insert" ON public.services FOR INSERT WITH CHECK (auth.uid() = provider_id);
+DROP POLICY IF EXISTS "Services provider update" ON public.services;
 CREATE POLICY "Services provider update" ON public.services FOR UPDATE USING (auth.uid() = provider_id);
+DROP POLICY IF EXISTS "Services provider delete" ON public.services;
 CREATE POLICY "Services provider delete" ON public.services FOR DELETE USING (auth.uid() = provider_id);
 
 -- Service Options: public read; provider manages own via service
+DROP POLICY IF EXISTS "Service options public read" ON public.service_options;
 CREATE POLICY "Service options public read" ON public.service_options FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Service options provider insert" ON public.service_options;
 CREATE POLICY "Service options provider insert" ON public.service_options FOR INSERT
   WITH CHECK (auth.uid() = (SELECT provider_id FROM public.services WHERE id = service_id));
+DROP POLICY IF EXISTS "Service options provider update" ON public.service_options;
 CREATE POLICY "Service options provider update" ON public.service_options FOR UPDATE
   USING (auth.uid() = (SELECT provider_id FROM public.services WHERE id = service_id));
+DROP POLICY IF EXISTS "Service options provider delete" ON public.service_options;
 CREATE POLICY "Service options provider delete" ON public.service_options FOR DELETE
   USING (auth.uid() = (SELECT provider_id FROM public.services WHERE id = service_id));
 
 -- Bookings: customer sees own; provider sees own; admin sees all
+DROP POLICY IF EXISTS "Bookings customer read" ON public.bookings;
 CREATE POLICY "Bookings customer read" ON public.bookings FOR SELECT USING (auth.uid() = customer_id);
+DROP POLICY IF EXISTS "Bookings provider read" ON public.bookings;
 CREATE POLICY "Bookings provider read" ON public.bookings FOR SELECT USING (auth.uid() = provider_id);
+DROP POLICY IF EXISTS "Bookings customer insert" ON public.bookings;
 CREATE POLICY "Bookings customer insert" ON public.bookings FOR INSERT WITH CHECK (auth.uid() = customer_id);
+DROP POLICY IF EXISTS "Bookings customer cancel" ON public.bookings;
 CREATE POLICY "Bookings customer cancel" ON public.bookings FOR UPDATE USING (auth.uid() = customer_id);
+DROP POLICY IF EXISTS "Bookings provider update" ON public.bookings;
 CREATE POLICY "Bookings provider update" ON public.bookings FOR UPDATE USING (auth.uid() = provider_id);
 
 -- Reviews: public read visible; customer inserts own
+DROP POLICY IF EXISTS "Reviews public read" ON public.reviews;
 CREATE POLICY "Reviews public read" ON public.reviews FOR SELECT USING (is_visible = true);
+DROP POLICY IF EXISTS "Reviews customer insert" ON public.reviews;
 CREATE POLICY "Reviews customer insert" ON public.reviews FOR INSERT WITH CHECK (auth.uid() = customer_id);
+DROP POLICY IF EXISTS "Reviews customer update" ON public.reviews;
 CREATE POLICY "Reviews customer update" ON public.reviews FOR UPDATE USING (auth.uid() = customer_id);
 
 -- Review Media: public read; customer manages own
+DROP POLICY IF EXISTS "Review media public read" ON public.review_media;
 CREATE POLICY "Review media public read" ON public.review_media FOR SELECT USING (
   EXISTS (SELECT 1 FROM public.reviews WHERE id = review_id AND is_visible = true)
 );
+DROP POLICY IF EXISTS "Review media customer insert" ON public.review_media;
 CREATE POLICY "Review media customer insert" ON public.review_media FOR INSERT
   WITH CHECK (auth.uid() = (SELECT customer_id FROM public.reviews WHERE id = review_id));
+DROP POLICY IF EXISTS "Review media customer delete" ON public.review_media;
 CREATE POLICY "Review media customer delete" ON public.review_media FOR DELETE
   USING (auth.uid() = (SELECT customer_id FROM public.reviews WHERE id = review_id));
 
 -- Messages: only sender or receiver can read
+DROP POLICY IF EXISTS "Messages read" ON public.messages;
 CREATE POLICY "Messages read" ON public.messages FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+DROP POLICY IF EXISTS "Messages insert" ON public.messages;
 CREATE POLICY "Messages insert" ON public.messages FOR INSERT WITH CHECK (auth.uid() = sender_id);
+DROP POLICY IF EXISTS "Messages update read" ON public.messages;
 CREATE POLICY "Messages update read" ON public.messages FOR UPDATE USING (auth.uid() = receiver_id);
 
 -- Service Images: public read; provider manages own
+DROP POLICY IF EXISTS "Service images public read" ON public.service_images;
 CREATE POLICY "Service images public read" ON public.service_images FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Service images provider insert" ON public.service_images;
 CREATE POLICY "Service images provider insert" ON public.service_images FOR INSERT
   WITH CHECK (auth.uid() = (SELECT provider_id FROM public.services WHERE id = service_id));
+DROP POLICY IF EXISTS "Service images provider delete" ON public.service_images;
 CREATE POLICY "Service images provider delete" ON public.service_images FOR DELETE
   USING (auth.uid() = (SELECT provider_id FROM public.services WHERE id = service_id));
 
 -- Provider Gallery: public read; provider manages own
+DROP POLICY IF EXISTS "Provider gallery public read" ON public.provider_gallery;
 CREATE POLICY "Provider gallery public read" ON public.provider_gallery FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Provider gallery provider insert" ON public.provider_gallery;
 CREATE POLICY "Provider gallery provider insert" ON public.provider_gallery FOR INSERT
   WITH CHECK (auth.uid() = provider_id);
+DROP POLICY IF EXISTS "Provider gallery provider delete" ON public.provider_gallery;
 CREATE POLICY "Provider gallery provider delete" ON public.provider_gallery FOR DELETE
   USING (auth.uid() = provider_id);
 
 -- Provider Badges: public read; admin manages
+DROP POLICY IF EXISTS "Provider badges public read" ON public.provider_badges;
 CREATE POLICY "Provider badges public read" ON public.provider_badges FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Provider badges admin manage" ON public.provider_badges;
 CREATE POLICY "Provider badges admin manage" ON public.provider_badges FOR ALL
   USING (EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'));
 
 -- Favorite Providers: customer manages own; provider reads own
+DROP POLICY IF EXISTS "Favorites customer manage" ON public.favorite_providers;
 CREATE POLICY "Favorites customer manage" ON public.favorite_providers FOR ALL
   USING (auth.uid() = customer_id);
+DROP POLICY IF EXISTS "Favorites provider read" ON public.favorite_providers;
 CREATE POLICY "Favorites provider read" ON public.favorite_providers FOR SELECT
   USING (auth.uid() = provider_id);
 
 -- Notifications: user manages own
+DROP POLICY IF EXISTS "Notifications user read" ON public.notifications;
 CREATE POLICY "Notifications user read" ON public.notifications FOR SELECT
   USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Notifications user update" ON public.notifications;
 CREATE POLICY "Notifications user update" ON public.notifications FOR UPDATE
   USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Notifications system insert" ON public.notifications;
 CREATE POLICY "Notifications system insert" ON public.notifications FOR INSERT
   WITH CHECK (true);
 
 -- Provider Stats: public read; provider read own
+DROP POLICY IF EXISTS "Provider stats public read" ON public.provider_stats;
 CREATE POLICY "Provider stats public read" ON public.provider_stats FOR SELECT USING (true);
 
 -- Availability: public read; provider manages own
+DROP POLICY IF EXISTS "Availability public read" ON public.availability;
 CREATE POLICY "Availability public read" ON public.availability FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Availability provider manage" ON public.availability;
 CREATE POLICY "Availability provider manage" ON public.availability FOR ALL USING (auth.uid() = provider_id);
 
 -- Payments: only involved parties
+DROP POLICY IF EXISTS "Payments read" ON public.payments;
 CREATE POLICY "Payments read" ON public.payments FOR SELECT USING (auth.uid() = customer_id OR auth.uid() = provider_id);
 
 -- Disputes: involved parties
+DROP POLICY IF EXISTS "Disputes read" ON public.disputes;
 CREATE POLICY "Disputes read" ON public.disputes FOR SELECT USING (auth.uid() = raised_by);
+DROP POLICY IF EXISTS "Disputes insert" ON public.disputes;
 CREATE POLICY "Disputes insert" ON public.disputes FOR INSERT WITH CHECK (auth.uid() = raised_by);
 
 -- ============================================================
