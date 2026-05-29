@@ -259,33 +259,43 @@ CREATE TRIGGER bookings_update_response_rate
 -- Service Images: public read; provider manages own
 ALTER TABLE public.service_images ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service images public read" ON public.service_images;
 CREATE POLICY "Service images public read" ON public.service_images FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Service images provider insert" ON public.service_images;
 CREATE POLICY "Service images provider insert" ON public.service_images FOR INSERT
   WITH CHECK (auth.uid() = (SELECT provider_id FROM public.services WHERE id = service_id));
+DROP POLICY IF EXISTS "Service images provider delete" ON public.service_images;
 CREATE POLICY "Service images provider delete" ON public.service_images FOR DELETE
   USING (auth.uid() = (SELECT provider_id FROM public.services WHERE id = service_id));
 
 -- Provider Gallery: public read; provider manages own
 ALTER TABLE public.provider_gallery ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Provider gallery public read" ON public.provider_gallery;
 CREATE POLICY "Provider gallery public read" ON public.provider_gallery FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Provider gallery provider insert" ON public.provider_gallery;
 CREATE POLICY "Provider gallery provider insert" ON public.provider_gallery FOR INSERT
   WITH CHECK (auth.uid() = provider_id);
+DROP POLICY IF EXISTS "Provider gallery provider delete" ON public.provider_gallery;
 CREATE POLICY "Provider gallery provider delete" ON public.provider_gallery FOR DELETE
   USING (auth.uid() = provider_id);
 
 -- Provider Badges: public read; admin manages
 ALTER TABLE public.provider_badges ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Provider badges public read" ON public.provider_badges;
 CREATE POLICY "Provider badges public read" ON public.provider_badges FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Provider badges admin manage" ON public.provider_badges;
 CREATE POLICY "Provider badges admin manage" ON public.provider_badges FOR ALL
   USING (EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'));
 
 -- Favorite Providers: customer manages own; provider reads own
 ALTER TABLE public.favorite_providers ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Favorites customer manage" ON public.favorite_providers;
 CREATE POLICY "Favorites customer manage" ON public.favorite_providers FOR ALL
   USING (auth.uid() = customer_id);
+DROP POLICY IF EXISTS "Favorites provider read" ON public.favorite_providers;
 CREATE POLICY "Favorites provider read" ON public.favorite_providers FOR SELECT
   USING (auth.uid() = provider_id);
 
@@ -371,8 +381,11 @@ CREATE INDEX IF NOT EXISTS idx_notifications_unread ON public.notifications(user
 
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Notifications user read" ON public.notifications;
 CREATE POLICY "Notifications user read" ON public.notifications FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Notifications user update" ON public.notifications;
 CREATE POLICY "Notifications user update" ON public.notifications FOR UPDATE USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Notifications system insert" ON public.notifications;
 CREATE POLICY "Notifications system insert" ON public.notifications FOR INSERT WITH CHECK (true);
 
 -- ============================================================
@@ -392,6 +405,7 @@ CREATE TABLE IF NOT EXISTS public.provider_stats (
 CREATE INDEX IF NOT EXISTS idx_provider_stats_rating ON public.provider_stats(average_rating DESC);
 
 ALTER TABLE public.provider_stats ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Provider stats public read" ON public.provider_stats;
 CREATE POLICY "Provider stats public read" ON public.provider_stats FOR SELECT USING (true);
 
 -- ============================================================
