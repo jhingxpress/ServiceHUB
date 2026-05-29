@@ -1,5 +1,8 @@
 -- ============================================================
 -- ServiceHub Database Schema
+-- Version: 2026-05-29 (Architecture Renovation Complete)
+-- Audit fixes: idempotent DDL, secure RLS, visible-review ratings,
+--              modern storefront fields, GPS discovery ready
 -- ============================================================
 
 -- Enable UUID generation
@@ -368,9 +371,12 @@ CREATE TABLE IF NOT EXISTS public.disputes (
 CREATE INDEX IF NOT EXISTS idx_bookings_customer ON public.bookings(customer_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_provider ON public.bookings(provider_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_status ON public.bookings(status);
+CREATE INDEX IF NOT EXISTS idx_bookings_status_provider ON public.bookings(status, provider_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_status_customer ON public.bookings(status, customer_id);
 CREATE INDEX IF NOT EXISTS idx_messages_booking ON public.messages(booking_id);
 CREATE INDEX IF NOT EXISTS idx_messages_sender ON public.messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_provider ON public.reviews(provider_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_provider_visible ON public.reviews(provider_id, is_visible) WHERE is_visible = true;
 CREATE INDEX IF NOT EXISTS idx_services_provider ON public.services(provider_id);
 CREATE INDEX IF NOT EXISTS idx_service_options_service ON public.service_options(service_id);
 CREATE INDEX IF NOT EXISTS idx_review_media_review ON public.review_media(review_id);
@@ -452,7 +458,16 @@ CREATE POLICY "Categories public read" ON public.categories FOR SELECT USING (tr
 
 -- Providers: public read approved; provider edits own; admin can update all
 DROP POLICY IF EXISTS "Providers public read" ON public.providers;
-CREATE POLICY "Providers public read" ON public.providers FOR SELECT USING (true);
+CREATE POLICY "Providers public read" ON public.providers FOR SELECT USING (
+    status = 'approved'
+    OR auth.uid() = id
+    OR EXISTS (
+        SELECT 1
+        FROM public.users
+        WHERE id = auth.uid()
+        AND role = 'admin'
+    )
+);
 DROP POLICY IF EXISTS "Providers insert own" ON public.providers;
 CREATE POLICY "Providers insert own" ON public.providers FOR INSERT WITH CHECK (auth.uid() = id);
 DROP POLICY IF EXISTS "Providers update own" ON public.providers;
@@ -642,12 +657,18 @@ CREATE TRIGGER bookings_updated_at BEFORE UPDATE ON public.bookings FOR EACH ROW
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.users (id, email, full_name, role)
+  INSERT INTO public.users (
+    id, email, full_name, phone, role, status, city, province
+  )
   VALUES (
     NEW.id,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
-    COALESCE(NEW.raw_user_meta_data->>'role', 'customer')
+    COALESCE(NEW.raw_user_meta_data->>'phone', NULL),
+    COALESCE(NEW.raw_user_meta_data->>'role', 'customer'),
+    'active',
+    COALESCE(NEW.raw_user_meta_data->>'city', NULL),
+    COALESCE(NEW.raw_user_meta_data->>'province', NULL)
   );
   RETURN NEW;
 END;
@@ -658,22 +679,46 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- Update provider rating after new review
+-- Update provider rating after review changes (INSERT, UPDATE, DELETE)
 CREATE OR REPLACE FUNCTION public.update_provider_rating()
 RETURNS TRIGGER AS $$
+DECLARE
+  target_provider_id UUID;
 BEGIN
+  -- Determine which provider to recalculate
+  IF TG_OP = 'DELETE' THEN
+    target_provider_id := OLD.provider_id;
+  ELSE
+    target_provider_id := NEW.provider_id;
+  END IF;
+
+  -- Recalculate from visible reviews only
   UPDATE public.providers
   SET
-    rating = (SELECT AVG(rating)::DECIMAL(3,2) FROM public.reviews WHERE provider_id = NEW.provider_id),
-    total_reviews = (SELECT COUNT(*) FROM public.reviews WHERE provider_id = NEW.provider_id)
-  WHERE id = NEW.provider_id;
-  RETURN NEW;
+    rating = COALESCE((
+      SELECT AVG(rating)::DECIMAL(3,2)
+      FROM public.reviews
+      WHERE provider_id = target_provider_id AND is_visible = true
+    ), 0),
+    total_reviews = COALESCE((
+      SELECT COUNT(*)
+      FROM public.reviews
+      WHERE provider_id = target_provider_id AND is_visible = true
+    ), 0)
+  WHERE id = target_provider_id;
+
+  -- Return appropriate row for trigger type
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  ELSE
+    RETURN NEW;
+  END IF;
 END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS reviews_update_rating ON public.reviews;
 CREATE TRIGGER reviews_update_rating
-  AFTER INSERT ON public.reviews
+  AFTER INSERT OR UPDATE OR DELETE ON public.reviews
   FOR EACH ROW EXECUTE FUNCTION public.update_provider_rating();
 
 -- Auto-set timestamps and is_verified on provider status transitions
@@ -1061,95 +1106,130 @@ VALUES ('provider-documents', 'provider-documents', false)
 ON CONFLICT (id) DO NOTHING;
 
 -- Storage policies for provider-documents bucket
+-- NOTE: Storage policies cannot use DROP POLICY IF EXISTS syntax reliably
+-- across all Supabase versions. For re-run safety, wrap in a DO block.
+DO $$
+BEGIN
+  -- Upload
+  CREATE POLICY "Providers can upload to their own folder"
+  ON storage.objects FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    bucket_id = 'provider-documents'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'Policy already exists, skipping';
+END $$;
 
--- Policy: Authenticated users can upload to their own folder
-CREATE POLICY "Providers can upload to their own folder"
-ON storage.objects FOR INSERT
-TO authenticated
-WITH CHECK (
-  bucket_id = 'provider-documents'
-  AND (storage.foldername(name))[1] = auth.uid()::text
-);
+DO $$
+BEGIN
+  -- Read own
+  CREATE POLICY "Providers can read their own files"
+  ON storage.objects FOR SELECT
+  TO authenticated
+  USING (
+    bucket_id = 'provider-documents'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'Policy already exists, skipping';
+END $$;
 
--- Policy: Providers can read their own files
-CREATE POLICY "Providers can read their own files"
-ON storage.objects FOR SELECT
-TO authenticated
-USING (
-  bucket_id = 'provider-documents'
-  AND (storage.foldername(name))[1] = auth.uid()::text
-);
+DO $$
+BEGIN
+  -- Admin read all
+  CREATE POLICY "Admins can read all provider documents"
+  ON storage.objects FOR SELECT
+  TO authenticated
+  USING (
+    bucket_id = 'provider-documents'
+    AND EXISTS (
+      SELECT 1 FROM users
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'Policy already exists, skipping';
+END $$;
 
--- Policy: Admins can read all provider documents
-CREATE POLICY "Admins can read all provider documents"
-ON storage.objects FOR SELECT
-TO authenticated
-USING (
-  bucket_id = 'provider-documents'
-  AND EXISTS (
-    SELECT 1 FROM users
-    WHERE id = auth.uid() AND role = 'admin'
+DO $$
+BEGIN
+  -- Update own
+  CREATE POLICY "Providers can update their own files"
+  ON storage.objects FOR UPDATE
+  TO authenticated
+  USING (
+    bucket_id = 'provider-documents'
+    AND (storage.foldername(name))[1] = auth.uid()::text
   )
-);
+  WITH CHECK (
+    bucket_id = 'provider-documents'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'Policy already exists, skipping';
+END $$;
 
--- Policy: Providers can update their own files
-CREATE POLICY "Providers can update their own files"
-ON storage.objects FOR UPDATE
-TO authenticated
-USING (
-  bucket_id = 'provider-documents'
-  AND (storage.foldername(name))[1] = auth.uid()::text
-)
-WITH CHECK (
-  bucket_id = 'provider-documents'
-  AND (storage.foldername(name))[1] = auth.uid()::text
-);
+DO $$
+BEGIN
+  -- Delete own
+  CREATE POLICY "Providers can delete their own files"
+  ON storage.objects FOR DELETE
+  TO authenticated
+  USING (
+    bucket_id = 'provider-documents'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'Policy already exists, skipping';
+END $$;
 
--- Policy: Providers can delete their own files
-CREATE POLICY "Providers can delete their own files"
-ON storage.objects FOR DELETE
-TO authenticated
-USING (
-  bucket_id = 'provider-documents'
-  AND (storage.foldername(name))[1] = auth.uid()::text
-);
-
--- Policy: Admins can delete any provider document
-CREATE POLICY "Admins can delete any provider document"
-ON storage.objects FOR DELETE
-TO authenticated
-USING (
-  bucket_id = 'provider-documents'
-  AND EXISTS (
-    SELECT 1 FROM users
-    WHERE id = auth.uid() AND role = 'admin'
-  )
-);
+DO $$
+BEGIN
+  -- Admin delete any
+  CREATE POLICY "Admins can delete any provider document"
+  ON storage.objects FOR DELETE
+  TO authenticated
+  USING (
+    bucket_id = 'provider-documents'
+    AND EXISTS (
+      SELECT 1 FROM users
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'Policy already exists, skipping';
+END $$;
 
 -- ============================================================
 -- EXAMPLE QUERIES
 -- ============================================================
 
--- Get all categories with service count
+-- Get all categories with provider and service count
 SELECT 
   c.id, c.name, c.icon, c.color,
-  COUNT(s.id) as service_count
+  COUNT(DISTINCT p.id) as provider_count,
+  COUNT(DISTINCT s.id) as service_count
 FROM categories c
-LEFT JOIN services s ON s.category_id = c.id
+LEFT JOIN providers p ON p.category_id = c.id
+LEFT JOIN services s ON s.provider_id = p.id
 GROUP BY c.id
 ORDER BY c.name;
 
--- Get top-rated providers in a category
+-- Get top-rated providers in a category (modern storefront)
 SELECT 
-  p.id, u.full_name, p.bio, p.hourly_rate, p.rating, p.total_reviews,
-  c.name as category_name
+  p.id, u.full_name, p.business_name, p.service_description, p.rating, p.total_reviews,
+  c.name as category_name, p.city, p.provider_type,
+  ps.completed_jobs, ps.favorite_count, ps.response_rate
 FROM providers p
 JOIN users u ON u.id = p.id
 JOIN categories c ON p.category_id = c.id
+LEFT JOIN provider_stats ps ON ps.provider_id = p.id
 WHERE c.name = 'Plumbing'
-  AND p.is_verified = true
+  AND p.status = 'approved'
   AND p.is_available = true
-ORDER BY p.rating DESC, p.total_reviews DESC
+ORDER BY p.rating DESC, ps.completed_jobs DESC
 LIMIT 10;
 
 -- Get a customer's booking history with provider info
@@ -1222,18 +1302,20 @@ SELECT
   (SELECT COUNT(*) FROM bookings WHERE status = 'completed') as completed_bookings,
   (SELECT SUM(total_amount) FROM bookings WHERE status = 'completed') as total_revenue;
 
--- Search providers by location and category
+-- Search providers by location and category (modern storefront)
 SELECT 
-  p.id, u.full_name, p.bio, p.hourly_rate, p.rating,
-  p.location, c.name as category_name
+  p.id, u.full_name, p.business_name, p.service_description, p.rating,
+  p.city, p.province, p.business_address, c.name as category_name,
+  ps.completed_jobs, ps.favorite_count, ps.response_rate
 FROM providers p
 JOIN users u ON u.id = p.id
 JOIN categories c ON p.category_id = c.id
-WHERE p.is_verified = true
+LEFT JOIN provider_stats ps ON ps.provider_id = p.id
+WHERE p.status = 'approved'
   AND p.is_available = true
-  AND p.location ILIKE '%Manila%'
+  AND (p.city ILIKE '%Digos%' OR p.province ILIKE '%Davao del Sur%')
   AND c.name = 'Cleaning'
-ORDER BY p.rating DESC;
+ORDER BY p.rating DESC, ps.completed_jobs DESC;
 
 -- Get provider availability schedule
 SELECT 
