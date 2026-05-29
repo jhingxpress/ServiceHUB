@@ -8,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- ============================================================
 -- USERS
 -- ============================================================
-CREATE TABLE public.users (
+CREATE TABLE IF NOT EXISTS public.users (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   full_name TEXT,
@@ -25,7 +25,7 @@ CREATE TABLE public.users (
 -- ============================================================
 -- CATEGORIES
 -- ============================================================
-CREATE TABLE public.categories (
+CREATE TABLE IF NOT EXISTS public.categories (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
   description TEXT,
@@ -37,7 +37,7 @@ CREATE TABLE public.categories (
 -- ============================================================
 -- PROVIDERS
 -- ============================================================
-CREATE TABLE public.providers (
+CREATE TABLE IF NOT EXISTS public.providers (
   id UUID REFERENCES public.users(id) ON DELETE CASCADE PRIMARY KEY,
   -- Business information
   business_name TEXT,
@@ -91,7 +91,7 @@ CREATE TABLE public.providers (
 -- SERVICES (Sub-services under a provider's single category)
 -- Each provider has ONE category; multiple sub-services under it
 -- ============================================================
-CREATE TABLE public.services (
+CREATE TABLE IF NOT EXISTS public.services (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
@@ -109,7 +109,7 @@ CREATE TABLE public.services (
 -- SERVICE OPTIONS (Price variants per sub-service)
 -- e.g. Aircon Cleaning → Window Type ₱500, Split Type ₱1200
 -- ============================================================
-CREATE TABLE public.service_options (
+CREATE TABLE IF NOT EXISTS public.service_options (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   service_id UUID REFERENCES public.services(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
@@ -124,7 +124,7 @@ CREATE TABLE public.service_options (
 -- ============================================================
 -- PROVIDER DOCUMENTS (Onboarding verification documents)
 -- ============================================================
-CREATE TABLE public.provider_documents (
+CREATE TABLE IF NOT EXISTS public.provider_documents (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
   document_type TEXT NOT NULL CHECK (document_type IN (
@@ -147,7 +147,7 @@ CREATE TABLE public.provider_documents (
 -- ============================================================
 -- SERVICE IMAGES
 -- ============================================================
-CREATE TABLE public.service_images (
+CREATE TABLE IF NOT EXISTS public.service_images (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   service_id UUID REFERENCES public.services(id) ON DELETE CASCADE NOT NULL,
   image_url TEXT NOT NULL,
@@ -158,7 +158,7 @@ CREATE TABLE public.service_images (
 -- ============================================================
 -- PROVIDER GALLERY
 -- ============================================================
-CREATE TABLE public.provider_gallery (
+CREATE TABLE IF NOT EXISTS public.provider_gallery (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
   image_url TEXT NOT NULL,
@@ -171,7 +171,7 @@ CREATE TABLE public.provider_gallery (
 -- ============================================================
 -- PROVIDER BADGES
 -- ============================================================
-CREATE TABLE public.provider_badges (
+CREATE TABLE IF NOT EXISTS public.provider_badges (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
   badge_type TEXT NOT NULL CHECK (badge_type IN (
@@ -189,7 +189,7 @@ CREATE TABLE public.provider_badges (
 -- ============================================================
 -- FAVORITE PROVIDERS
 -- ============================================================
-CREATE TABLE public.favorite_providers (
+CREATE TABLE IF NOT EXISTS public.favorite_providers (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   customer_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
@@ -200,7 +200,7 @@ CREATE TABLE public.favorite_providers (
 -- ============================================================
 -- NOTIFICATIONS
 -- ============================================================
-CREATE TABLE public.notifications (
+CREATE TABLE IF NOT EXISTS public.notifications (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   type TEXT NOT NULL CHECK (type IN (
@@ -226,7 +226,7 @@ CREATE TABLE public.notifications (
 -- ============================================================
 -- PROVIDER STATS (denormalized for fast reads)
 -- ============================================================
-CREATE TABLE public.provider_stats (
+CREATE TABLE IF NOT EXISTS public.provider_stats (
   provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE PRIMARY KEY,
   completed_jobs INTEGER DEFAULT 0,
   total_reviews INTEGER DEFAULT 0,
@@ -239,7 +239,7 @@ CREATE TABLE public.provider_stats (
 -- ============================================================
 -- PROVIDER VERIFICATION LOGS (Admin action audit trail)
 -- ============================================================
-CREATE TABLE public.provider_verification_logs (
+CREATE TABLE IF NOT EXISTS public.provider_verification_logs (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
   action TEXT NOT NULL,
@@ -251,7 +251,7 @@ CREATE TABLE public.provider_verification_logs (
 -- ============================================================
 -- BOOKINGS
 -- ============================================================
-CREATE TABLE public.bookings (
+CREATE TABLE IF NOT EXISTS public.bookings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   customer_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
@@ -278,7 +278,7 @@ CREATE TABLE public.bookings (
 -- ============================================================
 -- REVIEWS
 -- ============================================================
-CREATE TABLE public.reviews (
+CREATE TABLE IF NOT EXISTS public.reviews (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   booking_id UUID REFERENCES public.bookings(id) ON DELETE CASCADE UNIQUE NOT NULL,
   customer_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
@@ -293,7 +293,7 @@ CREATE TABLE public.reviews (
 -- ============================================================
 -- REVIEW MEDIA (Photos and videos attached to reviews)
 -- ============================================================
-CREATE TABLE public.review_media (
+CREATE TABLE IF NOT EXISTS public.review_media (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   review_id UUID REFERENCES public.reviews(id) ON DELETE CASCADE NOT NULL,
   media_type TEXT NOT NULL CHECK (media_type IN ('photo', 'video')),
@@ -304,7 +304,7 @@ CREATE TABLE public.review_media (
 -- ============================================================
 -- PAYMENTS
 -- ============================================================
-CREATE TABLE public.payments (
+CREATE TABLE IF NOT EXISTS public.payments (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   booking_id UUID REFERENCES public.bookings(id) ON DELETE CASCADE NOT NULL,
   customer_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
@@ -320,7 +320,7 @@ CREATE TABLE public.payments (
 -- ============================================================
 -- MESSAGES (Chat)
 -- ============================================================
-CREATE TABLE public.messages (
+CREATE TABLE IF NOT EXISTS public.messages (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   booking_id UUID REFERENCES public.bookings(id) ON DELETE CASCADE NOT NULL,
   sender_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
@@ -334,7 +334,7 @@ CREATE TABLE public.messages (
 -- ============================================================
 -- PROVIDER AVAILABILITY
 -- ============================================================
-CREATE TABLE public.availability (
+CREATE TABLE IF NOT EXISTS public.availability (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
   day_of_week INTEGER NOT NULL CHECK (day_of_week >= 0 AND day_of_week <= 6),
@@ -347,7 +347,7 @@ CREATE TABLE public.availability (
 -- ============================================================
 -- DISPUTES
 -- ============================================================
-CREATE TABLE public.disputes (
+CREATE TABLE IF NOT EXISTS public.disputes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   booking_id UUID REFERENCES public.bookings(id) ON DELETE CASCADE NOT NULL,
   raised_by UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
