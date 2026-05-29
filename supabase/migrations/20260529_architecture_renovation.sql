@@ -408,6 +408,10 @@ ALTER TABLE public.provider_stats ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Provider stats public read" ON public.provider_stats;
 CREATE POLICY "Provider stats public read" ON public.provider_stats FOR SELECT USING (true);
 
+-- Add missing is_visible column to reviews (schema was updated after initial migration)
+ALTER TABLE public.reviews
+ADD COLUMN IF NOT EXISTS is_visible BOOLEAN DEFAULT TRUE;
+
 -- ============================================================
 -- 17. HAVERSINE DISTANCE FUNCTION FOR GPS DISCOVERY
 -- ============================================================
