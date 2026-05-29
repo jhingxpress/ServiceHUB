@@ -151,7 +151,7 @@ export default function UserDetailScreen({ route, navigation }: Props) {
                   <React.Fragment key={b.id}>
                     <View style={styles.bookingRow}>
                       <View>
-                        <Text style={styles.bookingService}>{b.service?.name ?? 'Unknown Service'}</Text>
+                        <Text style={styles.bookingService}>{b.services?.name ?? 'Unknown Service'}</Text>
                         <Text style={styles.bookingDate}>{format(new Date(b.created_at), 'MMM d, yyyy')}</Text>
                       </View>
                       <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
