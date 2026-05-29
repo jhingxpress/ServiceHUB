@@ -28,7 +28,7 @@ interface ProviderItem {
   rating: number | null;
   total_reviews: number | null;
   users: { full_name: string | null; avatar_url: string | null };
-  services: { name: string; price: number }[];
+  services: { name: string; base_price: number }[];
 }
 
 const SORT_OPTIONS = ['Top Rated', 'Nearest', 'Lowest Price', 'Most Reviews'];
@@ -47,7 +47,7 @@ export default function CategoryListScreen({ route, navigation }: Props) {
       .select(`
         id, bio, location, hourly_rate, rating, total_reviews,
         users!providers_id_fkey(full_name, avatar_url),
-        services(name, price)
+        services(name, base_price)
       `)
       .eq('category_id', categoryId)
       .eq('is_verified', true)

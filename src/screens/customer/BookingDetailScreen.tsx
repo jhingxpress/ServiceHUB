@@ -46,7 +46,7 @@ export default function BookingDetailScreen() {
         provider:providers!bookings_provider_id_fkey(
           *, users!providers_id_fkey(full_name, avatar_url, phone)
         ),
-        service:services(name, price),
+        service:services(name, base_price),
         customer:users!bookings_customer_id_fkey(full_name, avatar_url)
       `)
       .eq('id', bookingId)

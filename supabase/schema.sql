@@ -583,6 +583,10 @@ DROP POLICY IF EXISTS "Bookings customer read" ON public.bookings;
 CREATE POLICY "Bookings customer read" ON public.bookings FOR SELECT USING (auth.uid() = customer_id);
 DROP POLICY IF EXISTS "Bookings provider read" ON public.bookings;
 CREATE POLICY "Bookings provider read" ON public.bookings FOR SELECT USING (auth.uid() = provider_id);
+DROP POLICY IF EXISTS "Bookings admin read" ON public.bookings;
+CREATE POLICY "Bookings admin read" ON public.bookings FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
 DROP POLICY IF EXISTS "Bookings customer insert" ON public.bookings;
 CREATE POLICY "Bookings customer insert" ON public.bookings FOR INSERT WITH CHECK (auth.uid() = customer_id);
 DROP POLICY IF EXISTS "Bookings customer cancel" ON public.bookings;
@@ -610,9 +614,12 @@ DROP POLICY IF EXISTS "Review media customer delete" ON public.review_media;
 CREATE POLICY "Review media customer delete" ON public.review_media FOR DELETE
   USING (auth.uid() = (SELECT customer_id FROM public.reviews WHERE id = review_id));
 
--- Messages: only sender or receiver can read
+-- Messages: sender, receiver, or admin can read
 DROP POLICY IF EXISTS "Messages read" ON public.messages;
-CREATE POLICY "Messages read" ON public.messages FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+CREATE POLICY "Messages read" ON public.messages FOR SELECT USING (
+  auth.uid() = sender_id OR auth.uid() = receiver_id
+  OR EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
 DROP POLICY IF EXISTS "Messages insert" ON public.messages;
 CREATE POLICY "Messages insert" ON public.messages FOR INSERT WITH CHECK (auth.uid() = sender_id);
 DROP POLICY IF EXISTS "Messages update read" ON public.messages;
@@ -674,13 +681,19 @@ CREATE POLICY "Availability public read" ON public.availability FOR SELECT USING
 DROP POLICY IF EXISTS "Availability provider manage" ON public.availability;
 CREATE POLICY "Availability provider manage" ON public.availability FOR ALL USING (auth.uid() = provider_id);
 
--- Payments: only involved parties
+-- Payments: involved parties + admin
 DROP POLICY IF EXISTS "Payments read" ON public.payments;
-CREATE POLICY "Payments read" ON public.payments FOR SELECT USING (auth.uid() = customer_id OR auth.uid() = provider_id);
+CREATE POLICY "Payments read" ON public.payments FOR SELECT USING (
+  auth.uid() = customer_id OR auth.uid() = provider_id
+  OR EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
 
--- Disputes: involved parties
+-- Disputes: involved parties + admin
 DROP POLICY IF EXISTS "Disputes read" ON public.disputes;
-CREATE POLICY "Disputes read" ON public.disputes FOR SELECT USING (auth.uid() = raised_by);
+CREATE POLICY "Disputes read" ON public.disputes FOR SELECT USING (
+  auth.uid() = raised_by
+  OR EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
 DROP POLICY IF EXISTS "Disputes insert" ON public.disputes;
 CREATE POLICY "Disputes insert" ON public.disputes FOR INSERT WITH CHECK (auth.uid() = raised_by);
 

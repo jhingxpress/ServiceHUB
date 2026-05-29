@@ -737,6 +737,33 @@ CREATE POLICY "Services public read" ON public.services FOR SELECT USING (
   )
 );
 
+-- Bookings: add admin read
+DROP POLICY IF EXISTS "Bookings admin read" ON public.bookings;
+CREATE POLICY "Bookings admin read" ON public.bookings FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
+
+-- Payments: add admin read
+DROP POLICY IF EXISTS "Payments read" ON public.payments;
+CREATE POLICY "Payments read" ON public.payments FOR SELECT USING (
+  auth.uid() = customer_id OR auth.uid() = provider_id
+  OR EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
+
+-- Messages: add admin read
+DROP POLICY IF EXISTS "Messages read" ON public.messages;
+CREATE POLICY "Messages read" ON public.messages FOR SELECT USING (
+  auth.uid() = sender_id OR auth.uid() = receiver_id
+  OR EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
+
+-- Disputes: add admin read
+DROP POLICY IF EXISTS "Disputes read" ON public.disputes;
+CREATE POLICY "Disputes read" ON public.disputes FOR SELECT USING (
+  auth.uid() = raised_by
+  OR EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
+
 -- ============================================================
 -- 26. PROVIDER VERIFICATION NOTIFICATIONS
 -- ============================================================

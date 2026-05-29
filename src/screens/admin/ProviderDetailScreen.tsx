@@ -39,7 +39,7 @@ interface ProviderDetailData {
   updated_at: string;
   users: { full_name: string | null; email: string | null; phone: string | null; avatar_url: string | null };
   category: { name: string; icon: string } | null;
-  services: { id: string; name: string; price: number; is_active: boolean }[];
+  services: { id: string; name: string; base_price: number; is_active: boolean }[];
 }
 
 interface DocRecord {
@@ -122,7 +122,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
         rejection_reason, created_at, updated_at,
         users!providers_id_fkey(full_name, email, phone, avatar_url),
         category:categories(name, icon),
-        services(id, name, price, is_active)
+        services(id, name, base_price, is_active)
       `).eq('id', providerId).single(),
       supabase.from('provider_documents').select('*').eq('provider_id', providerId).order('uploaded_at'),
       supabase.from('provider_verification_logs').select(`

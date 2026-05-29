@@ -40,7 +40,7 @@ export default function ActiveJobsScreen() {
       .select(`
         *,
         customer:users!bookings_customer_id_fkey(full_name, avatar_url, phone),
-        service:services(name, price)
+        service:services(name, base_price)
       `)
       .eq('provider_id', user.id)
       .in('status', ['accepted', 'in_progress'])
