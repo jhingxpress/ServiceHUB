@@ -361,30 +361,30 @@ CREATE TABLE IF NOT EXISTS public.disputes (
 -- ============================================================
 -- INDEXES
 -- ============================================================
-CREATE INDEX idx_bookings_customer ON public.bookings(customer_id);
-CREATE INDEX idx_bookings_provider ON public.bookings(provider_id);
-CREATE INDEX idx_bookings_status ON public.bookings(status);
-CREATE INDEX idx_messages_booking ON public.messages(booking_id);
-CREATE INDEX idx_messages_sender ON public.messages(sender_id);
-CREATE INDEX idx_reviews_provider ON public.reviews(provider_id);
-CREATE INDEX idx_services_provider ON public.services(provider_id);
-CREATE INDEX idx_service_options_service ON public.service_options(service_id);
-CREATE INDEX idx_review_media_review ON public.review_media(review_id);
-CREATE INDEX idx_providers_category ON public.providers(category_id);
-CREATE INDEX idx_providers_status ON public.providers(status);
-CREATE INDEX idx_provider_documents_provider ON public.provider_documents(provider_id);
-CREATE INDEX idx_provider_documents_status ON public.provider_documents(status);
-CREATE INDEX idx_verification_logs_provider ON public.provider_verification_logs(provider_id);
-CREATE INDEX idx_service_images_service ON public.service_images(service_id);
-CREATE INDEX idx_provider_gallery_provider ON public.provider_gallery(provider_id);
-CREATE INDEX idx_provider_badges_provider ON public.provider_badges(provider_id);
-CREATE INDEX idx_favorites_customer ON public.favorite_providers(customer_id);
-CREATE INDEX idx_favorites_provider ON public.favorite_providers(provider_id);
-CREATE INDEX idx_providers_location ON public.providers USING btree (latitude, longitude)
+CREATE INDEX IF NOT EXISTS idx_bookings_customer ON public.bookings(customer_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_provider ON public.bookings(provider_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_status ON public.bookings(status);
+CREATE INDEX IF NOT EXISTS idx_messages_booking ON public.messages(booking_id);
+CREATE INDEX IF NOT EXISTS idx_messages_sender ON public.messages(sender_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_provider ON public.reviews(provider_id);
+CREATE INDEX IF NOT EXISTS idx_services_provider ON public.services(provider_id);
+CREATE INDEX IF NOT EXISTS idx_service_options_service ON public.service_options(service_id);
+CREATE INDEX IF NOT EXISTS idx_review_media_review ON public.review_media(review_id);
+CREATE INDEX IF NOT EXISTS idx_providers_category ON public.providers(category_id);
+CREATE INDEX IF NOT EXISTS idx_providers_status ON public.providers(status);
+CREATE INDEX IF NOT EXISTS idx_provider_documents_provider ON public.provider_documents(provider_id);
+CREATE INDEX IF NOT EXISTS idx_provider_documents_status ON public.provider_documents(status);
+CREATE INDEX IF NOT EXISTS idx_verification_logs_provider ON public.provider_verification_logs(provider_id);
+CREATE INDEX IF NOT EXISTS idx_service_images_service ON public.service_images(service_id);
+CREATE INDEX IF NOT EXISTS idx_provider_gallery_provider ON public.provider_gallery(provider_id);
+CREATE INDEX IF NOT EXISTS idx_provider_badges_provider ON public.provider_badges(provider_id);
+CREATE INDEX IF NOT EXISTS idx_favorites_customer ON public.favorite_providers(customer_id);
+CREATE INDEX IF NOT EXISTS idx_favorites_provider ON public.favorite_providers(provider_id);
+CREATE INDEX IF NOT EXISTS idx_providers_location ON public.providers USING btree (latitude, longitude)
 WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND status = 'approved';
-CREATE INDEX idx_notifications_user ON public.notifications(user_id);
-CREATE INDEX idx_notifications_unread ON public.notifications(user_id, is_read) WHERE is_read = FALSE;
-CREATE INDEX idx_provider_stats_rating ON public.provider_stats(average_rating DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON public.notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON public.notifications(user_id, is_read) WHERE is_read = FALSE;
+CREATE INDEX IF NOT EXISTS idx_provider_stats_rating ON public.provider_stats(average_rating DESC);
 
 -- ============================================================
 -- FUNCTIONS: Haversine distance for GPS discovery
@@ -572,8 +572,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS users_updated_at ON public.users;
 CREATE TRIGGER users_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+DROP TRIGGER IF EXISTS providers_updated_at ON public.providers;
 CREATE TRIGGER providers_updated_at BEFORE UPDATE ON public.providers FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+DROP TRIGGER IF EXISTS bookings_updated_at ON public.bookings;
 CREATE TRIGGER bookings_updated_at BEFORE UPDATE ON public.bookings FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
 -- Auto-create user profile on signup
@@ -591,6 +594,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
@@ -608,6 +612,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS reviews_update_rating ON public.reviews;
 CREATE TRIGGER reviews_update_rating
   AFTER INSERT ON public.reviews
   FOR EACH ROW EXECUTE FUNCTION public.update_provider_rating();
@@ -633,6 +638,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS providers_status_change ON public.providers;
 CREATE TRIGGER providers_status_change
   BEFORE UPDATE ON public.providers
   FOR EACH ROW EXECUTE FUNCTION public.handle_provider_status_change();
@@ -660,6 +666,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS booking_accepted_welcome ON public.bookings;
 CREATE TRIGGER booking_accepted_welcome
   AFTER UPDATE ON public.bookings
   FOR EACH ROW EXECUTE FUNCTION public.send_welcome_message();
@@ -695,6 +702,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS booking_completed_payment ON public.bookings;
 CREATE TRIGGER booking_completed_payment
   AFTER UPDATE ON public.bookings
   FOR EACH ROW EXECUTE FUNCTION public.create_payment_on_completion();
@@ -717,6 +725,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS reviews_validate_booking_status ON public.reviews;
 CREATE TRIGGER reviews_validate_booking_status
   BEFORE INSERT ON public.reviews
   FOR EACH ROW EXECUTE FUNCTION public.validate_review_booking_status();
@@ -759,6 +768,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS providers_update_badges ON public.providers;
 CREATE TRIGGER providers_update_badges
   AFTER UPDATE ON public.providers
   FOR EACH ROW EXECUTE FUNCTION public.update_provider_badges();
@@ -792,6 +802,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS bookings_update_response_rate ON public.bookings;
 CREATE TRIGGER bookings_update_response_rate
   AFTER UPDATE ON public.bookings
   FOR EACH ROW EXECUTE FUNCTION public.update_provider_response_rate();
@@ -820,6 +831,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS providers_sync_stats ON public.providers;
 CREATE TRIGGER providers_sync_stats
   AFTER INSERT OR UPDATE ON public.providers
   FOR EACH ROW EXECUTE FUNCTION public.sync_provider_stats();
@@ -847,6 +859,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS favorites_sync_count ON public.favorite_providers;
 CREATE TRIGGER favorites_sync_count
   AFTER INSERT OR DELETE ON public.favorite_providers
   FOR EACH ROW EXECUTE FUNCTION public.sync_favorite_count();
@@ -920,6 +933,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS bookings_create_notification ON public.bookings;
 CREATE TRIGGER bookings_create_notification
   AFTER INSERT OR UPDATE ON public.bookings
   FOR EACH ROW EXECUTE FUNCTION public.create_booking_notification();
