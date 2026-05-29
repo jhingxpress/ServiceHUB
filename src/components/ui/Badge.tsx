@@ -33,7 +33,7 @@ export default function Badge({
       ]}
     >
       <Text style={[styles.text, size === 'sm' && styles.smallText, { color: textColor }]}>
-        {label.replace('_', ' ').toUpperCase()}
+        {label.replace(/_/g, ' ')}
       </Text>
     </View>
   );
@@ -41,19 +41,21 @@ export default function Badge({
 
 const styles = StyleSheet.create({
   badge: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 3,
-    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.sm,
     alignSelf: 'flex-start',
   },
   small: {
-    paddingHorizontal: SPACING.xs + 2,
+    paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.sm,
   },
   text: {
+    fontFamily: FONTS.semiBold,
     fontSize: FONTS.sizes.xs,
-    fontWeight: '700',
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
+    textTransform: 'capitalize',
   },
   smallText: {
     fontSize: 10,

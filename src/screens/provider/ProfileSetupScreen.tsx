@@ -183,9 +183,9 @@ const styles = StyleSheet.create({
     width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.surface,
     borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center',
   },
-  title: { fontSize: FONTS.sizes.lg, fontWeight: '700', color: COLORS.text },
+  title: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.semiBold, color: COLORS.text },
   form: { paddingHorizontal: SPACING.md },
-  label: { fontSize: FONTS.sizes.sm, fontWeight: '600', color: COLORS.text, marginBottom: SPACING.sm },
+  label: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: SPACING.sm },
   catScroll: { paddingBottom: SPACING.md, gap: SPACING.sm },
   catChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: COLORS.border,
   },
   catChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  catText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, fontWeight: '500' },
-  catTextActive: { color: COLORS.white, fontWeight: '700' },
+  catText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, fontFamily: FONTS.medium },
+  catTextActive: { color: COLORS.white, fontFamily: FONTS.semiBold },
   row: { flexDirection: 'row', alignItems: 'flex-start' },
 });

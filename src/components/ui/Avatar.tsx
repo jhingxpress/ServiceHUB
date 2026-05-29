@@ -82,6 +82,6 @@ const styles = StyleSheet.create({
   },
   initials: {
     color: COLORS.white,
-    fontWeight: '700',
+    fontFamily: FONTS.semiBold,
   },
 });

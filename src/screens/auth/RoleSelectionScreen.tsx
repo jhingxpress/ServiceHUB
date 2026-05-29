@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
   },
   content: { flex: 1, paddingHorizontal: SPACING.md, paddingTop: SPACING.md },
   title: {
-    fontSize: FONTS.sizes.xxxl, fontWeight: '800', color: COLORS.text,
+    fontSize: FONTS.sizes.xxxl, fontFamily: FONTS.bold, color: COLORS.text,
     lineHeight: 40, marginBottom: SPACING.sm,
   },
   subtitle: { fontSize: FONTS.sizes.base, color: COLORS.textSecondary, marginBottom: SPACING.xl },
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
   },
   roleIconSelected: { backgroundColor: 'rgba(255,255,255,0.2)' },
   roleBody: { flex: 1 },
-  roleTitle: { fontSize: FONTS.sizes.lg, fontWeight: '800', color: COLORS.text, marginBottom: 2 },
+  roleTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.bold, color: COLORS.text, marginBottom: 2 },
   roleTitleSelected: { color: COLORS.white },
   roleSubtitle: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginBottom: SPACING.sm },
   roleSubtitleSelected: { color: 'rgba(255,255,255,0.75)' },
@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md + 2, marginBottom: SPACING.md, ...SHADOWS.medium,
   },
   continueBtnDisabled: { backgroundColor: COLORS.border },
-  continueBtnText: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.white },
+  continueBtnText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.white },
   terms: { fontSize: FONTS.sizes.xs, color: COLORS.textLight, textAlign: 'center', lineHeight: 18 },
-  termsLink: { color: COLORS.primary, fontWeight: '600' },
+  termsLink: { color: COLORS.primary, fontFamily: FONTS.semiBold },
 });

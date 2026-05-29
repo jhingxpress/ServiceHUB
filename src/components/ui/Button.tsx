@@ -83,15 +83,22 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   disabled: {
-    opacity: 0.5,
+    opacity: 0.4,
   },
 
   // Variants
   primary: {
     backgroundColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   secondary: {
-    backgroundColor: COLORS.secondary,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
   },
   outline: {
     backgroundColor: 'transparent',
@@ -108,26 +115,26 @@ const styles = StyleSheet.create({
   // Sizes
   size_sm: {
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs + 2,
+    paddingVertical: SPACING.sm,
     borderRadius: BORDER_RADIUS.sm,
   },
   size_md: {
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm + 4,
+    paddingVertical: SPACING.md,
   },
   size_lg: {
     paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.lg,
   },
 
   // Text base
   text: {
-    fontWeight: '600',
+    fontFamily: FONTS.semiBold,
   },
 
   // Text variants
   text_primary: { color: COLORS.white },
-  text_secondary: { color: COLORS.white },
+  text_secondary: { color: COLORS.primary },
   text_outline: { color: COLORS.primary },
   text_ghost: { color: COLORS.primary },
   text_danger: { color: COLORS.white },

@@ -4,19 +4,41 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, ActivityIndicator, View, Text } from 'react-native';
+import { useFonts } from 'expo-font';
+import {
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+} from '@expo-google-fonts/poppins';
 import RootNavigator from './src/navigation/RootNavigator';
 import { useAuthStore } from './src/stores/authStore';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { ToastProvider } from './src/hooks/useToast';
 import Toast from './src/components/ui/Toast';
+import { COLORS } from './src/constants/theme';
 
 export default function App() {
   const { initialize } = useAuthStore();
+  const [fontsLoaded] = useFonts({
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+  });
 
   useEffect(() => {
     initialize();
   }, []);
+
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={styles.container}>
@@ -24,7 +46,7 @@ export default function App() {
         <ErrorBoundary>
           <ToastProvider>
             <NavigationContainer>
-              <StatusBar style="auto" />
+              <StatusBar style="dark" />
               <RootNavigator />
               <Toast />
             </NavigationContainer>
@@ -38,5 +60,11 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background,
   },
 });

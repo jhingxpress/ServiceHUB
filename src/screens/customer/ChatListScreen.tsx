@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   topBar: { paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
-  title: { fontSize: FONTS.sizes.xxl, fontWeight: '800', color: COLORS.text },
+  title: { fontSize: FONTS.sizes.xxl, fontFamily: FONTS.bold, color: COLORS.text },
   list: { padding: SPACING.md, gap: SPACING.sm, flexGrow: 1 },
   threadCard: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
@@ -174,13 +174,13 @@ const styles = StyleSheet.create({
   },
   threadInfo: { flex: 1 },
   threadTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  threadName: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text, flex: 1 },
+  threadName: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text, flex: 1 },
   threadRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
   threadTime: { fontSize: FONTS.sizes.xs, color: COLORS.textLight },
   unreadBadge: {
     backgroundColor: COLORS.primary, borderRadius: 10, minWidth: 20, height: 20,
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6,
   },
-  unreadText: { fontSize: 11, fontWeight: '700', color: COLORS.white },
+  unreadText: { fontSize: 11, fontFamily: FONTS.semiBold, color: COLORS.white },
   threadLastMsg: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
 });

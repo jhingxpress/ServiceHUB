@@ -244,7 +244,7 @@ export default function BookingDetailScreen() {
             <View style={[styles.infoRow, { borderTopWidth: 1, borderTopColor: COLORS.border, marginTop: SPACING.xs, paddingTop: SPACING.sm }]}>
               <Ionicons name="cash-outline" size={16} color={COLORS.textSecondary} />
               <Text style={styles.infoLabel}>Total</Text>
-              <Text style={[styles.infoValue, { color: COLORS.primary, fontWeight: '800' }]}>
+              <Text style={[styles.infoValue, { color: COLORS.primary, fontFamily: FONTS.bold }]}>
                 ₱{booking.total_amount}
               </Text>
             </View>
@@ -304,12 +304,12 @@ const styles = StyleSheet.create({
     width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.surface,
     borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center',
   },
-  title: { fontSize: FONTS.sizes.lg, fontWeight: '700', color: COLORS.text },
+  title: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.semiBold, color: COLORS.text },
   statusBanner: {
     marginHorizontal: SPACING.md, borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md, marginBottom: SPACING.md,
   },
-  statusText: { fontSize: FONTS.sizes.base, fontWeight: '800', marginBottom: 2 },
+  statusText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.bold, marginBottom: 2 },
   statusSubtext: { fontSize: FONTS.sizes.sm },
   progressSection: { marginHorizontal: SPACING.md, marginBottom: SPACING.md },
   progressTrack: { flexDirection: 'row', alignItems: 'center' },
@@ -321,9 +321,9 @@ const styles = StyleSheet.create({
   },
   stepDotActive: { backgroundColor: COLORS.primary },
   stepDotDone: { backgroundColor: COLORS.success },
-  stepNum: { fontSize: FONTS.sizes.xs, color: COLORS.white, fontWeight: '700' },
+  stepNum: { fontSize: FONTS.sizes.xs, color: COLORS.white, fontFamily: FONTS.semiBold },
   stepLabel: { fontSize: 10, color: COLORS.textLight, textTransform: 'capitalize', textAlign: 'center' },
-  stepLabelActive: { color: COLORS.primary, fontWeight: '600' },
+  stepLabelActive: { color: COLORS.primary, fontFamily: FONTS.semiBold },
   stepLine: { flex: 1, height: 2, backgroundColor: COLORS.border, marginBottom: 20 },
   stepLineDone: { backgroundColor: COLORS.success },
   card: {
@@ -331,9 +331,9 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.lg, padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border,
     ...SHADOWS.small,
   },
-  cardTitle: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text, marginBottom: SPACING.sm },
+  cardTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: SPACING.sm },
   providerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  providerName: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text },
+  providerName: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
   providerPhone: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
   chatBtn: {
     width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.primaryLight,
@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm, paddingVertical: 6,
   },
   infoLabel: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, width: 70 },
-  infoValue: { flex: 1, fontSize: FONTS.sizes.sm, fontWeight: '600', color: COLORS.text },
+  infoValue: { flex: 1, fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
   notesText: { fontSize: FONTS.sizes.base, color: COLORS.textSecondary, lineHeight: 22 },
   actions: { paddingHorizontal: SPACING.md, gap: SPACING.sm },
   actionBtn: { marginTop: 0 },

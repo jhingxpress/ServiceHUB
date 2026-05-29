@@ -112,6 +112,6 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     fontSize: 11,
-    fontWeight: '500',
+    fontFamily: FONTS.medium,
   },
 });

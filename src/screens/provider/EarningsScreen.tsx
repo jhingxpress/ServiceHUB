@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   topBar: { paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
-  title: { fontSize: FONTS.sizes.xxl, fontWeight: '800', color: COLORS.text },
+  title: { fontSize: FONTS.sizes.xxl, fontFamily: FONTS.bold, color: COLORS.text },
   summaryRow: { flexDirection: 'row', gap: SPACING.sm, paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
   summaryCard: {
     flex: 1, backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.xl,
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
     width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.primaryLight,
     alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.sm,
   },
-  summaryValue: { fontSize: FONTS.sizes.xxl, fontWeight: '800', color: COLORS.text },
+  summaryValue: { fontSize: FONTS.sizes.xxl, fontFamily: FONTS.bold, color: COLORS.text },
   summaryLabel: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
   payoutCard: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -164,11 +164,11 @@ const styles = StyleSheet.create({
     padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
   },
   payoutInfo: {},
-  payoutTitle: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text },
+  payoutTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
   payoutSub: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
-  payoutAmount: { fontSize: FONTS.sizes.xl, fontWeight: '800', color: COLORS.success },
+  payoutAmount: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.bold, color: COLORS.success },
   section: { paddingHorizontal: SPACING.md },
-  sectionTitle: { fontSize: FONTS.sizes.lg, fontWeight: '700', color: COLORS.text, marginBottom: SPACING.md },
+  sectionTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: SPACING.md },
   txRow: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
     paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border,
@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.successLight ?? '#D1FAE5', alignItems: 'center', justifyContent: 'center',
   },
   txInfo: { flex: 1 },
-  txTitle: { fontSize: FONTS.sizes.base, fontWeight: '600', color: COLORS.text },
+  txTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
   txDate: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
-  txAmount: { fontSize: FONTS.sizes.base, fontWeight: '800', color: COLORS.success },
+  txAmount: { fontSize: FONTS.sizes.base, fontFamily: FONTS.bold, color: COLORS.success },
 });

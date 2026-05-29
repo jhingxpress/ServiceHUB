@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   topBar: { paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
-  title: { fontSize: FONTS.sizes.xxl, fontWeight: '800', color: COLORS.text },
+  title: { fontSize: FONTS.sizes.xxl, fontFamily: FONTS.bold, color: COLORS.text },
   filterList: { maxHeight: 48, marginBottom: SPACING.xs },
   filterRow: { paddingHorizontal: SPACING.md, gap: SPACING.sm, alignItems: 'center' },
   filterTab: {
@@ -223,8 +223,8 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.full, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
   },
   filterTabActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  filterText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, fontWeight: '500' },
-  filterTextActive: { color: COLORS.white, fontWeight: '700' },
+  filterText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, fontFamily: FONTS.medium },
+  filterTextActive: { color: COLORS.white, fontFamily: FONTS.semiBold },
   list: { padding: SPACING.md, gap: SPACING.sm, flexGrow: 1 },
   card: {
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
@@ -238,13 +238,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background, borderRadius: BORDER_RADIUS.md,
     padding: SPACING.sm, marginBottom: SPACING.sm,
   },
-  reasonLabel: { fontSize: FONTS.sizes.xs, fontWeight: '700', color: COLORS.textLight, marginBottom: 2 },
+  reasonLabel: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: COLORS.textLight, marginBottom: 2 },
   reasonText: { fontSize: FONTS.sizes.sm, color: COLORS.text },
   resolutionBox: {
     backgroundColor: '#D1FAE5', borderRadius: BORDER_RADIUS.md,
     padding: SPACING.sm, marginBottom: SPACING.sm,
   },
-  resolutionLabel: { fontSize: FONTS.sizes.xs, fontWeight: '700', color: COLORS.success, marginBottom: 2 },
+  resolutionLabel: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: COLORS.success, marginBottom: 2 },
   resolutionText: { fontSize: FONTS.sizes.sm, color: COLORS.text },
   metaRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: SPACING.sm },
   metaText: { fontSize: FONTS.sizes.xs, color: COLORS.textLight },
@@ -259,5 +259,5 @@ const styles = StyleSheet.create({
     gap: 4, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md,
     backgroundColor: COLORS.success,
   },
-  actionText: { fontSize: FONTS.sizes.sm, fontWeight: '700', color: COLORS.text },
+  actionText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
 });

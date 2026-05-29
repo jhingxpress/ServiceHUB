@@ -1,40 +1,45 @@
 export const COLORS = {
-  primary: '#6366F1',
-  primaryDark: '#4F46E5',
-  primaryLight: '#EEF2FF',
-  secondary: '#8B5CF6',
-  accent: '#EC4899',
+  // Primary: Home Credit Red
+  primary: '#E31C3D',
+  primaryDark: '#B91D32',
+  primaryLight: '#FEE2E2',
 
-  background: '#F8FAFC',
+  // Neutrals
+  background: '#F5F5F5',
   surface: '#FFFFFF',
-  surfaceSecondary: '#F1F5F9',
+  surfaceSecondary: '#FAFAFA',
+  surfaceTertiary: '#F0F0F0',
 
-  text: '#1E293B',
-  textSecondary: '#64748B',
-  textLight: '#94A3B8',
+  // Text
+  text: '#222222',
+  textSecondary: '#666666',
+  textLight: '#999999',
+  textMuted: '#BBBBBB',
 
-  border: '#E2E8F0',
-  divider: '#F1F5F9',
+  // Borders
+  border: '#E5E5E5',
+  divider: '#EEEEEE',
 
-  success: '#10B981',
-  successLight: '#D1FAE5',
+  // Semantic
+  success: '#16A34A',
+  successLight: '#DCFCE7',
   warning: '#F59E0B',
   warningLight: '#FEF3C7',
-  error: '#EF4444',
+  error: '#DC2626',
   errorLight: '#FEE2E2',
-  info: '#3B82F6',
+  info: '#2563EB',
   infoLight: '#DBEAFE',
 
-  // Booking status
+  // Booking status colors
   pending: '#F59E0B',
-  accepted: '#3B82F6',
-  on_the_way: '#3B82F6',
-  arrived: '#8B5CF6',
-  in_progress: '#8B5CF6',
-  completed: '#10B981',
-  cancelled: '#EF4444',
-  rejected: '#EF4444',
-  disputed: '#F97316',
+  accepted: '#2563EB',
+  on_the_way: '#2563EB',
+  arrived: '#7C3AED',
+  in_progress: '#7C3AED',
+  completed: '#16A34A',
+  cancelled: '#DC2626',
+  rejected: '#DC2626',
+  disputed: '#EA580C',
 
   white: '#FFFFFF',
   black: '#000000',
@@ -43,59 +48,61 @@ export const COLORS = {
 };
 
 export const FONTS = {
-  regular: 'System',
-  medium: 'System',
-  bold: 'System',
+  regular: 'Poppins_400Regular',
+  medium: 'Poppins_500Medium',
+  semiBold: 'Poppins_600SemiBold',
+  bold: 'Poppins_700Bold',
   sizes: {
     xs: 11,
-    sm: 13,
-    base: 15,
-    md: 15,
-    lg: 17,
-    xl: 20,
-    xxl: 24,
-    xxxl: 30,
-    display: 36,
+    sm: 12,
+    base: 14,
+    md: 14,
+    lg: 16,
+    xl: 18,
+    xxl: 20,
+    xxxl: 24,
+    display: 28,
   },
 };
 
 export const SPACING = {
   xs: 4,
   sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
-  xxl: 48,
-};
-
-export const BORDER_RADIUS = {
-  sm: 8,
   md: 12,
   lg: 16,
   xl: 24,
+  xxl: 32,
+  xxxl: 48,
+};
+
+export const BORDER_RADIUS = {
+  sm: 6,
+  md: 10,
+  lg: 14,
+  xl: 20,
   full: 9999,
 };
 
 export const SHADOWS = {
   small: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
     elevation: 2,
   },
   medium: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
     elevation: 4,
   },
   large: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.14,
-    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
     elevation: 8,
   },
 };
@@ -106,7 +113,7 @@ export const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   on_the_way: { bg: '#DBEAFE', text: '#1E40AF' },
   arrived: { bg: '#EDE9FE', text: '#4C1D95' },
   in_progress: { bg: '#EDE9FE', text: '#4C1D95' },
-  completed: { bg: '#D1FAE5', text: '#065F46' },
+  completed: { bg: '#DCFCE7', text: '#166534' },
   cancelled: { bg: '#FEE2E2', text: '#991B1B' },
   rejected: { bg: '#FEE2E2', text: '#991B1B' },
   disputed: { bg: '#FFEDD5', text: '#9A3412' },

@@ -225,7 +225,7 @@ export default function BookingManagementScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
-  title: { fontSize: FONTS.sizes.xxl, fontWeight: '800', color: COLORS.text, paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
+  title: { fontSize: FONTS.sizes.xxl, fontFamily: FONTS.bold, color: COLORS.text, paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.xl,
@@ -240,10 +240,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
   },
   tabActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  tabText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontWeight: '500' },
-  tabTextActive: { color: COLORS.white, fontWeight: '700' },
+  tabText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontFamily: FONTS.medium },
+  tabTextActive: { color: COLORS.white, fontFamily: FONTS.semiBold },
   resultRow: { paddingHorizontal: SPACING.md, marginBottom: SPACING.xs },
-  resultCount: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontWeight: '500' },
+  resultCount: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontFamily: FONTS.medium },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   list: { padding: SPACING.md, gap: SPACING.sm, flexGrow: 1 },
   card: {
@@ -252,12 +252,12 @@ const styles = StyleSheet.create({
   },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm, marginBottom: SPACING.xs },
   cardInfo: { flex: 1 },
-  custName: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text },
+  custName: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
   serviceName: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 1 },
   dateText: { fontSize: FONTS.sizes.xs, color: COLORS.textLight, marginTop: 2 },
   statusBadge: { borderRadius: BORDER_RADIUS.full, paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-end', marginBottom: 4 },
-  statusText: { fontSize: 10, fontWeight: '700' },
-  price: { fontSize: FONTS.sizes.base, fontWeight: '800', color: COLORS.primary, textAlign: 'right' },
+  statusText: { fontSize: 10, fontFamily: FONTS.semiBold },
+  price: { fontSize: FONTS.sizes.base, fontFamily: FONTS.bold, color: COLORS.primary, textAlign: 'right' },
   locRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: SPACING.xs },
   locText: { fontSize: FONTS.sizes.xs, color: COLORS.textLight, flex: 1 },
   cancelBtn: {
@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
     gap: 5, paddingVertical: 7, borderRadius: BORDER_RADIUS.md,
     borderWidth: 1, borderColor: '#FECACA', backgroundColor: '#FEF2F2', marginTop: SPACING.xs,
   },
-  cancelText: { fontSize: FONTS.sizes.xs, fontWeight: '600', color: COLORS.error },
+  cancelText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: COLORS.error },
   emptyState: { alignItems: 'center', paddingTop: SPACING.xxl, gap: SPACING.sm },
-  emptyTitle: { fontSize: FONTS.sizes.lg, fontWeight: '700', color: COLORS.text },
+  emptyTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.semiBold, color: COLORS.text },
 });

@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FONTS.sizes.xxl,
-    fontWeight: '800',
+    fontFamily: FONTS.bold,
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   forgotText: {
     fontSize: FONTS.sizes.sm,
     color: COLORS.primary,
-    fontWeight: '600',
+    fontFamily: FONTS.semiBold,
   },
   loginBtn: {
     marginTop: SPACING.xs,
@@ -212,6 +212,6 @@ const styles = StyleSheet.create({
   registerLink: {
     fontSize: FONTS.sizes.base,
     color: COLORS.primary,
-    fontWeight: '700',
+    fontFamily: FONTS.semiBold,
   },
 });

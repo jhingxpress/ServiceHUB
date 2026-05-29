@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   },
   appName: {
     fontSize: FONTS.sizes.display,
-    fontWeight: '800',
+    fontFamily: FONTS.bold,
     color: COLORS.white,
     letterSpacing: -0.5,
     marginBottom: SPACING.sm,

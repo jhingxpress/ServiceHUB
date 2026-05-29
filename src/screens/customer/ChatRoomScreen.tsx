@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
   },
   headerInfo: { flex: 1 },
-  headerName: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text },
+  headerName: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
   headerSub: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   list: { padding: SPACING.md, gap: SPACING.sm, flexGrow: 1 },

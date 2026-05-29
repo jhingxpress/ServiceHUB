@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FONTS.sizes.xl,
-    fontWeight: '800',
+    fontFamily: FONTS.bold,
     color: COLORS.text,
     marginBottom: SPACING.sm,
     textAlign: 'center',
@@ -89,6 +89,6 @@ const styles = StyleSheet.create({
   buttonText: {
     color: COLORS.white,
     fontSize: FONTS.sizes.base,
-    fontWeight: '700',
+    fontFamily: FONTS.semiBold,
   },
 });

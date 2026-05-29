@@ -162,7 +162,7 @@ export default function ScheduleScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   topBar: { paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
-  title: { fontSize: FONTS.sizes.xxl, fontWeight: '800', color: COLORS.text },
+  title: { fontSize: FONTS.sizes.xxl, fontFamily: FONTS.bold, color: COLORS.text },
   subtitle: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
   infoCard: {
     marginHorizontal: SPACING.md, marginBottom: SPACING.md,
@@ -176,11 +176,11 @@ const styles = StyleSheet.create({
   },
   dayCardDisabled: { opacity: 0.6 },
   dayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm },
-  dayName: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text },
+  dayName: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
   dayNameDisabled: { color: COLORS.textLight },
   timeRow: { gap: SPACING.sm },
   timeBlock: {},
-  timeLabel: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontWeight: '600', marginBottom: 6 },
+  timeLabel: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontFamily: FONTS.semiBold, marginBottom: 6 },
   timeScroll: { gap: SPACING.xs },
   timeChip: {
     paddingHorizontal: SPACING.sm, paddingVertical: 6,
@@ -189,6 +189,6 @@ const styles = StyleSheet.create({
   },
   timeChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   timeChipText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
-  timeChipTextActive: { color: COLORS.white, fontWeight: '700' },
+  timeChipTextActive: { color: COLORS.white, fontFamily: FONTS.semiBold },
   footer: { paddingHorizontal: SPACING.md, marginTop: SPACING.md },
 });

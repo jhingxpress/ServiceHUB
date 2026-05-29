@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FONTS.sizes.xxl,
-    fontWeight: '800',
+    fontFamily: FONTS.bold,
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
@@ -185,5 +185,5 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
   },
   loginText: { fontSize: FONTS.sizes.base, color: COLORS.textSecondary },
-  loginLink: { fontSize: FONTS.sizes.base, color: COLORS.primary, fontWeight: '700' },
+  loginLink: { fontSize: FONTS.sizes.base, color: COLORS.primary, fontFamily: FONTS.semiBold },
 });

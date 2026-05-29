@@ -203,7 +203,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   topBar: { paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
-  title: { fontSize: FONTS.sizes.xxl, fontWeight: '800', color: COLORS.text },
+  title: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.xxl, color: COLORS.text },
   profileCard: {
     alignItems: 'center', marginHorizontal: SPACING.md, marginBottom: SPACING.md,
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.xl,
@@ -216,21 +216,21 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: COLORS.white,
   },
-  userName: { fontSize: FONTS.sizes.xl, fontWeight: '800', color: COLORS.text },
+  userName: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.xl, color: COLORS.text },
   userEmail: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
   userPhone: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
   roleBadge: {
     marginTop: SPACING.sm, backgroundColor: COLORS.primaryLight,
     paddingHorizontal: SPACING.md, paddingVertical: 4, borderRadius: BORDER_RADIUS.full,
   },
-  roleText: { fontSize: FONTS.sizes.xs, fontWeight: '700', color: COLORS.primary },
+  roleText: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.xs, color: COLORS.primary },
   statsCard: {
     flexDirection: 'row', marginHorizontal: SPACING.md, marginBottom: SPACING.md,
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.xl,
     padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
   },
   stat: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: FONTS.sizes.xl, fontWeight: '800', color: COLORS.primary },
+  statValue: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.xl, color: COLORS.primary },
   statLabel: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
   statDivider: { width: 1, backgroundColor: COLORS.border },
   menuCard: {
@@ -248,9 +248,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center',
   },
   menuIconDanger: { backgroundColor: '#FEE2E2' },
-  menuLabel: { flex: 1, fontSize: FONTS.sizes.base, color: COLORS.text, fontWeight: '500' },
+  menuLabel: { flex: 1, fontFamily: FONTS.medium, fontSize: FONTS.sizes.base, color: COLORS.text },
   menuLabelDanger: { color: COLORS.error },
   badge: { backgroundColor: COLORS.primary, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, marginRight: SPACING.xs },
-  badgeText: { fontSize: FONTS.sizes.xs, fontWeight: '700', color: COLORS.white },
+  badgeText: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.xs, color: COLORS.white },
   version: { textAlign: 'center', fontSize: FONTS.sizes.xs, color: COLORS.textLight, marginBottom: SPACING.sm },
 });

@@ -170,7 +170,7 @@ export default function BookingHistoryScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   topBar: { paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
-  title: { fontSize: FONTS.sizes.xxl, fontWeight: '800', color: COLORS.text },
+  title: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.xxl, color: COLORS.text },
   filterList: { maxHeight: 48, marginBottom: SPACING.xs },
   filterRow: { paddingHorizontal: SPACING.md, gap: SPACING.sm, alignItems: 'center' },
   filterTab: {
@@ -179,8 +179,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.border,
   },
   filterTabActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  filterText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, fontWeight: '500' },
-  filterTextActive: { color: COLORS.white, fontWeight: '700' },
+  filterText: { fontFamily: FONTS.medium, fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
+  filterTextActive: { fontFamily: FONTS.bold, color: COLORS.white },
   list: { padding: SPACING.md, gap: SPACING.sm, flexGrow: 1 },
   card: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -189,11 +189,11 @@ const styles = StyleSheet.create({
   },
   cardLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, flex: 1 },
   info: { flex: 1 },
-  providerName: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text },
+  providerName: { fontFamily: FONTS.semiBold, fontSize: FONTS.sizes.base, color: COLORS.text },
   serviceName: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 1 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   dateText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
   dot: { fontSize: FONTS.sizes.xs, color: COLORS.textLight },
-  amountText: { fontSize: FONTS.sizes.xs, fontWeight: '700', color: COLORS.primary },
+  amountText: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.xs, color: COLORS.primary },
   cardRight: { alignItems: 'flex-end', gap: SPACING.xs },
 });

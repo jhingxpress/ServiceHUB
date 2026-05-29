@@ -96,7 +96,7 @@ export default function ProviderSettingsScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
-  title: { fontSize: FONTS.sizes.xxl, fontWeight: '800', color: COLORS.text, paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
+  title: { fontSize: FONTS.sizes.xxl, fontFamily: FONTS.bold, color: COLORS.text, paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
   profileCard: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
     backgroundColor: COLORS.surface, marginHorizontal: SPACING.md,
@@ -104,32 +104,32 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small, marginBottom: SPACING.lg,
   },
   profileInfo: { flex: 1 },
-  profileName: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text },
+  profileName: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
   profileEmail: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 1 },
   providerBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5,
     backgroundColor: COLORS.primaryLight, borderRadius: BORDER_RADIUS.full,
     paddingHorizontal: 8, paddingVertical: 2, alignSelf: 'flex-start',
   },
-  providerBadgeText: { fontSize: 10, color: COLORS.primary, fontWeight: '600' },
+  providerBadgeText: { fontSize: 10, color: COLORS.primary, fontFamily: FONTS.semiBold },
   editBtn: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center',
   },
   section: { marginBottom: SPACING.md },
-  sectionLabel: { fontSize: FONTS.sizes.xs, fontWeight: '700', color: COLORS.textLight, textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: SPACING.md + 4, marginBottom: SPACING.xs },
+  sectionLabel: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: COLORS.textLight, textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: SPACING.md + 4, marginBottom: SPACING.xs },
   menuCard: {
     backgroundColor: COLORS.surface, marginHorizontal: SPACING.md,
     borderRadius: BORDER_RADIUS.xl, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
   },
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: SPACING.md },
   menuIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center' },
-  menuLabel: { flex: 1, fontSize: FONTS.sizes.base, color: COLORS.text, fontWeight: '500' },
+  menuLabel: { flex: 1, fontSize: FONTS.sizes.base, color: COLORS.text, fontFamily: FONTS.medium },
   divider: { height: 1, backgroundColor: COLORS.border, marginLeft: SPACING.md + 36 + SPACING.md },
   signOutBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm,
     marginHorizontal: SPACING.md, padding: SPACING.md, borderRadius: BORDER_RADIUS.xl,
     backgroundColor: '#FEE2E2', borderWidth: 1, borderColor: '#FECACA', marginTop: SPACING.sm,
   },
-  signOutText: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.error },
+  signOutText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.error },
 });

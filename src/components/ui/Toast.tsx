@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
   message: {
     flex: 1,
     fontSize: FONTS.sizes.sm,
-    fontWeight: '600',
+    fontFamily: FONTS.semiBold,
   },
   closeBtn: {
     padding: SPACING.xs,

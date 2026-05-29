@@ -194,7 +194,7 @@ export default function ManageUsersScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   topBar: { paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
-  title: { fontSize: FONTS.sizes.xxl, fontWeight: '800', color: COLORS.text },
+  title: { fontSize: FONTS.sizes.xxl, fontFamily: FONTS.bold, color: COLORS.text },
   searchRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
@@ -209,8 +209,8 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.full, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
   },
   filterTabActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  filterText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontWeight: '500' },
-  filterTextActive: { color: COLORS.white, fontWeight: '700' },
+  filterText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontFamily: FONTS.medium },
+  filterTextActive: { color: COLORS.white, fontFamily: FONTS.semiBold },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: SPACING.sm },
   loadingText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
   list: { padding: SPACING.md, gap: SPACING.sm, flexGrow: 1 },
@@ -220,10 +220,10 @@ const styles = StyleSheet.create({
     padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
   },
   userInfo: { flex: 1 },
-  userName: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text },
+  userName: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
   userEmail: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 1 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: 4 },
   rolePill: { borderRadius: BORDER_RADIUS.full, paddingHorizontal: 8, paddingVertical: 2 },
-  roleText: { fontSize: 10, fontWeight: '700', textTransform: 'capitalize' },
+  roleText: { fontSize: 10, fontFamily: FONTS.semiBold, textTransform: 'capitalize' },
   joinDate: { fontSize: 10, color: COLORS.textLight },
 });

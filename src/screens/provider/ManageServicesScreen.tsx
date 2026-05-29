@@ -99,7 +99,7 @@ export default function ManageServicesScreen() {
       {categoryName ? (
         <View style={styles.categoryBadge}>
           <Ionicons name="layers-outline" size={16} color={COLORS.primary} />
-          <Text style={styles.categoryText}>Category: <Text style={{ fontWeight: '700' }}>{categoryName}</Text></Text>
+          <Text style={styles.categoryText}>Category: <Text style={{ fontFamily: FONTS.semiBold }}>{categoryName}</Text></Text>
         </View>
       ) : null}
 
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: FONTS.sizes.xl, fontWeight: '800', color: COLORS.text },
+  title: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.bold, color: COLORS.text },
   addBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
   categoryBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginHorizontal: SPACING.md, marginBottom: SPACING.xs, backgroundColor: COLORS.primaryLight, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.full, alignSelf: 'flex-start' },
   categoryText: { fontSize: FONTS.sizes.sm, color: COLORS.primary },
@@ -212,28 +212,28 @@ const styles = StyleSheet.create({
   cardDisabled: { opacity: 0.55 },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', padding: SPACING.md },
   cardInfo: { flex: 1 },
-  serviceName: { fontSize: FONTS.sizes.base, fontWeight: '700', color: COLORS.text },
+  serviceName: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
   serviceDesc: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 3, lineHeight: 18 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.sm },
   optionsBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.primaryLight, paddingHorizontal: SPACING.sm, paddingVertical: 3, borderRadius: BORDER_RADIUS.full },
-  optionsText: { fontSize: FONTS.sizes.xs, color: COLORS.primary, fontWeight: '600' },
+  optionsText: { fontSize: FONTS.sizes.xs, color: COLORS.primary, fontFamily: FONTS.semiBold },
   statusBadge: { paddingHorizontal: SPACING.sm, paddingVertical: 3, borderRadius: BORDER_RADIUS.full },
   statusActive: { backgroundColor: '#D1FAE5' },
   statusInactive: { backgroundColor: COLORS.border },
-  statusText: { fontSize: FONTS.sizes.xs, fontWeight: '600' },
+  statusText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold },
   statusActiveText: { color: '#065F46' },
   statusInactiveText: { color: COLORS.textSecondary },
   actions: { flexDirection: 'row', gap: SPACING.xs, marginLeft: SPACING.sm },
   iconBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: COLORS.border },
   deleteBtn: { backgroundColor: '#FEE2E2', borderColor: '#FECACA' },
   manageOptionsBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, backgroundColor: COLORS.primaryLight, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderTopWidth: 1, borderTopColor: COLORS.border + '40' },
-  manageOptionsText: { flex: 1, fontSize: FONTS.sizes.sm, fontWeight: '600', color: COLORS.primary },
+  manageOptionsText: { flex: 1, fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.primary },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
   modal: { backgroundColor: COLORS.background, borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.lg, maxHeight: '75%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },
-  modalTitle: { fontSize: FONTS.sizes.xl, fontWeight: '700', color: COLORS.text },
+  modalTitle: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.semiBold, color: COLORS.text },
   formGroup: { marginBottom: SPACING.md },
-  fieldLabel: { fontSize: FONTS.sizes.sm, fontWeight: '600', color: COLORS.text, marginBottom: SPACING.xs },
+  fieldLabel: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: SPACING.xs },
   fieldInput: { backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.md, borderWidth: 1.5, borderColor: COLORS.border, padding: SPACING.md, fontSize: FONTS.sizes.base, color: COLORS.text, height: 48 },
   fieldInputMulti: { height: 80, paddingTop: SPACING.md },
 });

@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FONTS.sizes.lg,
-    fontWeight: '700',
+    fontFamily: FONTS.semiBold,
     color: COLORS.text,
     textAlign: 'center',
     marginBottom: SPACING.xs,
