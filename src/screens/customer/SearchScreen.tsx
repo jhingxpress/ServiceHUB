@@ -7,6 +7,7 @@ import {
   StyleSheet,
   TextInput,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +22,20 @@ import { CustomerStackParamList } from '../../navigation/types';
 
 type NavProp = NativeStackNavigationProp<CustomerStackParamList>;
 
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export default function SearchScreen() {
   const navigation = useNavigation<NavProp>();
   const [query, setQuery] = useState('');
@@ -28,6 +43,8 @@ export default function SearchScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(false);
+  const [nearbyMode, setNearbyMode] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     supabase.from('categories').select('*').order('name').then(({ data }) => {
@@ -40,8 +57,8 @@ export default function SearchScreen() {
     try {
       let q = supabase
         .from('providers')
-        .select('*, users!providers_id_fkey(full_name, avatar_url, email), categories(name, icon, color)')
-        .eq('kyc_status', 'approved')
+        .select('*, users!providers_id_fkey(full_name, avatar_url, email), categories(name, icon, color), provider_stats(*)')
+        .eq('status', 'approved')
         .eq('is_available', true);
 
       if (selectedCategory) {
@@ -49,21 +66,46 @@ export default function SearchScreen() {
       }
 
       if (query.trim()) {
-        q = q.ilike('users.full_name', `%${query.trim()}%`);
+        q = q.or(`business_name.ilike.%${query.trim()}%,users.full_name.ilike.%${query.trim()}%`);
       }
 
-      const { data } = await q.order('rating', { ascending: false }).limit(30);
-      setProviders(data ?? []);
+      const { data } = await q.order('rating', { ascending: false }).limit(50);
+      let results = (data ?? []) as Provider[];
+
+      if (nearbyMode && userLocation) {
+        results = results
+          .map((p) => ({
+            ...p,
+            _distance:
+              p.latitude && p.longitude
+                ? haversineKm(userLocation.lat, userLocation.lng, p.latitude, p.longitude)
+                : Infinity,
+          }))
+          .filter((p: any) => p._distance <= (p.service_radius_km ?? 10))
+          .sort((a: any, b: any) => a._distance - b._distance) as Provider[];
+      }
+
+      setProviders(results);
     } finally {
       setLoading(false);
     }
-  }, [query, selectedCategory]);
+  }, [query, selectedCategory, nearbyMode, userLocation]);
 
-  useEffect(() => {
-    search();
-  }, [search]);
+  useEffect(() => { search(); }, [search]);
 
-  const renderProvider = ({ item }: { item: Provider }) => (
+  const toggleNearby = () => {
+    if (!nearbyMode) {
+      // For MVP, use a hardcoded Davao del Sur center location
+      // In production, use expo-location to get real user location
+      setUserLocation({ lat: 6.7478, lng: 125.2943 }); // Digos City, Davao del Sur
+      setNearbyMode(true);
+    } else {
+      setNearbyMode(false);
+      setUserLocation(null);
+    }
+  };
+
+  const renderProvider = ({ item }: { item: any }) => (
     <TouchableOpacity
       style={styles.card}
       onPress={() => navigation.navigate('ProviderStorefront', { providerId: item.id })}
@@ -90,6 +132,12 @@ export default function SearchScreen() {
             <View style={styles.locationRow}>
               <Ionicons name="location-outline" size={13} color={COLORS.textLight} />
               <Text style={styles.location} numberOfLines={1}>{item.location}</Text>
+            </View>
+          )}
+          {nearbyMode && item._distance !== undefined && item._distance !== Infinity && (
+            <View style={styles.distanceRow}>
+              <Ionicons name="navigate-circle" size={13} color={COLORS.primary} />
+              <Text style={styles.distance}>{item._distance.toFixed(1)} km</Text>
             </View>
           )}
         </View>
@@ -119,6 +167,9 @@ export default function SearchScreen() {
             returnKeyType="search"
             onSubmitEditing={search}
           />
+          <TouchableOpacity onPress={toggleNearby}>
+            <Ionicons name={nearbyMode ? "locate" : "locate-outline"} size={20} color={nearbyMode ? COLORS.primary : COLORS.textLight} />
+          </TouchableOpacity>
           {query.length > 0 && (
             <TouchableOpacity onPress={() => setQuery('')}>
               <Ionicons name="close-circle" size={18} color={COLORS.textLight} />
@@ -230,4 +281,6 @@ const styles = StyleSheet.create({
   priceCol: { alignItems: 'flex-end' },
   price: { fontSize: FONTS.sizes.lg, fontWeight: '800', color: COLORS.primary },
   priceUnit: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
+  distanceRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  distance: { fontSize: FONTS.sizes.xs, color: COLORS.primary, fontWeight: '700' },
 });
