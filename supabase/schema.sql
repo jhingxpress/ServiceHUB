@@ -991,7 +991,7 @@ CREATE TRIGGER bookings_update_response_rate
 
 -- Sync provider_stats when provider main fields change
 CREATE OR REPLACE FUNCTION public.sync_provider_stats()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 BEGIN
   INSERT INTO public.provider_stats (
     provider_id, completed_jobs, total_reviews, average_rating, response_rate
@@ -1020,7 +1020,7 @@ CREATE TRIGGER providers_sync_stats
 
 -- Sync favorite_count on provider_stats when favorites change
 CREATE OR REPLACE FUNCTION public.sync_favorite_count()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
     UPDATE public.provider_stats
@@ -1157,7 +1157,7 @@ $$ LANGUAGE plpgsql;
 
 -- Update provider_stats response time after new message
 CREATE OR REPLACE FUNCTION public.update_provider_response_time()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 DECLARE
   target_provider_id UUID;
   new_avg INTEGER;

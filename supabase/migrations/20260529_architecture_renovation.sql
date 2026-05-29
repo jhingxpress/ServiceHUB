@@ -472,7 +472,7 @@ CREATE TRIGGER providers_status_change
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.sync_provider_stats()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 BEGIN
   INSERT INTO public.provider_stats (
     provider_id, completed_jobs, total_reviews, average_rating, response_rate
@@ -500,7 +500,7 @@ CREATE TRIGGER providers_sync_stats
   FOR EACH ROW EXECUTE FUNCTION public.sync_provider_stats();
 
 CREATE OR REPLACE FUNCTION public.sync_favorite_count()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
     UPDATE public.provider_stats
@@ -679,7 +679,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION public.update_provider_response_time()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 DECLARE
   target_provider_id UUID;
   new_avg INTEGER;
