@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, TextInput, Linking, Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +16,11 @@ import Avatar from '../../components/ui/Avatar';
 
 // Helper function to get proper storage URL
 const getStorageUrl = (filePath: string): string => {
+  if (!filePath) return '';
+  // Already a full URL — don't double-wrap
+  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+    return filePath;
+  }
   const { data } = supabase.storage.from('provider-documents').getPublicUrl(filePath);
   return data.publicUrl;
 };
@@ -361,7 +367,12 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
             ? <Text style={styles.emptyText}>No documents uploaded yet.</Text>
             : documents.map(doc => (
               <View key={doc.id} style={styles.docCard}>
-                <TouchableOpacity style={styles.docRow} onPress={() => setPreviewImage(getStorageUrl(doc.file_url))}>
+                <TouchableOpacity style={styles.docRow} onPress={() => {
+                  const url = getStorageUrl(doc.file_url);
+                  console.log('[ProviderDetailScreen] Opening preview for document:', doc.id);
+                  console.log('[ProviderDetailScreen] Image URL:', url);
+                  setPreviewImage(url);
+                }}>
                   <Image
                     source={{ uri: getStorageUrl(doc.file_url) }}
                     style={styles.docThumbnail}
@@ -501,14 +512,46 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
       </ScrollView>
 
       {/* Image Preview Modal */}
-      {previewImage && (
+      <Modal
+        visible={!!previewImage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          console.log('[ProviderDetailScreen] Modal onRequestClose');
+          setPreviewImage(null);
+        }}
+        statusBarTranslucent
+      >
         <View style={styles.previewOverlay}>
-          <TouchableOpacity style={styles.previewClose} onPress={() => setPreviewImage(null)}>
+          <TouchableOpacity
+            style={styles.previewClose}
+            onPress={() => {
+              console.log('[ProviderDetailScreen] Close button pressed');
+              setPreviewImage(null);
+            }}
+          >
             <Ionicons name="close" size={28} color={COLORS.white} />
           </TouchableOpacity>
-          <Image source={{ uri: previewImage }} style={styles.previewImage} resizeMode="contain" />
+          {previewImage ? (
+            <Image
+              source={{ uri: previewImage }}
+              style={styles.previewImage}
+              resizeMode="contain"
+              onError={(e) => {
+                console.log('[ProviderDetailScreen] Image load error:', e.nativeEvent.error);
+              }}
+              onLoad={() => {
+                console.log('[ProviderDetailScreen] Image loaded successfully');
+              }}
+            />
+          ) : (
+            <View style={styles.previewPlaceholder}>
+              <Ionicons name="image-outline" size={48} color={COLORS.textLight} />
+              <Text style={styles.previewPlaceholderText}>No image available</Text>
+            </View>
+          )}
         </View>
-      )}
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -584,6 +627,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center',
   },
   previewImage: { width: '100%', height: '100%' },
+  previewPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: SPACING.md },
+  previewPlaceholderText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.medium, color: COLORS.textLight },
   actionForm: {
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
     borderWidth: 1, borderColor: COLORS.border, padding: SPACING.md, gap: SPACING.md, ...SHADOWS.small,
