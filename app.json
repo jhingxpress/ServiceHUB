@@ -9,7 +9,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#6366F1"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.servicehub.app"
@@ -28,7 +30,8 @@
           "photosPermission": "Allow ServiceHub to access your photos.",
           "cameraPermission": "Allow ServiceHub to use your camera."
         }
-      ]
+      ],
+      "expo-font"
     ]
   }
 }
