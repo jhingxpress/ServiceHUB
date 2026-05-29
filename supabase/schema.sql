@@ -290,6 +290,10 @@ CREATE TABLE IF NOT EXISTS public.reviews (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Backfill: add is_visible if table was created before this field
+ALTER TABLE public.reviews
+ADD COLUMN IF NOT EXISTS is_visible BOOLEAN DEFAULT TRUE;
+
 -- ============================================================
 -- REVIEW MEDIA (Photos and videos attached to reviews)
 -- ============================================================
