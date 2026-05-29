@@ -39,7 +39,7 @@ interface ProviderDetailData {
   updated_at: string;
   users: { full_name: string | null; email: string | null; phone: string | null; avatar_url: string | null };
   category: { name: string; icon: string } | null;
-  services: { id: string; name: string; base_price: number; is_active: boolean }[];
+  services: { id: string; name: string; price: number; is_active: boolean }[];
 }
 
 interface DocRecord {
@@ -102,12 +102,15 @@ const STATUS_CFG: Record<string, { label: string; bg: string; color: string }> =
 };
 
 export default function ProviderDetailScreen({ route, navigation }: Props) {
+  console.log('[ProviderDetailScreen] Route params:', route.params);
   const { providerId } = route.params;
+  console.log('[ProviderDetailScreen] Provider ID:', providerId);
   const { user } = useAuthStore();
   const [provider, setProvider] = useState<ProviderDetailData | null>(null);
   const [documents, setDocuments] = useState<DocRecord[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [actionMode, setActionMode] = useState<'approve' | 'reject' | 'suspend' | null>(null);
   const [actionNotes, setActionNotes] = useState('');
   const [saving, setSaving] = useState(false);
@@ -115,25 +118,38 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
   const [processingDoc, setProcessingDoc] = useState<string | null>(null);
 
   const loadData = async () => {
-    const [provRes, docsRes, logsRes] = await Promise.all([
-      supabase.from('providers').select(`
-        id, business_name, business_address, city, province, business_email, business_phone,
-        service_description, service_area, years_of_experience, status, is_verified,
-        rejection_reason, created_at, updated_at,
-        users!providers_id_fkey(full_name, email, phone, avatar_url),
-        category:categories(name, icon),
-        services(id, name, base_price, is_active)
-      `).eq('id', providerId).single(),
-      supabase.from('provider_documents').select('*').eq('provider_id', providerId).order('uploaded_at'),
-      supabase.from('provider_verification_logs').select(`
-        id, action, notes, created_at,
-        performer:users!provider_verification_logs_performed_by_fkey(full_name)
-      `).eq('provider_id', providerId).order('created_at', { ascending: false }),
-    ]);
-    setProvider(provRes.data as unknown as ProviderDetailData);
-    setDocuments((docsRes.data ?? []) as DocRecord[]);
-    setLogs((logsRes.data ?? []) as unknown as LogEntry[]);
-    setLoading(false);
+    setLoading(true);
+    setError(null);
+    try {
+      const [provRes, docsRes, logsRes] = await Promise.all([
+        supabase.from('providers').select(`
+          id, business_name, business_address, city, province, business_email, business_phone,
+          service_description, service_area, years_of_experience, status, is_verified,
+          rejection_reason, created_at, updated_at,
+          users!providers_id_fkey(full_name, email, phone, avatar_url),
+          category:categories(name, icon),
+          services(id, name, price, is_active)
+        `).eq('id', providerId).single(),
+        supabase.from('provider_documents').select('*').eq('provider_id', providerId).order('uploaded_at'),
+        supabase.from('provider_verification_logs').select(`
+          id, action, notes, created_at,
+          performer:users!provider_verification_logs_performed_by_fkey(full_name)
+        `).eq('provider_id', providerId).order('created_at', { ascending: false }),
+      ]);
+      console.log('[ProviderDetailScreen] Query result (provider):', provRes.data);
+      console.log('[ProviderDetailScreen] Query error (provider):', provRes.error);
+      console.log('[ProviderDetailScreen] Query error (documents):', docsRes.error);
+      console.log('[ProviderDetailScreen] Query error (logs):', logsRes.error);
+      if (provRes.error) throw provRes.error;
+      setProvider(provRes.data as unknown as ProviderDetailData);
+      setDocuments((docsRes.data ?? []) as DocRecord[]);
+      setLogs((logsRes.data ?? []) as unknown as LogEntry[]);
+    } catch (err: any) {
+      console.error('[ProviderDetailScreen] loadData error:', err);
+      setError(err?.message ?? 'Failed to load provider details');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { loadData(); }, [providerId]);
@@ -241,7 +257,29 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
       </SafeAreaView>
     );
   }
-  if (!provider) return null;
+  if (error) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}>
+          <Ionicons name="alert-circle-outline" size={48} color={COLORS.error} />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={loadData}>
+            <Text style={styles.retryBtnText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+  if (!provider) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}>
+          <Ionicons name="person-outline" size={48} color={COLORS.textLight} />
+          <Text style={styles.emptyTitle}>Provider not found</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const statusCfg = STATUS_CFG[provider.status] ?? STATUS_CFG.draft;
 
@@ -477,6 +515,11 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.md },
+  errorText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.medium, color: COLORS.error, textAlign: 'center', marginTop: SPACING.md },
+  retryBtn: { marginTop: SPACING.md, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, backgroundColor: COLORS.primary, borderRadius: BORDER_RADIUS.xl },
+  retryBtnText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.white },
+  emptyTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.semiBold, color: COLORS.textLight, marginTop: SPACING.md },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,

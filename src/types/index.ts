@@ -147,7 +147,7 @@ export interface Service {
   provider_id: string;
   name: string;
   description: string | null;
-  base_price: number;
+  price: number;
   duration_minutes: number | null;
   is_active: boolean;
   sort_order: number;

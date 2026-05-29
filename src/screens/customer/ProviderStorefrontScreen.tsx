@@ -106,7 +106,7 @@ export default function ProviderStorefrontScreen() {
       providerId,
       serviceId: service?.id,
       serviceName: service?.name,
-      price: service?.base_price,
+      price: service?.price,
     });
   };
 
@@ -268,7 +268,7 @@ export default function ProviderStorefrontScreen() {
                   ) : null}
                 </View>
                 <View style={styles.serviceRight}>
-                  <Text style={styles.servicePrice}>₱{s.base_price?.toLocaleString() ?? '0'}</Text>
+                  <Text style={styles.servicePrice}>₱{s.price?.toLocaleString() ?? '0'}</Text>
                   <TouchableOpacity style={styles.bookBtn} onPress={() => handleBook(s)}>
                     <Text style={styles.bookBtnText}>Book</Text>
                   </TouchableOpacity>

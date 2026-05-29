@@ -99,8 +99,8 @@ CREATE TABLE IF NOT EXISTS public.services (
   provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
-  -- Base price; detailed pricing is in service_options
-  base_price DECIMAL(10,2) DEFAULT 0.00,
+  -- Service price; detailed pricing is in service_options
+  price DECIMAL(10,2) DEFAULT 0.00,
   duration_minutes INTEGER DEFAULT 60,
   is_active BOOLEAN DEFAULT TRUE,
   sort_order INTEGER DEFAULT 0,
@@ -1262,7 +1262,7 @@ ON CONFLICT (name) DO NOTHING;
 -- ============================================================
 -- SEED DATA: Test Services
 -- ============================================================
--- INSERT INTO public.services (provider_id, name, description, base_price, duration_minutes) VALUES
+-- INSERT INTO public.services (provider_id, name, description, price, duration_minutes) VALUES
 --   ('<uuid-3>', 'Pipe Repair', 'Fix leaking pipes and drainage issues', 450.00, 60),
 --   ('<uuid-3>', 'Water Heater Installation', 'Install and set up water heaters', 800.00, 120);
 

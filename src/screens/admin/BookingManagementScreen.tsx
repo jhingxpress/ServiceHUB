@@ -28,7 +28,7 @@ interface BookingItem {
   created_at: string;
   customer: { full_name: string | null; avatar_url: string | null };
   provider_user: { full_name: string | null; avatar_url: string | null } | null;
-  service: { name: string; base_price: number } | null;
+  service: { name: string; price: number } | null;
 }
 
 const STATUS_TABS: { key: BookingStatus; label: string }[] = [
@@ -64,7 +64,7 @@ export default function BookingManagementScreen() {
         id, status, scheduled_date, scheduled_time, location, created_at,
         customer:users!bookings_customer_id_fkey(full_name, avatar_url),
         provider_user:providers!bookings_provider_id_fkey(users!providers_id_fkey(full_name, avatar_url)),
-        service:services(name, base_price)
+        service:services(name, price)
       `)
       .order('created_at', { ascending: false });
     setBookings((data ?? []) as unknown as BookingItem[]);
@@ -128,8 +128,8 @@ export default function BookingManagementScreen() {
                 {item.status.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
               </Text>
             </View>
-            {item.service?.base_price && (
-              <Text style={styles.price}>₱{item.service.base_price}</Text>
+            {item.service?.price && (
+              <Text style={styles.price}>₱{item.service.price}</Text>
             )}
           </View>
         </View>

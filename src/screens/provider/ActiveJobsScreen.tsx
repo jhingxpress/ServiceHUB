@@ -40,7 +40,7 @@ export default function ActiveJobsScreen() {
       .select(`
         *,
         customer:users!bookings_customer_id_fkey(full_name, avatar_url, phone),
-        service:services(name, base_price)
+        service:services(name, price)
       `)
       .eq('provider_id', user.id)
       .in('status', ['accepted', 'in_progress'])
@@ -111,7 +111,7 @@ export default function ActiveJobsScreen() {
               <Text style={styles.custName}>{cust?.full_name ?? 'Customer'}</Text>
               <Text style={styles.serviceName}>{item.service?.name ?? 'Service'}</Text>
             </View>
-            <Text style={styles.price}>₱{item.total_amount ?? item.service?.base_price ?? '—'}</Text>
+            <Text style={styles.price}>₱{item.total_amount ?? item.service?.price ?? '—'}</Text>
           </View>
 
           {/* Details */}
