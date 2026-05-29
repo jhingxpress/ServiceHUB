@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, TextInput, Linking, Image,
-  Modal,
+  Modal, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -512,6 +512,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
       </ScrollView>
 
       {/* Image Preview Modal */}
+      {(() => { console.log('[ProviderDetailScreen] Modal render - previewImage:', previewImage); return null; })()}
       <Modal
         visible={!!previewImage}
         transparent
@@ -523,6 +524,30 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
         statusBarTranslucent
       >
         <View style={styles.previewOverlay}>
+          {previewImage ? (
+            <>
+              {(() => { console.log('[ProviderDetailScreen] Image source uri:', previewImage); return null; })()}
+              <Image
+                source={{ uri: previewImage }}
+                style={styles.previewImage}
+                resizeMode="contain"
+                onLoadStart={() => {
+                  console.log('[ProviderDetailScreen] Image load started, uri:', previewImage);
+                }}
+                onLoad={() => {
+                  console.log('[ProviderDetailScreen] Image loaded successfully');
+                }}
+                onError={(e) => {
+                  console.log('[ProviderDetailScreen] Image load error:', e.nativeEvent.error);
+                }}
+              />
+            </>
+          ) : (
+            <View style={styles.previewPlaceholder}>
+              <Ionicons name="image-outline" size={48} color={COLORS.textLight} />
+              <Text style={styles.previewPlaceholderText}>No image available</Text>
+            </View>
+          )}
           <TouchableOpacity
             style={styles.previewClose}
             onPress={() => {
@@ -532,24 +557,6 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           >
             <Ionicons name="close" size={28} color={COLORS.white} />
           </TouchableOpacity>
-          {previewImage ? (
-            <Image
-              source={{ uri: previewImage }}
-              style={styles.previewImage}
-              resizeMode="contain"
-              onError={(e) => {
-                console.log('[ProviderDetailScreen] Image load error:', e.nativeEvent.error);
-              }}
-              onLoad={() => {
-                console.log('[ProviderDetailScreen] Image loaded successfully');
-              }}
-            />
-          ) : (
-            <View style={styles.previewPlaceholder}>
-              <Ionicons name="image-outline" size={48} color={COLORS.textLight} />
-              <Text style={styles.previewPlaceholderText}>No image available</Text>
-            </View>
-          )}
         </View>
       </Modal>
     </SafeAreaView>
@@ -618,15 +625,19 @@ const styles = StyleSheet.create({
   docStatus: { borderRadius: BORDER_RADIUS.full, paddingHorizontal: 8, paddingVertical: 3 },
   docStatusText: { fontSize: 11, fontFamily: FONTS.semiBold },
   previewOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    flex: 1,
     backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center',
   },
   previewClose: {
     position: 'absolute', top: 50, right: 20,
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center',
+    zIndex: 10,
   },
-  previewImage: { width: '100%', height: '100%' },
+  previewImage: {
+    width: Dimensions.get('window').width * 0.9,
+    height: Dimensions.get('window').height * 0.75,
+  },
   previewPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: SPACING.md },
   previewPlaceholderText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.medium, color: COLORS.textLight },
   actionForm: {
