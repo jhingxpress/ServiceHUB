@@ -1016,7 +1016,8 @@ INSERT INTO public.categories (name, description, icon, color) VALUES
   ('Towing Services',    'Vehicle towing, roadside assistance and recovery',              'trail-sign-outline',     '#EF4444'),
   ('Welding Services',   'Metal fabrication, repair and welding work',                    'construct-outline',      '#F59E0B'),
   ('Construction',       'General construction, renovation and repair services',          'business-outline',       '#6366F1'),
-  ('Courier Services',   'Package delivery, document courier and logistics',              'cube-outline',           '#10B981');
+  ('Courier Services',   'Package delivery, document courier and logistics',              'cube-outline',           '#10B981')
+ON CONFLICT (name) DO NOTHING;
 
 -- ============================================================
 -- SEED DATA: Test Users (requires auth.users entries first)
