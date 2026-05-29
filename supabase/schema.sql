@@ -115,7 +115,6 @@ ALTER TABLE public.users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE public.providers ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE public.providers ADD COLUMN IF NOT EXISTS current_status TEXT NOT NULL DEFAULT 'offline' CHECK (current_status IN ('online', 'busy', 'offline'));
 ALTER TABLE public.services ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
-ALTER TABLE public.provider_stats ADD COLUMN IF NOT EXISTS average_response_minutes INTEGER DEFAULT 0;
 
 -- ============================================================
 -- SERVICE OPTIONS (Price variants per sub-service)
@@ -245,6 +244,7 @@ CREATE TABLE IF NOT EXISTS public.provider_stats (
   average_rating DECIMAL(3,2) DEFAULT 0.00,
   response_rate INTEGER DEFAULT 0 CHECK (response_rate >= 0 AND response_rate <= 100),
   favorite_count INTEGER DEFAULT 0,
+  average_response_minutes INTEGER DEFAULT 0,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -483,9 +483,15 @@ ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.provider_stats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
 
--- Users: read own profile; update own profile
+-- Users: read own active profile; update own profile; admin reads all
 DROP POLICY IF EXISTS "Users read own profile" ON public.users;
-CREATE POLICY "Users read own profile" ON public.users FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users read own profile" ON public.users FOR SELECT USING (
+  auth.uid() = id AND deleted_at IS NULL
+);
+DROP POLICY IF EXISTS "Admins read all users" ON public.users;
+CREATE POLICY "Admins read all users" ON public.users FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
 DROP POLICY IF EXISTS "Users update own profile" ON public.users;
 CREATE POLICY "Users update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
 DROP POLICY IF EXISTS "Users insert own profile" ON public.users;
@@ -495,10 +501,10 @@ CREATE POLICY "Users insert own profile" ON public.users FOR INSERT WITH CHECK (
 DROP POLICY IF EXISTS "Categories public read" ON public.categories;
 CREATE POLICY "Categories public read" ON public.categories FOR SELECT USING (true);
 
--- Providers: public read approved; provider edits own; admin can update all
+-- Providers: public read approved non-deleted; provider edits own; admin can update all
 DROP POLICY IF EXISTS "Providers public read" ON public.providers;
 CREATE POLICY "Providers public read" ON public.providers FOR SELECT USING (
-    status = 'approved'
+    (status = 'approved' AND deleted_at IS NULL)
     OR auth.uid() = id
     OR EXISTS (
         SELECT 1
@@ -543,9 +549,15 @@ CREATE POLICY "Verification logs insert" ON public.provider_verification_logs
     EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
   );
 
--- Services: public read active; provider manages own
+-- Services: public read active non-deleted; provider manages own
 DROP POLICY IF EXISTS "Services public read" ON public.services;
-CREATE POLICY "Services public read" ON public.services FOR SELECT USING (true);
+CREATE POLICY "Services public read" ON public.services FOR SELECT USING (
+  deleted_at IS NULL AND (
+    EXISTS (SELECT 1 FROM public.providers WHERE id = provider_id AND deleted_at IS NULL)
+    OR auth.uid() = provider_id
+    OR EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+  )
+);
 DROP POLICY IF EXISTS "Services provider insert" ON public.services;
 CREATE POLICY "Services provider insert" ON public.services FOR INSERT WITH CHECK (auth.uid() = provider_id);
 DROP POLICY IF EXISTS "Services provider update" ON public.services;
@@ -1152,6 +1164,38 @@ DROP TRIGGER IF EXISTS messages_update_response_time ON public.messages;
 CREATE TRIGGER messages_update_response_time
   AFTER INSERT ON public.messages
   FOR EACH ROW EXECUTE FUNCTION public.update_provider_response_time();
+
+-- Provider verification approval/rejection notifications
+CREATE OR REPLACE FUNCTION public.handle_provider_verification_notification()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF OLD.status = 'pending_review' AND NEW.status = 'approved' THEN
+    INSERT INTO public.notifications (user_id, type, title, body, data)
+    VALUES (
+      NEW.id,
+      'verification_approved',
+      'Application Approved',
+      'Your provider application has been approved. You may now publish services and receive bookings.',
+      jsonb_build_object('provider_id', NEW.id, 'status', NEW.status, 'review_timestamp', NOW())
+    );
+  ELSIF OLD.status = 'pending_review' AND NEW.status = 'rejected' THEN
+    INSERT INTO public.notifications (user_id, type, title, body, data)
+    VALUES (
+      NEW.id,
+      'verification_rejected',
+      'Application Rejected',
+      'Your provider application was rejected. Please review the feedback and resubmit your documents.',
+      jsonb_build_object('provider_id', NEW.id, 'status', NEW.status, 'review_timestamp', NOW())
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS providers_verification_notification ON public.providers;
+CREATE TRIGGER providers_verification_notification
+  AFTER UPDATE ON public.providers
+  FOR EACH ROW EXECUTE FUNCTION public.handle_provider_verification_notification();
 
 -- ============================================================
 -- SEED DATA: Categories

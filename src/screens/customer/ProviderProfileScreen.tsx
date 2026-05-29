@@ -48,12 +48,14 @@ export default function ProviderProfileScreen() {
           .from('providers')
           .select('*, users!providers_id_fkey(full_name, avatar_url, phone, email), categories(name, icon, color)')
           .eq('id', providerId)
+          .is('deleted_at', null)
           .single(),
         supabase
           .from('services')
           .select('*, service_options(*)')
           .eq('provider_id', providerId)
           .eq('is_active', true)
+          .is('deleted_at', null)
           .order('sort_order')
           .order('created_at'),
         supabase

@@ -59,7 +59,8 @@ export default function SearchScreen() {
         .from('providers')
         .select('*, users!providers_id_fkey(full_name, avatar_url, email), categories(name, icon, color), provider_stats(*)')
         .eq('status', 'approved')
-        .eq('is_available', true);
+        .eq('is_available', true)
+        .is('deleted_at', null);
 
       if (selectedCategory) {
         q = q.eq('category_id', selectedCategory);

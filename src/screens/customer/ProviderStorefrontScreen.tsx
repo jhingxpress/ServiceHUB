@@ -60,6 +60,7 @@ export default function ProviderStorefrontScreen() {
       .select('*, users(full_name, avatar_url, phone), categories(name, icon, color), provider_badges(*), provider_gallery(*), provider_stats(*)')
       .eq('id', providerId)
       .eq('status', 'approved')
+      .is('deleted_at', null)
       .single();
 
     if (!prov) {
@@ -73,6 +74,7 @@ export default function ProviderStorefrontScreen() {
       .select('*, service_options(*), service_images(*)')
       .eq('provider_id', providerId)
       .eq('is_active', true)
+      .is('deleted_at', null)
       .order('sort_order');
 
     const { data: revs } = await supabase

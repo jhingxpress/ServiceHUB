@@ -52,6 +52,7 @@ export default function CategoryListScreen({ route, navigation }: Props) {
       .eq('category_id', categoryId)
       .eq('is_verified', true)
       .eq('is_available', true)
+      .is('deleted_at', null)
       .then(({ data }) => {
         const list = (data ?? []) as unknown as ProviderItem[];
         setProviders(list);

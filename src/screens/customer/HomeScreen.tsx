@@ -54,6 +54,7 @@ export default function HomeScreen() {
           .eq('is_verified', true)
           .eq('is_available', true)
           .eq('status', 'approved')
+          .is('deleted_at', null)
           .order('rating', { ascending: false })
           .limit(8),
         user

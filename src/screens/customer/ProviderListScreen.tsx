@@ -51,6 +51,7 @@ export default function ProviderListScreen({ route, navigation }: Props) {
       `)
       .eq('is_verified', true)
       .eq('is_available', true)
+      .is('deleted_at', null)
       .order('rating', { ascending: false });
 
     if (categoryId) q = q.eq('category_id', categoryId);
