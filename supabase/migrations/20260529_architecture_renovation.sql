@@ -166,7 +166,7 @@ CREATE TRIGGER reviews_validate_booking_status
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.update_provider_badges()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 BEGIN
   -- Verified Provider badge
   IF NEW.is_verified = TRUE THEN
@@ -218,7 +218,7 @@ CREATE TRIGGER providers_update_badges
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.update_provider_response_rate()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 DECLARE
   total_requests INTEGER;
   accepted_count INTEGER;
@@ -529,7 +529,7 @@ CREATE TRIGGER favorites_sync_count
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.create_booking_notification()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 DECLARE
   cust_name TEXT;
   prov_name TEXT;
@@ -769,7 +769,7 @@ CREATE POLICY "Disputes read" ON public.disputes FOR SELECT USING (
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.handle_provider_verification_notification()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 BEGIN
   IF OLD.status = 'pending_review' AND NEW.status = 'approved' THEN
     INSERT INTO public.notifications (user_id, type, title, body, data)

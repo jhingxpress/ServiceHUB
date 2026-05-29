@@ -759,7 +759,7 @@ CREATE TRIGGER on_auth_user_created
 
 -- Update provider rating after review changes (INSERT, UPDATE, DELETE)
 CREATE OR REPLACE FUNCTION public.update_provider_rating()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 DECLARE
   target_provider_id UUID;
 BEGIN
@@ -827,7 +827,7 @@ CREATE TRIGGER providers_status_change
 
 -- Auto-send welcome message when booking is accepted
 CREATE OR REPLACE FUNCTION public.send_welcome_message()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 DECLARE
   prov_id UUID;
   cust_id UUID;
@@ -867,7 +867,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Create payment record when booking is completed
 CREATE OR REPLACE FUNCTION public.create_payment_on_completion()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 BEGIN
   IF NEW.status = 'completed' AND OLD.status != 'completed' THEN
     INSERT INTO public.payments (booking_id, customer_id, provider_id, amount, status, payment_method)
@@ -914,7 +914,7 @@ CREATE TRIGGER reviews_validate_booking_status
 
 -- Update provider badges after provider stats change
 CREATE OR REPLACE FUNCTION public.update_provider_badges()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 BEGIN
   IF NEW.is_verified = TRUE THEN
     INSERT INTO public.provider_badges (provider_id, badge_type)
@@ -957,7 +957,7 @@ CREATE TRIGGER providers_update_badges
 
 -- Update provider response rate when booking status changes
 CREATE OR REPLACE FUNCTION public.update_provider_response_rate()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 DECLARE
   total_requests INTEGER;
   accepted_count INTEGER;
@@ -1048,7 +1048,7 @@ CREATE TRIGGER favorites_sync_count
 
 -- Create notifications on booking status changes
 CREATE OR REPLACE FUNCTION public.create_booking_notification()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 DECLARE
   cust_name TEXT;
   prov_name TEXT;
@@ -1180,7 +1180,7 @@ CREATE TRIGGER messages_update_response_time
 
 -- Provider verification approval/rejection notifications
 CREATE OR REPLACE FUNCTION public.handle_provider_verification_notification()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER SECURITY DEFINER AS $$
 BEGIN
   IF OLD.status = 'pending_review' AND NEW.status = 'approved' THEN
     INSERT INTO public.notifications (user_id, type, title, body, data)
