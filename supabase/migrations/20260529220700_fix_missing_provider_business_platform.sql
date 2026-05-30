@@ -275,19 +275,26 @@ RETURNS TABLE (
 ) AS $$
 BEGIN
   RETURN QUERY
-  WITH metrics AS (
+  WITH
+  booking_counts AS (
+    SELECT COUNT(*)::INTEGER AS total_bookings
+    FROM public.bookings
+    WHERE provider_id = p_provider_id
+  ),
+  metrics AS (
     SELECT
       COALESCE(ps.response_rate, 0) AS response_rate,
       COALESCE(
         CASE
-          WHEN ps.total_bookings > 0 THEN
-            (ps.completed_jobs::DECIMAL / NULLIF(ps.total_bookings, 0) * 100)::INTEGER
+          WHEN bc.total_bookings > 0 THEN
+            (ps.completed_jobs::DECIMAL / NULLIF(bc.total_bookings, 0) * 100)::INTEGER
           ELSE 0
         END, 0
       ) AS completion_rate,
       COALESCE(ps.average_rating * 20, 0)::INTEGER AS rating_score,
       COALESCE(ps.completed_jobs, 0) AS completed_jobs
     FROM public.provider_stats ps
+    CROSS JOIN booking_counts bc
     WHERE ps.provider_id = p_provider_id
   )
   SELECT
