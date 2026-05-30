@@ -63,7 +63,18 @@ export interface Category {
   description: string | null;
   icon: string;
   color: string;
+  parent_id: string | null;
+  is_parent: boolean;
   created_at: string;
+}
+
+export interface ProviderCategory {
+  id: string;
+  provider_id: string;
+  category_id: string;
+  is_primary: boolean;
+  created_at: string;
+  categories?: Category;
 }
 
 export interface Provider {

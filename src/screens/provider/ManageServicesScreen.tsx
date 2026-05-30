@@ -9,7 +9,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
-import { Service } from '../../types';
+import { Service, ProviderCategory } from '../../types';
 import * as ImagePicker from 'expo-image-picker';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Button from '../../components/ui/Button';
@@ -30,6 +30,7 @@ export default function ManageServicesScreen() {
   const { user } = useAuthStore();
   const [services, setServices] = useState<ServiceWithOptions[]>([]);
   const [categoryName, setCategoryName] = useState<string>('');
+  const [linkedCategories, setLinkedCategories] = useState<ProviderCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
@@ -41,9 +42,13 @@ export default function ManageServicesScreen() {
     if (!user) return;
     setLoading(true);
 
-    const [provRes, srvRes] = await Promise.all([
+    const [provRes, srvRes, pcRes] = await Promise.all([
       supabase.from('providers').select('categories(name)').eq('id', user.id).single(),
       supabase.from('services').select('*').eq('provider_id', user.id),
+      supabase.from('provider_categories')
+        .select('*, categories(id, name, icon, color)')
+        .eq('provider_id', user.id)
+        .order('is_primary', { ascending: false }),
     ]);
 
     if (srvRes.error) {
@@ -55,6 +60,7 @@ export default function ManageServicesScreen() {
 
     const cat = (provRes.data as any)?.categories;
     setCategoryName(cat?.name ?? '');
+    setLinkedCategories((pcRes.data ?? []) as ProviderCategory[]);
 
     const serviceIds = (srvRes.data ?? []).map((s: any) => s.id);
 
@@ -242,11 +248,30 @@ export default function ManageServicesScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Category badge */}
-      {categoryName ? (
-        <View style={styles.categoryBadge}>
+      {/* Linked categories */}
+      {linkedCategories.length > 0 ? (
+        <View style={styles.categoriesRow}>
           <Ionicons name="layers-outline" size={16} color={COLORS.primary} />
-          <Text style={styles.categoryText}>Category: <Text style={{ fontFamily: FONTS.semiBold }}>{categoryName}</Text></Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginLeft: SPACING.sm }}>
+            {linkedCategories.map((lc) => (
+              <View
+                key={lc.category_id}
+                style={[
+                  styles.linkedCatChip,
+                  lc.is_primary && { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.linkedCatChipText,
+                    lc.is_primary && { color: COLORS.white, fontFamily: FONTS.bold },
+                  ]}
+                >
+                  {lc.categories?.name ?? 'Category'}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
         </View>
       ) : null}
 
@@ -389,8 +414,9 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.bold, color: COLORS.text },
   addBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
-  categoryBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginHorizontal: SPACING.md, marginBottom: SPACING.xs, backgroundColor: COLORS.primaryLight, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.full, alignSelf: 'flex-start' },
-  categoryText: { fontSize: FONTS.sizes.sm, color: COLORS.primary },
+  categoriesRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: SPACING.md, marginBottom: SPACING.xs },
+  linkedCatChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.sm, paddingVertical: 5, backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.full, borderWidth: 1, borderColor: COLORS.border, marginRight: SPACING.xs },
+  linkedCatChipText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontFamily: FONTS.medium },
   hint: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.xs, marginHorizontal: SPACING.md, marginBottom: SPACING.md, padding: SPACING.sm, backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.md, borderWidth: 1, borderColor: COLORS.border },
   hintText: { flex: 1, fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, lineHeight: 16 },
   list: { padding: SPACING.md, gap: SPACING.sm, flexGrow: 1 },

@@ -116,9 +116,10 @@ export default function ProviderOnboardingScreen() {
   const [yearsExp, setYearsExp] = useState('');
   const [serviceArea, setServiceArea] = useState('');
 
-  // Step 2
+  // Step 2 — two-level category picker
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [catLoading, setCatLoading] = useState(true);
 
   // Step 3 — documents
@@ -134,7 +135,8 @@ export default function ProviderOnboardingScreen() {
 
   const loadCategories = async () => {
     const { data } = await supabase.from('categories').select('*').order('name');
-    setCategories((data ?? []) as Category[]);
+    const cats = (data ?? []) as Category[];
+    setCategories(cats);
     setCatLoading(false);
   };
 
@@ -152,6 +154,19 @@ export default function ProviderOnboardingScreen() {
       setYearsExp(data.years_of_experience ? String(data.years_of_experience) : '');
       setServiceArea(data.service_area ?? '');
       setSelectedCategoryId(data.category_id ?? null);
+    }
+    // Load existing provider category
+    const { data: pcData } = await supabase
+      .from('provider_categories')
+      .select('category_id')
+      .eq('provider_id', user.id)
+      .eq('is_primary', true)
+      .single();
+    if (pcData?.category_id) {
+      setSelectedCategoryId(pcData.category_id);
+      // Pre-select parent if we can infer it
+      const leafCat = categories.find(c => c.id === pcData.category_id);
+      if (leafCat?.parent_id) setSelectedParentId(leafCat.parent_id);
     }
     const { data: existingDocs } = await supabase
       .from('provider_documents').select('*').eq('provider_id', user.id);
@@ -367,13 +382,25 @@ export default function ProviderOnboardingScreen() {
         status: 'pending_review',
       };
       console.log('[handleSubmit] Payload:', payload);
-      
+
       const { error, data } = await supabase.from('providers').upsert(payload);
       console.log('[handleSubmit] Upsert result:', { error, data });
-      
+
       if (error) {
         console.error('[handleSubmit] Upsert error:', error);
         throw error;
+      }
+
+      // Insert / update provider_categories junction
+      if (selectedCategoryId && user) {
+        await supabase.from('provider_categories').delete()
+          .eq('provider_id', user.id).eq('is_primary', true);
+        const { error: pcErr } = await supabase.from('provider_categories').insert({
+          provider_id: user.id,
+          category_id: selectedCategoryId,
+          is_primary: true,
+        });
+        if (pcErr) console.error('[handleSubmit] provider_categories insert error:', pcErr);
       }
       
       console.log('[handleSubmit] Refreshing provider profile...');
@@ -482,35 +509,78 @@ export default function ProviderOnboardingScreen() {
     </View>
   );
 
+  const parentCategories = categories.filter(c => c.is_parent);
+  const leafCategories = categories.filter(c => c.parent_id === selectedParentId && !c.is_parent);
+
   const renderStep2 = () => (
     <View>
       <Text style={styles.stepHeading}>Select Service Category</Text>
-      <Text style={styles.stepSubheading}>Choose your primary service category. You can only select one.</Text>
+      <Text style={styles.stepSubheading}>Choose your primary service category.</Text>
       {catLoading
         ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.xl }} />
         : (
-          <View style={styles.catGrid}>
-            {categories.map(cat => {
-              const selected = cat.id === selectedCategoryId;
-              return (
+          <View>
+            {/* Parent groups */}
+            {!selectedParentId && (
+              <View style={styles.catGrid}>
+                {parentCategories.map(parent => {
+                  const active = parent.id === selectedParentId;
+                  return (
+                    <TouchableOpacity
+                      key={parent.id}
+                      style={[styles.catCard, active && styles.catCardSelected, { borderColor: active ? parent.color : COLORS.border }]}
+                      onPress={() => { setSelectedParentId(parent.id); setSelectedCategoryId(null); }}
+                      activeOpacity={0.8}
+                    >
+                      <View style={[styles.catIcon, { backgroundColor: active ? parent.color : `${parent.color}20` }]}>
+                        <Ionicons name={parent.icon as React.ComponentProps<typeof Ionicons>['name']} size={22} color={active ? COLORS.white : parent.color} />
+                      </View>
+                      <Text style={[styles.catName, active && styles.catNameSelected]} numberOfLines={2}>{parent.name}</Text>
+                      <Ionicons name="chevron-forward" size={14} color={COLORS.textLight} />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Leaf services under selected parent */}
+            {selectedParentId && (
+              <View>
                 <TouchableOpacity
-                  key={cat.id}
-                  style={[styles.catCard, selected && styles.catCardSelected, { borderColor: selected ? cat.color : COLORS.border }]}
-                  onPress={() => setSelectedCategoryId(cat.id)}
-                  activeOpacity={0.8}
+                  style={styles.backToParents}
+                  onPress={() => { setSelectedParentId(null); setSelectedCategoryId(null); }}
                 >
-                  <View style={[styles.catIcon, { backgroundColor: selected ? cat.color : `${cat.color}20` }]}>
-                    <Ionicons name={cat.icon as React.ComponentProps<typeof Ionicons>['name']} size={22} color={selected ? COLORS.white : cat.color} />
-                  </View>
-                  <Text style={[styles.catName, selected && styles.catNameSelected]} numberOfLines={2}>{cat.name}</Text>
-                  {selected && (
-                    <View style={[styles.catCheck, { backgroundColor: cat.color }]}>
-                      <Ionicons name="checkmark" size={10} color={COLORS.white} />
-                    </View>
-                  )}
+                  <Ionicons name="arrow-back" size={16} color={COLORS.primary} />
+                  <Text style={styles.backToParentsText}>Back to categories</Text>
                 </TouchableOpacity>
-              );
-            })}
+                <Text style={styles.stepSubheading}>
+                  {parentCategories.find(p => p.id === selectedParentId)?.name}
+                </Text>
+                <View style={styles.catGrid}>
+                  {leafCategories.map(cat => {
+                    const selected = cat.id === selectedCategoryId;
+                    return (
+                      <TouchableOpacity
+                        key={cat.id}
+                        style={[styles.catCard, selected && styles.catCardSelected, { borderColor: selected ? cat.color : COLORS.border }]}
+                        onPress={() => setSelectedCategoryId(cat.id)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={[styles.catIcon, { backgroundColor: selected ? cat.color : `${cat.color}20` }]}>
+                          <Ionicons name={cat.icon as React.ComponentProps<typeof Ionicons>['name']} size={22} color={selected ? COLORS.white : cat.color} />
+                        </View>
+                        <Text style={[styles.catName, selected && styles.catNameSelected]} numberOfLines={2}>{cat.name}</Text>
+                        {selected && (
+                          <View style={[styles.catCheck, { backgroundColor: cat.color }]}>
+                            <Ionicons name="checkmark" size={10} color={COLORS.white} />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
           </View>
         )
       }
@@ -973,4 +1043,6 @@ const styles = StyleSheet.create({
   nextBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, paddingVertical: SPACING.sm + 2, borderRadius: BORDER_RADIUS.xl, backgroundColor: COLORS.primary, ...SHADOWS.small },
   nextBtnDisabled: { opacity: 0.6 },
   nextBtnText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.white },
+  backToParents: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm },
+  backToParentsText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.primary },
 });
