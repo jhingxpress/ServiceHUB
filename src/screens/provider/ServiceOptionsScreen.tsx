@@ -92,12 +92,27 @@ export default function ServiceOptionsScreen() {
       });
       if (error) { Alert.alert('Error', error.message); } else { setModalVisible(false); fetchOptions(); }
     }
+    // Refresh aggregates regardless of add or edit
+    const { data: service } = await supabase.from('services').select('provider_id').eq('id', serviceId).single();
+    if (service?.provider_id) {
+      await Promise.all([
+        supabase.rpc('refresh_provider_checklist', { p_provider_id: service.provider_id }),
+        supabase.rpc('refresh_provider_score', { p_provider_id: service.provider_id }),
+      ]);
+    }
     setSaving(false);
   };
 
   const handleToggle = async (opt: ServiceOption) => {
     await supabase.from('service_options').update({ is_active: !opt.is_active }).eq('id', opt.id);
     fetchOptions();
+    const { data: service } = await supabase.from('services').select('provider_id').eq('id', serviceId).single();
+    if (service?.provider_id) {
+      await Promise.all([
+        supabase.rpc('refresh_provider_checklist', { p_provider_id: service.provider_id }),
+        supabase.rpc('refresh_provider_score', { p_provider_id: service.provider_id }),
+      ]);
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -106,7 +121,17 @@ export default function ServiceOptionsScreen() {
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: async () => { await supabase.from('service_options').delete().eq('id', id); fetchOptions(); },
+        onPress: async () => {
+          await supabase.from('service_options').delete().eq('id', id);
+          fetchOptions();
+          const { data: service } = await supabase.from('services').select('provider_id').eq('id', serviceId).single();
+          if (service?.provider_id) {
+            await Promise.all([
+              supabase.rpc('refresh_provider_checklist', { p_provider_id: service.provider_id }),
+              supabase.rpc('refresh_provider_score', { p_provider_id: service.provider_id }),
+            ]);
+          }
+        },
       },
     ]);
   };
