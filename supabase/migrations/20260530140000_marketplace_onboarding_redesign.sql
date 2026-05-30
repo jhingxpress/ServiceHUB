@@ -109,15 +109,15 @@ BEGIN
   SELECT * INTO v_is_approved, v_has_first_service, v_has_pricing, v_has_photos, v_has_schedule, v_has_published_profile
   FROM public.compute_provider_checklist(p_provider_id);
 
-  -- 5 steps, each worth 20%
-  v_progress := (
+  -- 6 onboarding items; cap at 100%
+  v_progress := LEAST(100, (
     (CASE WHEN v_is_approved THEN 1 ELSE 0 END) +
     (CASE WHEN v_has_first_service THEN 1 ELSE 0 END) +
     (CASE WHEN v_has_pricing THEN 1 ELSE 0 END) +
     (CASE WHEN v_has_photos THEN 1 ELSE 0 END) +
     (CASE WHEN v_has_schedule THEN 1 ELSE 0 END) +
     (CASE WHEN v_has_published_profile THEN 1 ELSE 0 END)
-  ) * 100 / 5;
+  ) * 100 / 6);
 
   INSERT INTO public.provider_checklist (
     provider_id, is_approved, has_first_service, has_pricing,
