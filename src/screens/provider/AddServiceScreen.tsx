@@ -26,6 +26,7 @@ export default function AddServiceScreen() {
     name: '',
     description: '',
     price: '',
+    home_visit_fee: '',
     duration_minutes: '',
     what_includes: '',
   });
@@ -60,6 +61,7 @@ export default function AddServiceScreen() {
         name: form.name.trim(),
         description: form.description.trim() || null,
         price: parseFloat(form.price),
+        home_visit_fee: form.home_visit_fee ? parseFloat(form.home_visit_fee) : 0,
         duration_minutes: form.duration_minutes ? parseInt(form.duration_minutes, 10) : null,
         is_active: true,
       });
@@ -83,7 +85,8 @@ export default function AddServiceScreen() {
     optional?: boolean;
   }[] = [
     { key: 'name', label: 'Service Name', placeholder: 'e.g. Deep Cleaning, AC Repair', icon: 'construct-outline' },
-    { key: 'price', label: 'Price (PHP)', placeholder: '500', icon: 'cash-outline', keyboard: 'decimal-pad' },
+    { key: 'price', label: 'Starting Price (PHP)', placeholder: '500', icon: 'cash-outline', keyboard: 'decimal-pad' },
+    { key: 'home_visit_fee', label: 'Home Visit Fee (PHP)', placeholder: '100', icon: 'car-outline', keyboard: 'decimal-pad', optional: true },
     { key: 'duration_minutes', label: 'Duration (minutes)', placeholder: '60', icon: 'time-outline', keyboard: 'number-pad', optional: true },
     { key: 'description', label: 'Description', placeholder: 'What does this service include?', icon: 'document-text-outline', multiline: true, optional: true },
     { key: 'what_includes', label: 'What\'s Included', placeholder: 'Tools, materials, etc.', icon: 'list-outline', multiline: true, optional: true },

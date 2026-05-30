@@ -148,6 +148,7 @@ export interface Service {
   name: string;
   description: string | null;
   price: number;
+  home_visit_fee: number;
   duration_minutes: number | null;
   is_active: boolean;
   sort_order: number;
@@ -315,6 +316,52 @@ export interface ProviderStats {
   response_rate: number;
   favorite_count: number;
   average_response_minutes: number;
+  updated_at: string;
+}
+
+export interface ProviderChecklist {
+  provider_id: string;
+  is_approved: boolean;
+  has_first_service: boolean;
+  has_pricing: boolean;
+  has_photos: boolean;
+  has_schedule: boolean;
+  has_first_booking: boolean;
+  progress_percent: number;
+  updated_at: string;
+}
+
+export interface ProviderPortfolio {
+  id: string;
+  provider_id: string;
+  image_url: string;
+  caption: string | null;
+  photo_type: 'before' | 'after' | 'completed' | 'certificate' | 'equipment';
+  sort_order: number;
+  created_at: string;
+}
+
+export interface ProviderView {
+  id: string;
+  provider_id: string;
+  viewer_id: string | null;
+  viewed_at: string;
+}
+
+export interface ProviderPerformance {
+  provider_id: string;
+  profile_views: number;
+  total_bookings: number;
+  conversion_rate: number;
+  response_rate: number;
+  completion_rate: number;
+  updated_at: string;
+}
+
+export interface ProviderScore {
+  provider_id: string;
+  score: number;
+  color_tier: 'green' | 'yellow' | 'red';
   updated_at: string;
 }
 

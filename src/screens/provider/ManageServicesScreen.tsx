@@ -13,6 +13,7 @@ import { Service } from '../../types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
+import SmartServiceSuggestions from '../../components/provider/SmartServiceSuggestions';
 import { ProviderStackParamList } from '../../navigation/types';
 
 type NavProp = NativeStackNavigationProp<ProviderStackParamList>;
@@ -107,6 +108,16 @@ export default function ManageServicesScreen() {
         <Ionicons name="information-circle-outline" size={15} color={COLORS.textSecondary} />
         <Text style={styles.hintText}>Add sub-services under your category. Tap "Manage Pricing" to set price options per sub-service.</Text>
       </View>
+
+      {/* Smart Service Suggestions */}
+      {!loading && services.length === 0 && categoryName && user && (
+        <SmartServiceSuggestions
+          categoryName={categoryName}
+          existingServices={services}
+          providerId={user.id}
+          onAdded={fetchServices}
+        />
+      )}
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={COLORS.primary} /></View>

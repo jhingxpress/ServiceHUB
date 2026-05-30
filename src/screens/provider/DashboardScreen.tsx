@@ -14,10 +14,14 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
-import { Booking } from '../../types';
+import { Booking, ProviderChecklist, ProviderPerformance, ProviderScore } from '../../types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 import Badge from '../../components/ui/Badge';
+import OnboardingChecklist from '../../components/provider/OnboardingChecklist';
+import PerformanceCard from '../../components/provider/PerformanceCard';
+import ProviderScoreRing from '../../components/provider/ProviderScoreRing';
+import FirstBookingGoal from '../../components/provider/FirstBookingGoal';
 import { ProviderStackParamList } from '../../navigation/types';
 
 type NavProp = NativeStackNavigationProp<ProviderStackParamList>;
@@ -34,6 +38,9 @@ export default function ProviderDashboard() {
   const { user } = useAuthStore();
   const [stats, setStats] = useState<Stats>({ pending: 0, active: 0, completed: 0, earnings: 0 });
   const [recentBookings, setRecentBookings] = useState<Booking[]>([]);
+  const [checklist, setChecklist] = useState<ProviderChecklist | null>(null);
+  const [performance, setPerformance] = useState<ProviderPerformance | null>(null);
+  const [score, setScore] = useState<ProviderScore | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isAvailable, setIsAvailable] = useState(true);
@@ -41,7 +48,7 @@ export default function ProviderDashboard() {
   const loadData = useCallback(async () => {
     if (!user) return;
 
-    const [bookingsRes, providerRes] = await Promise.all([
+    const [bookingsRes, providerRes, checklistRes, perfRes, scoreRes] = await Promise.all([
       supabase
         .from('bookings')
         .select('*, customer:users!bookings_customer_id_fkey(full_name, avatar_url), service:services(name)')
@@ -49,6 +56,9 @@ export default function ProviderDashboard() {
         .order('created_at', { ascending: false })
         .limit(20),
       supabase.from('providers').select('is_available, earnings_total').eq('id', user.id).single(),
+      supabase.from('provider_checklist').select('*').eq('provider_id', user.id).single(),
+      supabase.from('provider_performance').select('*').eq('provider_id', user.id).single(),
+      supabase.from('provider_score').select('*').eq('provider_id', user.id).single(),
     ]);
 
     const bookings: Booking[] = bookingsRes.data ?? [];
@@ -61,6 +71,10 @@ export default function ProviderDashboard() {
       completed: bookings.filter((b) => b.status === 'completed').length,
       earnings: providerRes.data?.earnings_total ?? 0,
     });
+
+    setChecklist(checklistRes.data ?? null);
+    setPerformance(perfRes.data ?? null);
+    setScore(scoreRes.data ?? null);
 
     setLoading(false);
     setRefreshing(false);
@@ -113,6 +127,12 @@ export default function ProviderDashboard() {
           </Text>
         </TouchableOpacity>
 
+        {/* Onboarding Checklist */}
+        <OnboardingChecklist checklist={checklist} />
+
+        {/* First Booking Goal */}
+        <FirstBookingGoal totalBookings={stats.completed + stats.active + stats.pending} />
+
         {/* Stats */}
         <View style={styles.statsGrid}>
           {[
@@ -130,6 +150,12 @@ export default function ProviderDashboard() {
             </View>
           ))}
         </View>
+
+        {/* Provider Score */}
+        <ProviderScoreRing score={score} />
+
+        {/* Business Performance */}
+        <PerformanceCard performance={performance} />
 
         {/* Quick Actions */}
         <View style={styles.quickSection}>
