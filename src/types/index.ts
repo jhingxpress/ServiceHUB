@@ -15,6 +15,8 @@ export type DocumentType =
   | 'other_supporting';
 export type ProviderType = 'individual' | 'business';
 export type ProviderCurrentStatus = 'online' | 'busy' | 'offline';
+export type MarketplaceStatus = 'live' | 'hidden';
+export type BusinessStatus = 'available' | 'busy' | 'vacation_mode' | 'closed';
 
 export type BookingStatus =
   | 'pending'
@@ -101,6 +103,9 @@ export interface Provider {
   rejection_reason: string | null;
   // Availability
   current_status: ProviderCurrentStatus;
+  // Marketplace
+  marketplace_status: MarketplaceStatus;
+  business_status: BusinessStatus;
   // Stats
   rating: number;
   total_reviews: number;
@@ -326,7 +331,7 @@ export interface ProviderChecklist {
   has_pricing: boolean;
   has_photos: boolean;
   has_schedule: boolean;
-  has_first_booking: boolean;
+  has_published_profile: boolean;
   progress_percent: number;
   updated_at: string;
 }

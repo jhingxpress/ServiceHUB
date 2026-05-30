@@ -7,6 +7,7 @@ import {
   StyleSheet,
   RefreshControl,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,14 +16,14 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
-import { Booking, ProviderChecklist, ProviderPerformance, ProviderScore } from '../../types';
+import { Booking, Provider, ProviderChecklist, ProviderPerformance, ProviderScore, BusinessStatus } from '../../types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 import Badge from '../../components/ui/Badge';
 import OnboardingChecklist from '../../components/provider/OnboardingChecklist';
 import PerformanceCard from '../../components/provider/PerformanceCard';
 import ProviderScoreRing from '../../components/provider/ProviderScoreRing';
-import FirstBookingGoal from '../../components/provider/FirstBookingGoal';
+import BusinessGoals from '../../components/provider/BusinessGoals';
 import ProviderApprovalModal from '../../components/provider/ProviderApprovalModal';
 import { ProviderStackParamList } from '../../navigation/types';
 
@@ -43,9 +44,9 @@ export default function ProviderDashboard() {
   const [checklist, setChecklist] = useState<ProviderChecklist | null>(null);
   const [performance, setPerformance] = useState<ProviderPerformance | null>(null);
   const [score, setScore] = useState<ProviderScore | null>(null);
+  const [provider, setProvider] = useState<Provider | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [isAvailable, setIsAvailable] = useState(true);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const ONBOARDING_KEY = 'provider_onboarding_seen';
 
@@ -59,7 +60,7 @@ export default function ProviderDashboard() {
         .eq('provider_id', user.id)
         .order('created_at', { ascending: false })
         .limit(20),
-      supabase.from('providers').select('is_available, earnings_total').eq('id', user.id).single(),
+      supabase.from('providers').select('*, categories(name)').eq('id', user.id).single(),
       supabase.from('provider_checklist').select('*').eq('provider_id', user.id).single(),
       supabase.from('provider_performance').select('*').eq('provider_id', user.id).single(),
       supabase.from('provider_score').select('*').eq('provider_id', user.id).single(),
@@ -67,7 +68,7 @@ export default function ProviderDashboard() {
 
     const bookings: Booking[] = bookingsRes.data ?? [];
     setRecentBookings(bookings.slice(0, 5));
-    setIsAvailable(providerRes.data?.is_available ?? true);
+    setProvider(providerRes.data as Provider | null);
 
     setStats({
       pending: bookings.filter((b) => b.status === 'pending').length,
@@ -106,10 +107,34 @@ export default function ProviderDashboard() {
     await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
   };
 
-  const toggleAvailability = async () => {
-    const next = !isAvailable;
-    setIsAvailable(next);
-    await supabase.from('providers').update({ is_available: next }).eq('id', user?.id);
+  const handlePublish = async () => {
+    if (!user) return;
+    const checklistKeys = ['is_approved', 'has_first_service', 'has_pricing', 'has_photos', 'has_schedule'] as const;
+    const allReady = checklistKeys.every((k) => checklist?.[k] === true);
+    if (!allReady) {
+      Alert.alert(
+        'Not Ready Yet',
+        'Complete all other onboarding steps before publishing your business profile.'
+      );
+      return;
+    }
+    const { error } = await supabase
+      .from('providers')
+      .update({ marketplace_status: 'live' })
+      .eq('id', user.id);
+    if (error) {
+      Alert.alert('Publish failed', error.message);
+      return;
+    }
+    await supabase.rpc('refresh_provider_checklist', { p_provider_id: user.id });
+    loadData();
+    Alert.alert('Published', 'Your business profile is now live in the marketplace!');
+  };
+
+  const setBusinessStatus = async (status: BusinessStatus) => {
+    if (!user) return;
+    setProvider((prev) => (prev ? { ...prev, business_status: status } : prev));
+    await supabase.from('providers').update({ business_status: status }).eq('id', user.id);
   };
 
   if (loading) {
@@ -126,7 +151,7 @@ export default function ProviderDashboard() {
     <SafeAreaView style={styles.safe}>
       <ProviderApprovalModal
         visible={showApprovalModal}
-        progressText={`${checklist ? (checklist.progress_percent > 0 ? 1 : 0) : 0}/6 Complete`}
+        progressText={`${checklist ? (checklist.progress_percent > 0 ? 1 : 0) : 0}/5 Complete`}
         onDismiss={dismissApprovalModal}
       />
       <ScrollView
@@ -142,25 +167,50 @@ export default function ProviderDashboard() {
           <Avatar uri={user?.avatar_url} name={user?.full_name} size={44} borderColor={COLORS.primary} />
         </View>
 
-        {/* Availability toggle */}
-        <TouchableOpacity
-          style={[styles.availabilityBar, { backgroundColor: isAvailable ? COLORS.successLight ?? '#D1FAE5' : '#FEE2E2' }]}
-          onPress={toggleAvailability}
-        >
-          <View style={[styles.availDot, { backgroundColor: isAvailable ? COLORS.success : COLORS.error }]} />
-          <Text style={[styles.availText, { color: isAvailable ? COLORS.success : COLORS.error }]}>
-            {isAvailable ? 'You are available for bookings' : 'You are not accepting bookings'}
-          </Text>
-          <Text style={[styles.availToggle, { color: isAvailable ? COLORS.success : COLORS.error }]}>
-            {isAvailable ? 'Go Offline' : 'Go Online'}
-          </Text>
-        </TouchableOpacity>
+        {/* Business Status */}
+        {provider && (
+          <View style={styles.statusBar}>
+            <Text style={styles.statusLabel}>Business Status</Text>
+            <View style={styles.statusRow}>
+              {(
+                [
+                  { key: 'available', label: 'Available', color: COLORS.success },
+                  { key: 'busy', label: 'Busy', color: '#F59E0B' },
+                  { key: 'vacation_mode', label: 'Vacation', color: '#8B5CF6' },
+                  { key: 'closed', label: 'Closed', color: COLORS.error },
+                ] as { key: BusinessStatus; label: string; color: string }[]
+              ).map((s) => {
+                const active = provider.business_status === s.key;
+                return (
+                  <TouchableOpacity
+                    key={s.key}
+                    style={[styles.statusChip, active && { backgroundColor: s.color + '20', borderColor: s.color }]}
+                    onPress={() => setBusinessStatus(s.key)}
+                  >
+                    <View style={[styles.statusDot, { backgroundColor: s.color, opacity: active ? 1 : 0.3 }]} />
+                    <Text style={[styles.statusChipText, active && { color: s.color, fontFamily: FONTS.bold }]}>
+                      {s.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
-        {/* Onboarding Checklist */}
-        <OnboardingChecklist checklist={checklist} />
+        {/* Onboarding Checklist or Business Ready */}
+        <OnboardingChecklist checklist={checklist} provider={provider} onPublish={handlePublish} />
 
-        {/* First Booking Goal */}
-        <FirstBookingGoal totalBookings={stats.completed + stats.active + stats.pending} />
+        {/* Business Goals (shown when onboarding complete) */}
+        {checklist && checklist.progress_percent >= 100 && (
+          <BusinessGoals
+            completedJobs={stats.completed}
+            totalBookings={stats.completed + stats.active + stats.pending}
+            totalReviews={provider?.total_reviews ?? 0}
+            earnings={stats.earnings}
+            rating={score?.score ?? 0}
+          />
+        )}
 
         {/* Stats */}
         <View style={styles.statsGrid}>
@@ -287,9 +337,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', marginHorizontal: SPACING.md,
     borderRadius: BORDER_RADIUS.lg, padding: SPACING.md, marginBottom: SPACING.md, gap: SPACING.sm,
   },
-  availDot: { width: 10, height: 10, borderRadius: 5 },
-  availText: { flex: 1, fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold },
-  availToggle: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, textDecorationLine: 'underline' },
+  statusBar: {
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.small,
+  },
+  statusLabel: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: SPACING.sm },
+  statusRow: { flexDirection: 'row', gap: SPACING.sm, flexWrap: 'wrap' },
+  statusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.full,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  statusChipText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontFamily: FONTS.medium },
   statsGrid: {
     flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: SPACING.md, gap: SPACING.sm, marginBottom: SPACING.md,
   },

@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ProviderChecklist } from '../../types';
+import { ProviderChecklist, Provider } from '../../types';
 import { ProviderStackParamList } from '../../navigation/types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 
@@ -11,6 +11,8 @@ type NavProp = NativeStackNavigationProp<ProviderStackParamList>;
 
 interface Props {
   checklist: ProviderChecklist | null;
+  provider?: Provider | null;
+  onPublish?: () => void;
 }
 
 const CHECKLIST_ITEMS: { key: keyof ProviderChecklist; label: string; icon: React.ComponentProps<typeof Ionicons>['name']; navTarget?: string }[] = [
@@ -19,10 +21,10 @@ const CHECKLIST_ITEMS: { key: keyof ProviderChecklist; label: string; icon: Reac
   { key: 'has_pricing', label: 'Set Service Pricing', icon: 'pricetag-outline', navTarget: 'ManageServices' },
   { key: 'has_photos', label: 'Upload Service Photos', icon: 'images-outline', navTarget: 'ManageServices' },
   { key: 'has_schedule', label: 'Configure Schedule', icon: 'calendar-outline', navTarget: 'Schedule' },
-  { key: 'has_first_booking', label: 'Receive First Booking', icon: 'gift-outline' },
+  { key: 'has_published_profile', label: 'Publish Business Profile', icon: 'rocket-outline', navTarget: 'PublishProfile' },
 ];
 
-export default function OnboardingChecklist({ checklist }: Props) {
+export default function OnboardingChecklist({ checklist, provider, onPublish }: Props) {
   const navigation = useNavigation<NavProp>();
 
   if (!checklist) return null;
@@ -31,9 +33,34 @@ export default function OnboardingChecklist({ checklist }: Props) {
   const total = CHECKLIST_ITEMS.length;
   const percent = Math.round((completed / total) * 100);
 
-  if (completed >= total) return null;
+  // Show Business Ready card when fully complete
+  if (completed >= total) {
+    return (
+      <View style={[styles.card, styles.businessReadyCard]}>
+        <View style={styles.readyHeader}>
+          <View style={[styles.readyIconWrap, { backgroundColor: COLORS.successLight }]}>
+            <Ionicons name="checkmark-circle" size={28} color={COLORS.success} />
+          </View>
+          <View style={styles.readyTextWrap}>
+            <Text style={styles.readyTitle}>Business Ready</Text>
+            <Text style={styles.readySubtitle}>100% Complete</Text>
+          </View>
+        </View>
+        <Text style={styles.readyBody}>
+          Your services are now visible in the ServiceHub marketplace. Customers can discover and book your services.
+        </Text>
+        <View style={styles.statusBadge}>
+          <Text style={styles.statusBadgeText}>LIVE IN MARKETPLACE</Text>
+        </View>
+      </View>
+    );
+  }
 
   const handlePress = (item: typeof CHECKLIST_ITEMS[0]) => {
+    if (item.navTarget === 'PublishProfile') {
+      if (onPublish) onPublish();
+      return;
+    }
     if (item.navTarget) {
       if (item.navTarget === 'Schedule') {
         navigation.getParent()?.navigate('Schedule');
@@ -172,5 +199,53 @@ const styles = StyleSheet.create({
   itemLabelDone: {
     textDecorationLine: 'line-through',
     color: COLORS.textLight,
+  },
+  businessReadyCard: {
+    borderColor: COLORS.success,
+    borderWidth: 1.5,
+    backgroundColor: '#F0FDF4',
+  },
+  readyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  readyIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  readyTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  readyTitle: {
+    fontSize: FONTS.sizes.lg,
+    fontFamily: FONTS.bold,
+    color: COLORS.success,
+  },
+  readySubtitle: {
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.textSecondary,
+    fontFamily: FONTS.semiBold,
+  },
+  readyBody: {
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.text,
+    lineHeight: 20,
+  },
+  statusBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.success,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+  },
+  statusBadgeText: {
+    fontSize: FONTS.sizes.xs,
+    fontFamily: FONTS.bold,
+    color: COLORS.white,
   },
 });
