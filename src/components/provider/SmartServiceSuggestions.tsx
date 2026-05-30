@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { Service } from '../../types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
+import { useToast } from '../../hooks/useToast';
 
 const CATEGORY_SUGGESTIONS: Record<string, string[]> = {
   'Cleaning': [
@@ -87,6 +88,7 @@ interface Props {
 }
 
 export default function SmartServiceSuggestions({ categoryName, existingServices, providerId, onAdded }: Props) {
+  const { showToast } = useToast();
   const suggestions = CATEGORY_SUGGESTIONS[categoryName] ?? [];
   const existingNames = new Set(existingServices.map((s) => s.name.toLowerCase().trim()));
 
@@ -105,6 +107,7 @@ export default function SmartServiceSuggestions({ categoryName, existingServices
     if (error) {
       Alert.alert('Error', error.message);
     } else {
+      showToast(`${name} added successfully`, 'success');
       onAdded();
     }
   };

@@ -9,7 +9,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
-import { Service } from '../../types';
+import { Service, ServiceImage } from '../../types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
@@ -20,6 +20,7 @@ type NavProp = NativeStackNavigationProp<ProviderStackParamList>;
 
 interface ServiceWithOptions extends Service {
   option_count?: number;
+  image_count?: number;
 }
 
 export default function ManageServicesScreen() {
@@ -38,7 +39,7 @@ export default function ManageServicesScreen() {
 
     const [provRes, srvRes] = await Promise.all([
       supabase.from('providers').select('categories(name)').eq('id', user.id).single(),
-      supabase.from('services').select('*, service_options(id)').eq('provider_id', user.id).order('sort_order').order('created_at'),
+      supabase.from('services').select('*, service_options(id), service_images(id)').eq('provider_id', user.id).order('sort_order').order('created_at'),
     ]);
 
     const cat = (provRes.data as any)?.categories;
@@ -47,6 +48,7 @@ export default function ManageServicesScreen() {
     const mapped: ServiceWithOptions[] = (srvRes.data ?? []).map((s: any) => ({
       ...s,
       option_count: s.service_options?.length ?? 0,
+      image_count: s.service_images?.length ?? 0,
     }));
     setServices(mapped);
     setLoading(false);
@@ -109,14 +111,25 @@ export default function ManageServicesScreen() {
         <Text style={styles.hintText}>Add sub-services under your category. Tap "Manage Pricing" to set price options per sub-service.</Text>
       </View>
 
-      {/* Smart Service Suggestions */}
+      {/* Smart Service Suggestions + Single CTA */}
       {!loading && services.length === 0 && categoryName && user && (
-        <SmartServiceSuggestions
-          categoryName={categoryName}
-          existingServices={services}
-          providerId={user.id}
-          onAdded={fetchServices}
-        />
+        <View style={{ marginBottom: SPACING.md }}>
+          <SmartServiceSuggestions
+            categoryName={categoryName}
+            existingServices={services}
+            providerId={user.id}
+            onAdded={fetchServices}
+          />
+          <View style={{ marginHorizontal: SPACING.md, marginTop: SPACING.md }}>
+            <Button
+              title="Create Custom Service"
+              onPress={openAdd}
+              variant="outline"
+              fullWidth
+              size="lg"
+            />
+          </View>
+        </View>
       )}
 
       {loading ? (
@@ -127,55 +140,62 @@ export default function ManageServicesScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <View style={[styles.card, !item.is_active && styles.cardDisabled]}>
-              <View style={styles.cardTop}>
-                <View style={styles.cardInfo}>
-                  <Text style={styles.serviceName}>{item.name}</Text>
-                  {item.description ? <Text style={styles.serviceDesc} numberOfLines={2}>{item.description}</Text> : null}
-                  <View style={styles.metaRow}>
-                    <View style={styles.optionsBadge}>
-                      <Ionicons name="pricetag-outline" size={12} color={COLORS.primary} />
-                      <Text style={styles.optionsText}>{item.option_count} option{item.option_count !== 1 ? 's' : ''}</Text>
-                    </View>
-                    <View style={[styles.statusBadge, item.is_active ? styles.statusActive : styles.statusInactive]}>
-                      <Text style={[styles.statusText, item.is_active ? styles.statusActiveText : styles.statusInactiveText]}>
-                        {item.is_active ? 'Active' : 'Hidden'}
+          renderItem={({ item }) => {
+            const portfolioPercent = Math.min(100, (item.image_count ?? 0) * 25);
+            const hasPricing = (item.option_count ?? 0) > 0 || item.price > 0;
+            return (
+              <View style={[styles.card, !item.is_active && styles.cardDisabled]}>
+                <View style={styles.cardTop}>
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.serviceName}>{item.name}</Text>
+                    {item.description ? <Text style={styles.serviceDesc} numberOfLines={2}>{item.description}</Text> : null}
+                    <View style={styles.metaRow}>
+                      <View style={[styles.statusBadge, item.is_active ? styles.statusActive : styles.statusInactive]}>
+                        <Text style={[styles.statusText, item.is_active ? styles.statusActiveText : styles.statusInactiveText]}>
+                          {item.is_active ? 'Active' : 'Hidden'}
+                        </Text>
+                      </View>
+                      <Text style={styles.pricingText}>
+                        Pricing: {hasPricing ? 'Set' : 'Not Set'}
                       </Text>
                     </View>
+                    {/* Portfolio completion bar */}
+                    <View style={styles.portfolioRow}>
+                      <Text style={styles.portfolioLabel}>Portfolio</Text>
+                      <View style={styles.portfolioTrack}>
+                        <View style={[styles.portfolioFill, { width: `${portfolioPercent}%` }]} />
+                      </View>
+                      <Text style={styles.portfolioPercent}>{portfolioPercent}%</Text>
+                    </View>
+                  </View>
+                  <View style={styles.actions}>
+                    <TouchableOpacity style={styles.iconBtn} onPress={() => openEdit(item)}>
+                      <Ionicons name="pencil-outline" size={16} color={COLORS.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.iconBtn} onPress={() => handleToggle(item)}>
+                      <Ionicons name={item.is_active ? 'eye-outline' : 'eye-off-outline'} size={16} color={COLORS.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.iconBtn, styles.deleteBtn]} onPress={() => handleDelete(item.id)}>
+                      <Ionicons name="trash-outline" size={16} color={COLORS.error} />
+                    </TouchableOpacity>
                   </View>
                 </View>
-                <View style={styles.actions}>
-                  <TouchableOpacity style={styles.iconBtn} onPress={() => openEdit(item)}>
-                    <Ionicons name="pencil-outline" size={16} color={COLORS.primary} />
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { borderRightWidth: 1, borderRightColor: COLORS.border + '40' }]}
+                    onPress={() => navigation.navigate('ServiceOptions', { serviceId: item.id, serviceName: item.name })}
+                  >
+                    <Ionicons name="pricetag-outline" size={16} color={COLORS.primary} />
+                    <Text style={styles.actionBtnText}>Manage Pricing</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.iconBtn} onPress={() => handleToggle(item)}>
-                    <Ionicons name={item.is_active ? 'eye-outline' : 'eye-off-outline'} size={16} color={COLORS.textSecondary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.iconBtn, styles.deleteBtn]} onPress={() => handleDelete(item.id)}>
-                    <Ionicons name="trash-outline" size={16} color={COLORS.error} />
+                  <TouchableOpacity style={styles.actionBtn} onPress={() => Alert.alert('Coming Soon', 'Photo upload for services will be available in the next update.')}>
+                    <Ionicons name="images-outline" size={16} color={COLORS.primary} />
+                    <Text style={styles.actionBtnText}>Upload Photos</Text>
                   </TouchableOpacity>
                 </View>
               </View>
-              <TouchableOpacity
-                style={styles.manageOptionsBtn}
-                onPress={() => navigation.navigate('ServiceOptions', { serviceId: item.id, serviceName: item.name })}
-              >
-                <Ionicons name="pricetags-outline" size={16} color={COLORS.primary} />
-                <Text style={styles.manageOptionsText}>Manage Pricing Options</Text>
-                <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
-              </TouchableOpacity>
-            </View>
-          )}
-          ListEmptyComponent={
-            <EmptyState
-              icon="construct-outline"
-              title="No sub-services yet"
-              subtitle={`Add sub-services under your ${categoryName || 'category'} to start receiving bookings`}
-              actionLabel="Add Sub-Service"
-              onAction={openAdd}
-            />
-          }
+            );
+          }}
         />
       )}
 
@@ -237,8 +257,15 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: SPACING.xs, marginLeft: SPACING.sm },
   iconBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: COLORS.border },
   deleteBtn: { backgroundColor: '#FEE2E2', borderColor: '#FECACA' },
-  manageOptionsBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, backgroundColor: COLORS.primaryLight, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderTopWidth: 1, borderTopColor: COLORS.border + '40' },
-  manageOptionsText: { flex: 1, fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.primary },
+  pricingText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontFamily: FONTS.medium },
+  portfolioRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.sm },
+  portfolioLabel: { fontSize: FONTS.sizes.xs, color: COLORS.textLight, fontFamily: FONTS.medium, width: 48 },
+  portfolioTrack: { flex: 1, height: 4, backgroundColor: COLORS.background, borderRadius: BORDER_RADIUS.full, overflow: 'hidden' },
+  portfolioFill: { height: '100%', backgroundColor: COLORS.primary, borderRadius: BORDER_RADIUS.full },
+  portfolioPercent: { fontSize: FONTS.sizes.xs, color: COLORS.primary, fontFamily: FONTS.semiBold, width: 32, textAlign: 'right' },
+  actionRow: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: COLORS.border + '40' },
+  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs, paddingVertical: SPACING.sm, backgroundColor: COLORS.primaryLight },
+  actionBtnText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.primary },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
   modal: { backgroundColor: COLORS.background, borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.lg, maxHeight: '75%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },

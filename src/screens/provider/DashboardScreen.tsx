@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { Booking, ProviderChecklist, ProviderPerformance, ProviderScore } from '../../types';
@@ -22,6 +23,7 @@ import OnboardingChecklist from '../../components/provider/OnboardingChecklist';
 import PerformanceCard from '../../components/provider/PerformanceCard';
 import ProviderScoreRing from '../../components/provider/ProviderScoreRing';
 import FirstBookingGoal from '../../components/provider/FirstBookingGoal';
+import ProviderApprovalModal from '../../components/provider/ProviderApprovalModal';
 import { ProviderStackParamList } from '../../navigation/types';
 
 type NavProp = NativeStackNavigationProp<ProviderStackParamList>;
@@ -44,6 +46,8 @@ export default function ProviderDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isAvailable, setIsAvailable] = useState(true);
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const ONBOARDING_KEY = 'provider_onboarding_seen';
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -76,11 +80,25 @@ export default function ProviderDashboard() {
     setPerformance(perfRes.data ?? null);
     setScore(scoreRes.data ?? null);
 
+    // Show approval modal once if provider is approved and hasn't seen it
+    const checklistData = checklistRes.data as ProviderChecklist | null;
+    if (checklistData?.is_approved) {
+      const seen = await AsyncStorage.getItem(ONBOARDING_KEY);
+      if (!seen) {
+        setShowApprovalModal(true);
+      }
+    }
+
     setLoading(false);
     setRefreshing(false);
   }, [user]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  const dismissApprovalModal = async () => {
+    setShowApprovalModal(false);
+    await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+  };
 
   const toggleAvailability = async () => {
     const next = !isAvailable;
@@ -100,11 +118,16 @@ export default function ProviderDashboard() {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <ProviderApprovalModal
+        visible={showApprovalModal}
+        progressText={`${checklist ? (checklist.progress_percent > 0 ? 1 : 0) : 0}/6 Complete`}
+        onDismiss={dismissApprovalModal}
+      />
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor={COLORS.primary} />}
       >
-        {/* Header */}
+        {/* Header -->
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Welcome back,</Text>
@@ -157,24 +180,49 @@ export default function ProviderDashboard() {
         {/* Business Performance */}
         <PerformanceCard performance={performance} />
 
-        {/* Quick Actions */}
+        {/* Quick Actions with badges */}
         <View style={styles.quickSection}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickRow}>
             {[
-              { label: 'Requests', icon: 'notifications-outline', action: () => navigation.getParent()?.navigate('Requests') },
-              { label: 'Schedule', icon: 'calendar-outline', action: () => navigation.getParent()?.navigate('Schedule') },
+              { label: 'Requests', icon: 'notifications-outline', action: () => navigation.getParent()?.navigate('Requests'), badge: stats.pending > 0 ? stats.pending.toString() : undefined },
+              { label: 'Active Jobs', icon: 'play-circle-outline', action: () => navigation.getParent()?.navigate('ActiveJobs'), badge: stats.active > 0 ? stats.active.toString() : undefined },
               { label: 'Services', icon: 'construct-outline', action: () => navigation.navigate('ManageServices') },
-              { label: 'Earnings', icon: 'wallet-outline', action: () => navigation.getParent()?.navigate('Earnings') },
+              { label: 'Earnings', icon: 'wallet-outline', action: () => navigation.getParent()?.navigate('Earnings'), badge: stats.earnings > 0 ? `₱${stats.earnings}` : undefined },
             ].map((q) => (
               <TouchableOpacity
                 key={q.label}
                 style={styles.quickCard}
                 onPress={q.action}
               >
-                <Ionicons name={q.icon as React.ComponentProps<typeof Ionicons>['name']} size={24} color={COLORS.primary} />
+                <View style={styles.quickIconWrap}>
+                  <Ionicons name={q.icon as React.ComponentProps<typeof Ionicons>['name']} size={24} color={COLORS.primary} />
+                  {q.badge ? (
+                    <View style={styles.badgeWrap}>
+                      <Text style={styles.badgeText} numberOfLines={1}>{q.badge}</Text>
+                    </View>
+                  ) : null}
+                </View>
                 <Text style={styles.quickLabel}>{q.label}</Text>
               </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Future Features Placeholders */}
+        <View style={styles.futureSection}>
+          <Text style={styles.sectionTitle}>Coming Soon</Text>
+          <View style={styles.futureRow}>
+            {[
+              { label: 'Top Rated', icon: 'trophy-outline' },
+              { label: 'Fast Responder', icon: 'flash-outline' },
+              { label: 'Verified Pro', icon: 'shield-checkmark-outline' },
+              { label: 'Boost', icon: 'rocket-outline' },
+            ].map((f) => (
+              <View key={f.label} style={styles.futureChip}>
+                <Ionicons name={f.icon as React.ComponentProps<typeof Ionicons>['name']} size={16} color={COLORS.textMuted} />
+                <Text style={styles.futureChipText}>{f.label}</Text>
+              </View>
             ))}
           </View>
         </View>
@@ -255,6 +303,35 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
   },
   quickLabel: { fontSize: FONTS.sizes.xs, color: COLORS.text, fontFamily: FONTS.semiBold, textAlign: 'center' },
+  quickIconWrap: { position: 'relative', marginBottom: SPACING.xs },
+  badgeWrap: {
+    position: 'absolute',
+    top: -6,
+    right: -10,
+    backgroundColor: COLORS.error,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    minWidth: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { fontSize: 9, color: COLORS.white, fontFamily: FONTS.bold },
+  futureSection: { paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
+  futureRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  futureChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: COLORS.surfaceTertiary,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    opacity: 0.6,
+  },
+  futureChipText: { fontSize: FONTS.sizes.xs, color: COLORS.textMuted, fontFamily: FONTS.medium },
   section: { paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm },
   sectionLink: { fontSize: FONTS.sizes.sm, color: COLORS.primary, fontFamily: FONTS.semiBold },

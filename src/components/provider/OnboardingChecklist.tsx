@@ -17,7 +17,7 @@ const CHECKLIST_ITEMS: { key: keyof ProviderChecklist; label: string; icon: Reac
   { key: 'is_approved', label: 'Provider Approved', icon: 'shield-checkmark-outline' },
   { key: 'has_first_service', label: 'Add First Service', icon: 'construct-outline', navTarget: 'ManageServices' },
   { key: 'has_pricing', label: 'Set Service Pricing', icon: 'pricetag-outline', navTarget: 'ManageServices' },
-  { key: 'has_photos', label: 'Upload Service Photos', icon: 'images-outline' },
+  { key: 'has_photos', label: 'Upload Service Photos', icon: 'images-outline', navTarget: 'ProfileSetup' },
   { key: 'has_schedule', label: 'Configure Schedule', icon: 'calendar-outline', navTarget: 'Schedule' },
   { key: 'has_first_booking', label: 'Receive First Booking', icon: 'gift-outline' },
 ];

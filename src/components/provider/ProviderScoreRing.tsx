@@ -53,17 +53,35 @@ export default function ProviderScoreRing({ score }: Props) {
         <View style={styles.legend}>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
-            <Text style={styles.legendText}>90-100</Text>
+            <Text style={styles.legendText}>90-100 Excellent</Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
-            <Text style={styles.legendText}>75-89</Text>
+            <Text style={styles.legendText}>75-89 Good</Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
-            <Text style={styles.legendText}>Below 75</Text>
+            <Text style={styles.legendText}>Below 75 Needs Improvement</Text>
           </View>
         </View>
+      </View>
+
+      {/* Explanation */}
+      <View style={styles.explanation}>
+        <Text style={styles.explanationTitle}>Your visibility to customers depends on:</Text>
+        {[
+          'Service Setup',
+          'Pricing Completion',
+          'Portfolio Photos',
+          'Response Rate',
+          'Completed Jobs',
+          'Customer Ratings',
+        ].map((factor) => (
+          <View key={factor} style={styles.factorRow}>
+            <View style={[styles.legendDot, { backgroundColor: tier.ring }]} />
+            <Text style={styles.factorText}>{factor}</Text>
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -154,6 +172,26 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   legendText: {
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.textSecondary,
+  },
+  explanation: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.divider,
+    paddingTop: SPACING.md,
+    gap: SPACING.sm,
+  },
+  explanationTitle: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.text,
+  },
+  factorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  factorText: {
     fontSize: FONTS.sizes.sm,
     color: COLORS.textSecondary,
   },
