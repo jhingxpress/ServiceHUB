@@ -92,12 +92,25 @@ export default function SmartServiceSuggestions({ categoryName, existingServices
   const suggestions = CATEGORY_SUGGESTIONS[categoryName] ?? [];
   const existingNames = new Set(existingServices.map((s) => s.name.toLowerCase().trim()));
 
-  if (suggestions.length === 0 || existingServices.length > 0) return null;
+  // Only show suggestions that haven't been added yet
+  const availableSuggestions = suggestions.filter(
+    (name) => !existingNames.has(name.toLowerCase().trim())
+  );
+
+  if (availableSuggestions.length === 0) return null;
 
   const handleAdd = async (name: string) => {
+    const trimmed = name.trim();
+
+    // Frontend duplicate guard
+    if (existingNames.has(trimmed.toLowerCase())) {
+      showToast(`${trimmed} already exists`, 'warning');
+      return;
+    }
+
     const { error } = await supabase.from('services').insert({
       provider_id: providerId,
-      name: name.trim(),
+      name: trimmed,
       description: null,
       price: 0,
       home_visit_fee: 0,
@@ -107,7 +120,12 @@ export default function SmartServiceSuggestions({ categoryName, existingServices
     if (error) {
       Alert.alert('Error', error.message);
     } else {
-      showToast(`${name} added successfully`, 'success');
+      showToast(`${trimmed} added successfully`, 'success');
+      // Refresh backend aggregates
+      await Promise.all([
+        supabase.rpc('refresh_provider_checklist', { p_provider_id: providerId }),
+        supabase.rpc('refresh_provider_score', { p_provider_id: providerId }),
+      ]);
       onAdded();
     }
   };
@@ -122,25 +140,17 @@ export default function SmartServiceSuggestions({ categoryName, existingServices
         Based on your <Text style={{ fontFamily: FONTS.semiBold }}>{categoryName}</Text> category
       </Text>
       <View style={styles.chips}>
-        {suggestions.map((name) => {
-          const isAdded = existingNames.has(name.toLowerCase().trim());
-          return (
-            <TouchableOpacity
-              key={name}
-              style={[styles.chip, isAdded && styles.chipAdded]}
-              onPress={() => !isAdded && handleAdd(name)}
-              activeOpacity={0.7}
-              disabled={isAdded}
-            >
-              <Ionicons
-                name={isAdded ? 'checkmark-circle' : 'add-circle-outline'}
-                size={16}
-                color={isAdded ? COLORS.success : COLORS.primary}
-              />
-              <Text style={[styles.chipText, isAdded && styles.chipTextAdded]}>{name}</Text>
-            </TouchableOpacity>
-          );
-        })}
+        {availableSuggestions.map((name) => (
+          <TouchableOpacity
+            key={name}
+            style={styles.chip}
+            onPress={() => handleAdd(name)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="add-circle-outline" size={16} color={COLORS.primary} />
+            <Text style={styles.chipText}>{name}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
     </View>
   );

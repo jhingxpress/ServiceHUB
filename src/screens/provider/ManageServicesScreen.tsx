@@ -36,15 +36,18 @@ export default function ManageServicesScreen() {
 
   const fetchServices = useCallback(async () => {
     if (!user) return;
+    setLoading(true);
 
     const [provRes, srvRes] = await Promise.all([
       supabase.from('providers').select('categories(name)').eq('id', user.id).single(),
-      supabase.from('services').select('*, service_options(id)').eq('provider_id', user.id).order('sort_order').order('created_at'),
+      supabase.from('services').select('*').eq('provider_id', user.id),
     ]);
 
     if (srvRes.error) {
       console.error('ManageServices: services query failed', srvRes.error);
       Alert.alert('Error loading services', srvRes.error.message);
+    } else {
+      console.log('ManageServices: loaded', (srvRes.data ?? []).length, 'services for provider', user.id);
     }
 
     const cat = (provRes.data as any)?.categories;
@@ -52,8 +55,8 @@ export default function ManageServicesScreen() {
 
     const mapped: ServiceWithOptions[] = (srvRes.data ?? []).map((s: any) => ({
       ...s,
-      option_count: s.service_options?.length ?? 0,
-      image_count: 0, // TODO: fetch from service_images table when photo upload is implemented
+      option_count: 0,
+      image_count: 0,
     }));
     setServices(mapped);
     setLoading(false);
@@ -69,12 +72,31 @@ export default function ManageServicesScreen() {
     if (!user) return;
     setSaving(true);
 
+    const trimmedName = form.name.trim();
+
     if (editingService) {
-      const { error } = await supabase.from('services').update({ name: form.name.trim(), description: form.description.trim() || null }).eq('id', editingService.id);
+      const { error } = await supabase.from('services').update({ name: trimmedName, description: form.description.trim() || null }).eq('id', editingService.id);
       if (error) { Alert.alert('Error', error.message); } else { setModalVisible(false); fetchServices(); }
     } else {
-      const { error } = await supabase.from('services').insert({ provider_id: user.id, name: form.name.trim(), description: form.description.trim() || null, is_active: true });
-      if (error) { Alert.alert('Error', error.message); } else { setModalVisible(false); fetchServices(); }
+      // Check for duplicate
+      const duplicate = services.find((s) => s.name.toLowerCase().trim() === trimmedName.toLowerCase());
+      if (duplicate) {
+        Alert.alert('Duplicate Service', `"${trimmedName}" already exists. Please use a different name.`);
+        setSaving(false);
+        return;
+      }
+
+      const { error } = await supabase.from('services').insert({ provider_id: user.id, name: trimmedName, description: form.description.trim() || null, is_active: true });
+      if (error) {
+        Alert.alert('Error', error.message);
+      } else {
+        setModalVisible(false);
+        await Promise.all([
+          supabase.rpc('refresh_provider_checklist', { p_provider_id: user.id }),
+          supabase.rpc('refresh_provider_score', { p_provider_id: user.id }),
+        ]);
+        fetchServices();
+      }
     }
     setSaving(false);
   };
