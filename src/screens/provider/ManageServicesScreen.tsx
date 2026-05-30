@@ -22,6 +22,7 @@ type NavProp = NativeStackNavigationProp<ProviderStackParamList>;
 interface ServiceWithOptions extends Service {
   option_count?: number;
   image_count?: number;
+  min_price?: number | null;
 }
 
 export default function ManageServicesScreen() {
@@ -55,8 +56,26 @@ export default function ManageServicesScreen() {
     const cat = (provRes.data as any)?.categories;
     setCategoryName(cat?.name ?? '');
 
-    // Fetch image counts for all services
     const serviceIds = (srvRes.data ?? []).map((s: any) => s.id);
+
+    // Fetch active pricing options for all services
+    let optionCounts: Record<string, number> = {};
+    let minPrices: Record<string, number> = {};
+    if (serviceIds.length > 0) {
+      const { data: options } = await supabase
+        .from('service_options')
+        .select('service_id, price, is_active')
+        .in('service_id', serviceIds)
+        .eq('is_active', true);
+      (options ?? []).forEach((opt: any) => {
+        optionCounts[opt.service_id] = (optionCounts[opt.service_id] || 0) + 1;
+        if (opt.price != null && (minPrices[opt.service_id] == null || opt.price < minPrices[opt.service_id])) {
+          minPrices[opt.service_id] = opt.price;
+        }
+      });
+    }
+
+    // Fetch image counts for all services
     let imageCounts: Record<string, number> = {};
     if (serviceIds.length > 0) {
       const { data: images } = await supabase
@@ -70,8 +89,9 @@ export default function ManageServicesScreen() {
 
     const mapped: ServiceWithOptions[] = (srvRes.data ?? []).map((s: any) => ({
       ...s,
-      option_count: 0,
+      option_count: optionCounts[s.id] || 0,
       image_count: imageCounts[s.id] || 0,
+      min_price: minPrices[s.id] ?? null,
     }));
     setServices(mapped);
     setLoading(false);
@@ -150,16 +170,24 @@ export default function ManageServicesScreen() {
       const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
       const filename = `${user.id}/${Date.now()}.${ext}`;
 
+      console.log('[Upload] bucket: service-images');
+      console.log('[Upload] path:', filename);
+
       const response = await fetch(uri);
       const blob = await response.blob();
 
-      const { error: uploadError } = await supabase.storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('service-images')
         .upload(filename, blob, { contentType: `image/${ext}` });
 
-      if (uploadError) throw uploadError;
+      console.log('[Upload] response data:', uploadData);
+      if (uploadError) {
+        console.error('[Upload] error:', uploadError);
+        throw uploadError;
+      }
 
       const { data: urlData } = supabase.storage.from('service-images').getPublicUrl(filename);
+      console.log('[Upload] publicUrl:', urlData?.publicUrl);
 
       const { error: insertError } = await supabase.from('service_images').insert({
         service_id: serviceId,
@@ -172,6 +200,7 @@ export default function ManageServicesScreen() {
       Alert.alert('Success', 'Photo uploaded successfully.');
       fetchServices();
     } catch (err: any) {
+      console.error('[Upload] catch error:', err);
       Alert.alert('Upload failed', err.message || 'Could not upload photo');
     } finally {
       setUploadingPhoto(null);
@@ -235,6 +264,9 @@ export default function ManageServicesScreen() {
           renderItem={({ item }) => {
             const portfolioPercent = Math.min(100, (item.image_count ?? 0) * 25);
             const hasPricing = (item.option_count ?? 0) > 0 || item.price > 0;
+            const pricingLabel = hasPricing
+              ? (item.min_price != null ? `Starting at ₱${item.min_price.toLocaleString()}` : 'Set')
+              : 'Not Set';
             return (
               <View style={[styles.card, !item.is_active && styles.cardDisabled]}>
                 <View style={styles.cardTop}>
@@ -248,7 +280,7 @@ export default function ManageServicesScreen() {
                         </Text>
                       </View>
                       <Text style={styles.pricingText}>
-                        Pricing: {hasPricing ? 'Set' : 'Not Set'}
+                        Pricing: {pricingLabel}
                       </Text>
                     </View>
                     {/* Portfolio completion bar */}
