@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet, Alert,
-  Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
+  Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +9,8 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
-import { Service, ServiceImage } from '../../types';
+import { Service } from '../../types';
+import * as ImagePicker from 'expo-image-picker';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
@@ -32,6 +33,7 @@ export default function ManageServicesScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', description: '' });
 
   const fetchServices = useCallback(async () => {
@@ -53,10 +55,23 @@ export default function ManageServicesScreen() {
     const cat = (provRes.data as any)?.categories;
     setCategoryName(cat?.name ?? '');
 
+    // Fetch image counts for all services
+    const serviceIds = (srvRes.data ?? []).map((s: any) => s.id);
+    let imageCounts: Record<string, number> = {};
+    if (serviceIds.length > 0) {
+      const { data: images } = await supabase
+        .from('service_images')
+        .select('service_id')
+        .in('service_id', serviceIds);
+      (images ?? []).forEach((img: any) => {
+        imageCounts[img.service_id] = (imageCounts[img.service_id] || 0) + 1;
+      });
+    }
+
     const mapped: ServiceWithOptions[] = (srvRes.data ?? []).map((s: any) => ({
       ...s,
       option_count: 0,
-      image_count: 0,
+      image_count: imageCounts[s.id] || 0,
     }));
     setServices(mapped);
     setLoading(false);
@@ -111,6 +126,56 @@ export default function ManageServicesScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => { await supabase.from('services').delete().eq('id', id); fetchServices(); } },
     ]);
+  };
+
+  const handleUploadPhoto = async (serviceId: string) => {
+    if (!user) return;
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission required', 'Please allow access to your photo library.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+
+    setUploadingPhoto(serviceId);
+    try {
+      const uri = result.assets[0].uri;
+      const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const filename = `${user.id}/${Date.now()}.${ext}`;
+
+      const response = await fetch(uri);
+      const blob = await response.blob();
+
+      const { error: uploadError } = await supabase.storage
+        .from('service-images')
+        .upload(filename, blob, { contentType: `image/${ext}` });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from('service-images').getPublicUrl(filename);
+
+      const { error: insertError } = await supabase.from('service_images').insert({
+        service_id: serviceId,
+        image_url: urlData.publicUrl,
+        sort_order: 0,
+      });
+
+      if (insertError) throw insertError;
+
+      Alert.alert('Success', 'Photo uploaded successfully.');
+      fetchServices();
+    } catch (err: any) {
+      Alert.alert('Upload failed', err.message || 'Could not upload photo');
+    } finally {
+      setUploadingPhoto(null);
+    }
   };
 
   return (
@@ -215,8 +280,16 @@ export default function ManageServicesScreen() {
                     <Ionicons name="pricetag-outline" size={16} color={COLORS.primary} />
                     <Text style={styles.actionBtnText}>Manage Pricing</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionBtn} onPress={() => Alert.alert('Coming Soon', 'Photo upload for services will be available in the next update.')}>
-                    <Ionicons name="images-outline" size={16} color={COLORS.primary} />
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => handleUploadPhoto(item.id)}
+                    disabled={uploadingPhoto === item.id}
+                  >
+                    {uploadingPhoto === item.id ? (
+                      <ActivityIndicator size={16} color={COLORS.primary} />
+                    ) : (
+                      <Ionicons name="images-outline" size={16} color={COLORS.primary} />
+                    )}
                     <Text style={styles.actionBtnText}>Upload Photos</Text>
                   </TouchableOpacity>
                 </View>
