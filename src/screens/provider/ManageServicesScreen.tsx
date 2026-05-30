@@ -39,8 +39,13 @@ export default function ManageServicesScreen() {
 
     const [provRes, srvRes] = await Promise.all([
       supabase.from('providers').select('categories(name)').eq('id', user.id).single(),
-      supabase.from('services').select('*, service_options(id), service_images(id)').eq('provider_id', user.id).order('sort_order').order('created_at'),
+      supabase.from('services').select('*, service_options(id)').eq('provider_id', user.id).order('sort_order').order('created_at'),
     ]);
+
+    if (srvRes.error) {
+      console.error('ManageServices: services query failed', srvRes.error);
+      Alert.alert('Error loading services', srvRes.error.message);
+    }
 
     const cat = (provRes.data as any)?.categories;
     setCategoryName(cat?.name ?? '');
@@ -48,7 +53,7 @@ export default function ManageServicesScreen() {
     const mapped: ServiceWithOptions[] = (srvRes.data ?? []).map((s: any) => ({
       ...s,
       option_count: s.service_options?.length ?? 0,
-      image_count: s.service_images?.length ?? 0,
+      image_count: 0, // TODO: fetch from service_images table when photo upload is implemented
     }));
     setServices(mapped);
     setLoading(false);
