@@ -10,11 +10,15 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { ProviderStackParamList } from '../../navigation/types';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Button from '../../components/ui/Button';
+
+type NavProp = NativeStackNavigationProp<ProviderStackParamList>;
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const HOURS = Array.from({ length: 24 }, (_, i) => {
@@ -31,6 +35,7 @@ interface DaySchedule {
 }
 
 export default function ScheduleScreen() {
+  const navigation = useNavigation<NavProp>();
   const { user } = useAuthStore();
   const [schedule, setSchedule] = useState<DaySchedule[]>(
     DAYS.map((day) => ({
@@ -125,7 +130,14 @@ export default function ScheduleScreen() {
     ]);
 
     setSaving(false);
-    Alert.alert('Saved', 'Your availability schedule has been updated.');
+    Alert.alert(
+      'Saved',
+      'Your availability schedule has been updated.',
+      [
+        { text: 'Stay Here', style: 'cancel' },
+        { text: 'Go to Dashboard', onPress: () => navigation.navigate('ProviderTabs', { screen: 'Dashboard' }) },
+      ]
+    );
   };
 
   return (
