@@ -63,6 +63,7 @@ export type ProviderStackParamList = {
   ProfileSetup: undefined;
   ManageServices: undefined;
   ServiceOptions: { serviceId: string; serviceName: string };
+  ProviderServicePreview: { serviceId: string };
   ProviderOnboarding: undefined;
   PendingApproval: undefined;
   ReportScreen: { reportedUserId: string; bookingId?: string; reportedUserName?: string };

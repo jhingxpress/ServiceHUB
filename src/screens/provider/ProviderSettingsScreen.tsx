@@ -13,7 +13,10 @@ type NavProp = NativeStackNavigationProp<ProviderStackParamList>;
 
 export default function ProviderSettingsScreen() {
   const navigation = useNavigation<NavProp>();
-  const { user, signOut } = useAuthStore();
+  const { user, providerProfile, signOut } = useAuthStore();
+
+  // Fallback chain: provider photo → user avatar → initials
+  const avatarUri = providerProfile?.profile_photo_url ?? user?.avatar_url ?? null;
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -49,7 +52,7 @@ export default function ProviderSettingsScreen() {
 
         {/* Profile card */}
         <View style={styles.profileCard}>
-          <Avatar uri={user?.avatar_url} name={user?.full_name} size={60} borderColor={COLORS.primary} />
+          <Avatar uri={avatarUri} name={user?.full_name} size={60} borderColor={COLORS.primary} />
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>{user?.full_name ?? 'Provider'}</Text>
             <Text style={styles.profileEmail}>{user?.email}</Text>

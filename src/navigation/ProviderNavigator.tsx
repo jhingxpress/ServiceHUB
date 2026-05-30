@@ -17,6 +17,7 @@ import ChatScreen from '../screens/customer/ChatScreen';
 import ProviderProfileSetupScreen from '../screens/provider/ProviderProfileSetupScreen';
 import ManageServicesScreen from '../screens/provider/ManageServicesScreen';
 import ServiceOptionsScreen from '../screens/provider/ServiceOptionsScreen';
+import ProviderServicePreviewScreen from '../screens/provider/ProviderServicePreviewScreen';
 import ProviderOnboardingScreen from '../screens/provider/ProviderOnboardingScreen';
 import PendingApprovalScreen from '../screens/provider/PendingApprovalScreen';
 import ReportScreen from '../screens/shared/ReportScreen';
@@ -92,6 +93,7 @@ export default function ProviderNavigator() {
           <Stack.Screen name="ProfileSetup" component={ProviderProfileSetupScreen} />
           <Stack.Screen name="ManageServices" component={ManageServicesScreen} />
           <Stack.Screen name="ServiceOptions" component={ServiceOptionsScreen} />
+          <Stack.Screen name="ProviderServicePreview" component={ProviderServicePreviewScreen} />
           <Stack.Screen name="ReportScreen" component={ReportScreen} />
         </>
       ) : isPending ? (

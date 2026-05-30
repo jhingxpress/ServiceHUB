@@ -77,6 +77,28 @@ export interface ProviderCategory {
   categories?: Category;
 }
 
+/** Service group under a category (e.g. Motorcycle Services under Automotive) */
+export interface ServiceGroup {
+  id: string;
+  category_id: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+/** Service template within a group (e.g. Motorcycle Repair under Motorcycle Services) */
+export interface ServiceTemplate {
+  id: string;
+  service_group_id: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface Provider {
   id: string;
   // Business info
@@ -96,6 +118,13 @@ export interface Provider {
   location: string | null;
   latitude: number | null;
   longitude: number | null;
+  // Business Profile
+  profile_photo_url: string | null;
+  cover_photo_url: string | null;
+  business_headline: string | null;
+  business_description: string | null;
+  certifications: string | null;
+  profile_completed: boolean;
   // Storefront
   provider_type: ProviderType;
   cover_photo: string | null;
@@ -342,7 +371,7 @@ export interface ProviderChecklist {
   has_pricing: boolean;
   has_photos: boolean;
   has_schedule: boolean;
-  has_published_profile: boolean;
+  has_business_profile: boolean;
   progress_percent: number;
   updated_at: string;
 }

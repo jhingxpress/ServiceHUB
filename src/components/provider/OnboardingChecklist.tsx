@@ -21,7 +21,7 @@ const CHECKLIST_ITEMS: { key: keyof ProviderChecklist; label: string; icon: Reac
   { key: 'has_pricing', label: 'Set Service Pricing', icon: 'pricetag-outline', navTarget: 'ManageServices' },
   { key: 'has_photos', label: 'Upload Service Photos', icon: 'images-outline', navTarget: 'ManageServices' },
   { key: 'has_schedule', label: 'Configure Schedule', icon: 'calendar-outline', navTarget: 'Schedule' },
-  { key: 'has_published_profile', label: 'Publish Business Profile', icon: 'rocket-outline', navTarget: 'PublishProfile' },
+  { key: 'has_business_profile', label: 'Complete Business Profile', icon: 'business-outline', navTarget: 'ProfileSetup' },
 ];
 
 export default function OnboardingChecklist({ checklist, provider, onPublish }: Props) {
@@ -57,10 +57,6 @@ export default function OnboardingChecklist({ checklist, provider, onPublish }: 
   }
 
   const handlePress = (item: typeof CHECKLIST_ITEMS[0]) => {
-    if (item.navTarget === 'PublishProfile') {
-      if (onPublish) onPublish();
-      return;
-    }
     if (item.navTarget) {
       if (item.navTarget === 'Schedule') {
         navigation.getParent()?.navigate('Schedule');

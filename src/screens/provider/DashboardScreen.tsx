@@ -20,6 +20,7 @@ import { Booking, Provider, ProviderChecklist, ProviderPerformance, ProviderScor
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 import Badge from '../../components/ui/Badge';
+import Button from '../../components/ui/Button';
 import OnboardingChecklist from '../../components/provider/OnboardingChecklist';
 import PerformanceCard from '../../components/provider/PerformanceCard';
 import ProviderScoreRing from '../../components/provider/ProviderScoreRing';
@@ -38,7 +39,10 @@ interface Stats {
 
 export default function ProviderDashboard() {
   const navigation = useNavigation<NavProp>();
-  const { user } = useAuthStore();
+  const { user, providerProfile } = useAuthStore();
+
+  // Fallback chain: provider photo → user avatar → initials
+  const avatarUri = providerProfile?.profile_photo_url ?? user?.avatar_url ?? null;
   const [stats, setStats] = useState<Stats>({ pending: 0, active: 0, completed: 0, earnings: 0 });
   const [recentBookings, setRecentBookings] = useState<Booking[]>([]);
   const [checklist, setChecklist] = useState<ProviderChecklist | null>(null);
@@ -107,28 +111,8 @@ export default function ProviderDashboard() {
     await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
   };
 
-  const handlePublish = async () => {
-    if (!user) return;
-    const checklistKeys = ['is_approved', 'has_first_service', 'has_pricing', 'has_photos', 'has_schedule'] as const;
-    const allReady = checklistKeys.every((k) => checklist?.[k] === true);
-    if (!allReady) {
-      Alert.alert(
-        'Not Ready Yet',
-        'Complete all other onboarding steps before publishing your business profile.'
-      );
-      return;
-    }
-    const { error } = await supabase
-      .from('providers')
-      .update({ marketplace_status: 'live' })
-      .eq('id', user.id);
-    if (error) {
-      Alert.alert('Publish failed', error.message);
-      return;
-    }
-    await supabase.rpc('refresh_provider_checklist', { p_provider_id: user.id });
-    loadData();
-    Alert.alert('Published', 'Your business profile is now live in the marketplace!');
+  const handleCompleteProfile = () => {
+    navigation.navigate('ProfileSetup');
   };
 
   const setBusinessStatus = async (status: BusinessStatus) => {
@@ -151,7 +135,7 @@ export default function ProviderDashboard() {
     <SafeAreaView style={styles.safe}>
       <ProviderApprovalModal
         visible={showApprovalModal}
-        progressText={`${checklist ? (checklist.progress_percent > 0 ? 1 : 0) : 0}/5 Complete`}
+        progressText={`${checklist ? (checklist.progress_percent > 0 ? 1 : 0) : 0}/6 Complete`}
         onDismiss={dismissApprovalModal}
       />
       <ScrollView
@@ -164,7 +148,7 @@ export default function ProviderDashboard() {
             <Text style={styles.greeting}>Welcome back,</Text>
             <Text style={styles.userName}>{user?.full_name?.split(' ')[0] ?? 'Provider'}</Text>
           </View>
-          <Avatar uri={user?.avatar_url} name={user?.full_name} size={44} borderColor={COLORS.primary} />
+          <Avatar uri={avatarUri} name={user?.full_name} size={44} borderColor={COLORS.primary} />
         </View>
 
         {/* Business Status */}
@@ -198,8 +182,64 @@ export default function ProviderDashboard() {
           </View>
         )}
 
+        {/* Profile Completion Card */}
+        {provider && !provider.profile_completed && (
+          <View style={styles.profileCard}>
+            <View style={styles.profileHeader}>
+              <View style={styles.profileIconWrap}>
+                <Ionicons name="business-outline" size={24} color={COLORS.primary} />
+              </View>
+              <View style={styles.profileTextWrap}>
+                <Text style={styles.profileTitle}>Complete Your Business Profile</Text>
+                <Text style={styles.profileSubtitle}>
+                  {Math.round(
+                    ((provider.profile_photo_url ? 1 : 0) +
+                      (provider.cover_photo_url ? 1 : 0) +
+                      (provider.business_name ? 1 : 0) +
+                      (provider.business_headline ? 1 : 0) +
+                      (provider.business_description ? 1 : 0) +
+                      (provider.service_area ? 1 : 0)) *
+                      100 /
+                      6
+                  )}% Complete
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.profileChecklist}>
+              {[
+                { label: 'Business Name', done: !!provider.business_name },
+                { label: 'Headline', done: !!provider.business_headline },
+                { label: 'Profile Photo', done: !!provider.profile_photo_url },
+                { label: 'Cover Photo', done: !!provider.cover_photo_url },
+                { label: 'Service Area', done: !!provider.service_area },
+                { label: 'Description', done: !!provider.business_description },
+              ].map((item) => (
+                <View key={item.label} style={styles.profileCheckItem}>
+                  <Ionicons
+                    name={item.done ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={16}
+                    color={item.done ? COLORS.success : COLORS.textMuted}
+                  />
+                  <Text style={[styles.profileCheckLabel, item.done && styles.profileCheckDone]}>
+                    {item.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            <Button
+              title="Complete Profile"
+              onPress={handleCompleteProfile}
+              fullWidth
+              size="md"
+              style={{ marginTop: SPACING.sm }}
+            />
+          </View>
+        )}
+
         {/* Onboarding Checklist or Business Ready */}
-        <OnboardingChecklist checklist={checklist} provider={provider} onPublish={handlePublish} />
+        <OnboardingChecklist checklist={checklist} provider={provider} />
 
         {/* Business Goals (shown when onboarding complete) */}
         {checklist && checklist.progress_percent >= 100 && (
@@ -427,4 +467,26 @@ const styles = StyleSheet.create({
   bookingCustomer: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
   bookingService: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 1 },
   bookingDate: { fontSize: FONTS.sizes.xs, color: COLORS.textLight, marginTop: 2 },
+  profileCard: {
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.small,
+  },
+  profileHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.md },
+  profileIconWrap: {
+    width: 48, height: 48, borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center',
+  },
+  profileTextWrap: { flex: 1 },
+  profileTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
+  profileSubtitle: { fontSize: FONTS.sizes.sm, color: COLORS.primary, fontFamily: FONTS.medium, marginTop: 2 },
+  profileChecklist: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginBottom: SPACING.md },
+  profileCheckItem: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, width: '47%' },
+  profileCheckLabel: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontFamily: FONTS.medium },
+  profileCheckDone: { color: COLORS.success, textDecorationLine: 'line-through' },
 });
