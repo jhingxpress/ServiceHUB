@@ -121,6 +121,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
   const [actionNotes, setActionNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [processingDoc, setProcessingDoc] = useState<string | null>(null);
 
   const loadData = async () => {
@@ -245,8 +246,12 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
       }
       
       console.log('[ProviderDetail] === REFRESHING DATA ===');
+      const completedAction = actionMode;
       setActionMode(null); setActionNotes('');
       await loadData();
+      if (completedAction === 'approve') {
+        setShowSuccessModal(true);
+      }
       console.log('[ProviderDetail] === ACTION COMPLETE ===');
     } catch (err) {
       console.error('[ProviderDetail] === ACTION EXCEPTION ===');
@@ -559,6 +564,44 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           </TouchableOpacity>
         </View>
       </Modal>
+
+      {/* Approval Success Modal */}
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSuccessModal(false)}
+        statusBarTranslucent
+      >
+        <View style={styles.successOverlay}>
+          <View style={styles.successCard}>
+            <View style={styles.successIconWrap}>
+              <Ionicons name="checkmark-circle" size={56} color={COLORS.success} />
+            </View>
+            <Text style={styles.successTitle}>Provider Approved</Text>
+            <Text style={styles.successBody}>
+              {provider?.business_name ?? provider?.users?.full_name ?? 'Provider'} has been approved and can now offer services on ServiceHub.
+            </Text>
+            <View style={styles.successActions}>
+              <TouchableOpacity
+                style={[styles.successBtn, styles.successBtnSecondary]}
+                onPress={() => setShowSuccessModal(false)}
+              >
+                <Text style={styles.successBtnSecondaryText}>Review Details</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.successBtn, styles.successBtnPrimary]}
+                onPress={() => {
+                  setShowSuccessModal(false);
+                  navigation.goBack();
+                }}
+              >
+                <Text style={styles.successBtnPrimaryText}>Back to Pending Providers</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -696,4 +739,74 @@ const styles = StyleSheet.create({
   logAction: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
   logNotes: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2, lineHeight: 20 },
   logMeta: { fontSize: FONTS.sizes.xs, color: COLORS.textLight, marginTop: 3 },
+  successOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  successCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.xl,
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+    gap: SPACING.md,
+    ...SHADOWS.large,
+  },
+  successIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.successLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
+  successTitle: {
+    fontSize: FONTS.sizes.xl,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+    textAlign: 'center',
+  },
+  successBody: {
+    fontSize: FONTS.sizes.base,
+    fontFamily: FONTS.regular,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  successActions: {
+    width: '100%',
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  successBtn: {
+    width: '100%',
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successBtnPrimary: {
+    backgroundColor: COLORS.success,
+    ...SHADOWS.small,
+  },
+  successBtnPrimaryText: {
+    fontSize: FONTS.sizes.base,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.white,
+  },
+  successBtnSecondary: {
+    backgroundColor: COLORS.surfaceSecondary,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+  },
+  successBtnSecondaryText: {
+    fontSize: FONTS.sizes.base,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.text,
+  },
 });
