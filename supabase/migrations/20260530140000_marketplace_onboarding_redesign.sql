@@ -28,9 +28,24 @@ ALTER TABLE public.provider_checklist
   ADD COLUMN IF NOT EXISTS has_published_profile BOOLEAN DEFAULT false;
 
 -- ============================================================
--- 3. UPDATE compute_provider_checklist (5-step, 20% each)
+-- 3. DROP and RECREATE compute_provider_checklist
+--    (CREATE OR REPLACE fails when OUT parameter row type changes)
 -- ============================================================
-CREATE OR REPLACE FUNCTION public.compute_provider_checklist(p_provider_id UUID)
+
+-- Drop dependent trigger first
+DROP TRIGGER IF EXISTS trg_auto_publish_provider ON public.provider_checklist;
+
+-- Drop dependent function
+DROP FUNCTION IF EXISTS public.auto_publish_provider();
+
+-- Drop function that depends on compute_provider_checklist
+DROP FUNCTION IF EXISTS public.refresh_provider_checklist(UUID);
+
+-- Drop the function whose return type is changing
+DROP FUNCTION IF EXISTS public.compute_provider_checklist(UUID);
+
+-- Recreate compute_provider_checklist with new signature
+CREATE FUNCTION public.compute_provider_checklist(p_provider_id UUID)
 RETURNS TABLE (
   is_approved BOOLEAN,
   has_first_service BOOLEAN,
@@ -78,9 +93,9 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================================
--- 4. UPDATE refresh_provider_checklist (5 items = 20% each)
+-- 4. RECREATE refresh_provider_checklist (5 items = 20% each)
 -- ============================================================
-CREATE OR REPLACE FUNCTION public.refresh_provider_checklist(p_provider_id UUID)
+CREATE FUNCTION public.refresh_provider_checklist(p_provider_id UUID)
 RETURNS void AS $$
 DECLARE
   v_is_approved BOOLEAN;
@@ -125,9 +140,9 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================================
--- 5. FUNCTION: Auto-publish provider when all prerequisites met
+-- 5. RECREATE auto-publish function and trigger
 -- ============================================================
-CREATE OR REPLACE FUNCTION public.auto_publish_provider()
+CREATE FUNCTION public.auto_publish_provider()
 RETURNS TRIGGER AS $$
 BEGIN
   -- If all onboarding steps except publishing are complete, auto-publish
@@ -150,8 +165,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Drop existing trigger if any to avoid duplicates
-DROP TRIGGER IF EXISTS trg_auto_publish_provider ON public.provider_checklist;
 CREATE TRIGGER trg_auto_publish_provider
   AFTER INSERT OR UPDATE ON public.provider_checklist
   FOR EACH ROW
