@@ -160,25 +160,48 @@ export default function ManageServicesScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       quality: 0.8,
+      base64: true,
     });
 
-    if (result.canceled || !result.assets?.[0]?.uri) return;
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    const uri = asset.uri;
+    const ext = (asset.fileName || uri).split('.').pop()?.toLowerCase() || 'jpg';
+    const mimeType = `image/${ext}`;
+    const filename = `${user.id}/${Date.now()}.${ext}`;
+
+    console.log('[Upload] selected URI:', uri);
+    console.log('[Upload] fileName:', asset.fileName || 'unknown');
+    console.log('[Upload] mimeType:', mimeType);
+    console.log('[Upload] base64 length:', asset.base64 ? asset.base64.length : 0);
+
+    if (!asset.base64) {
+      Alert.alert('Upload failed', 'Could not read image data. Please try again.');
+      return;
+    }
 
     setUploadingPhoto(serviceId);
     try {
-      const uri = result.assets[0].uri;
-      const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
-      const filename = `${user.id}/${Date.now()}.${ext}`;
-
       console.log('[Upload] bucket: service-images');
       console.log('[Upload] path:', filename);
 
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      // Convert base64 to ArrayBuffer (React Native compatible)
+      const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
+        const binaryString = atob(base64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+      };
+
+      const arrayBuffer = base64ToArrayBuffer(asset.base64);
+      console.log('[Upload] ArrayBuffer size:', arrayBuffer.byteLength);
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('service-images')
-        .upload(filename, blob, { contentType: `image/${ext}` });
+        .upload(filename, arrayBuffer, { contentType: mimeType });
 
       console.log('[Upload] response data:', uploadData);
       if (uploadError) {
