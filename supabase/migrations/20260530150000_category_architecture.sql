@@ -192,7 +192,8 @@ ON CONFLICT (provider_id, category_id) DO NOTHING;
 
 ALTER TABLE public.provider_categories ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS provider_categories_select
+DROP POLICY IF EXISTS provider_categories_select ON public.provider_categories;
+CREATE POLICY provider_categories_select
   ON public.provider_categories FOR SELECT
   TO authenticated
   USING (
@@ -203,13 +204,15 @@ CREATE POLICY IF NOT EXISTS provider_categories_select
     )
   );
 
-CREATE POLICY IF NOT EXISTS provider_categories_provider_modify
+DROP POLICY IF EXISTS provider_categories_provider_modify ON public.provider_categories;
+CREATE POLICY provider_categories_provider_modify
   ON public.provider_categories FOR ALL
   TO authenticated
   USING (provider_id = auth.uid())
   WITH CHECK (provider_id = auth.uid());
 
-CREATE POLICY IF NOT EXISTS provider_categories_admin_all
+DROP POLICY IF EXISTS provider_categories_admin_all ON public.provider_categories;
+CREATE POLICY provider_categories_admin_all
   ON public.provider_categories FOR ALL
   TO authenticated
   USING (public.is_admin());
