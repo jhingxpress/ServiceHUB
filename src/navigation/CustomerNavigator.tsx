@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { View, StyleSheet } from 'react-native';
 import { CustomerStackParamList, CustomerTabParamList } from './types';
 import { COLORS, FONTS } from '../constants/theme';
+import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../stores/authStore';
 
 import HomeScreen from '../screens/customer/HomeScreen';
 import SearchScreen from '../screens/customer/SearchScreen';
@@ -19,6 +21,7 @@ import ChatScreen from '../screens/customer/ChatScreen';
 import ReviewScreen from '../screens/customer/ReviewScreen';
 import CategoryListScreen from '../screens/customer/CategoryListScreen';
 import ProviderListScreen from '../screens/customer/ProviderListScreen';
+import ServiceDetailScreen from '../screens/customer/ServiceDetailScreen';
 import NotificationCenterScreen from '../screens/customer/NotificationCenterScreen';
 import MyReviewsScreen from '../screens/customer/MyReviewsScreen';
 import ReportScreen from '../screens/shared/ReportScreen';
@@ -27,6 +30,37 @@ const Stack = createNativeStackNavigator<CustomerStackParamList>();
 const Tab = createBottomTabNavigator<CustomerTabParamList>();
 
 function CustomerTabs() {
+  const { user } = useAuthStore();
+  const [notifBadge, setNotifBadge] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    const fetchBadge = async () => {
+      const { count } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_read', false);
+      setNotifBadge(count ?? 0);
+    };
+    fetchBadge();
+
+    const channel = supabase
+      .channel(`nav-notif-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+        () => setNotifBadge((c) => c + 1)
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+        () => fetchBadge()
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -65,7 +99,11 @@ function CustomerTabs() {
       <Tab.Screen name="Search" component={SearchScreen} />
       <Tab.Screen name="Bookings" component={BookingHistoryScreen} />
       <Tab.Screen name="Messages" component={ChatListScreen} />
-      <Tab.Screen name="Profile" component={CustomerProfileScreen} />
+      <Tab.Screen
+        name="Profile"
+        component={CustomerProfileScreen}
+        options={{ tabBarBadge: notifBadge > 0 ? (notifBadge > 99 ? '99+' : notifBadge) : undefined }}
+      />
     </Tab.Navigator>
   );
 }
@@ -89,6 +127,7 @@ export default function CustomerNavigator() {
       <Stack.Screen name="ReviewService" component={ReviewScreen} />
       <Stack.Screen name="CategoryList" component={CategoryListScreen} />
       <Stack.Screen name="ProviderList" component={ProviderListScreen} />
+      <Stack.Screen name="ServiceDetail" component={ServiceDetailScreen} />
       <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} />
       <Stack.Screen name="MyReviews" component={MyReviewsScreen} />
       <Stack.Screen name="ReportScreen" component={ReportScreen} />

@@ -28,15 +28,35 @@ export default function BusinessGoals({ completedJobs, totalBookings, totalRevie
   ];
 
   const completed = goals.filter((g) => g.done).length;
+  const nextGoal = goals.find((g) => !g.done);
 
   return (
     <View style={styles.card}>
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Business Goals</Text>
-          <Text style={styles.subtitle}>{completed}/{goals.length} Achieved</Text>
+          <Text style={styles.subtitle}>{completed}/{goals.length} Completed</Text>
         </View>
+        {completed === goals.length && (
+          <View style={styles.allDoneBadge}>
+            <Ionicons name="trophy" size={14} color={COLORS.white} />
+          </View>
+        )}
       </View>
+
+      {/* Progress bar */}
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${(completed / goals.length) * 100}%` }]} />
+      </View>
+
+      {/* Next milestone */}
+      {nextGoal && (
+        <View style={styles.nextGoalRow}>
+          <Ionicons name="flag-outline" size={14} color={COLORS.primary} />
+          <Text style={styles.nextGoalLabel}>Next:</Text>
+          <Text style={styles.nextGoalText}>{nextGoal.label}</Text>
+        </View>
+      )}
 
       <View style={styles.items}>
         {goals.map((goal) => (
@@ -44,7 +64,7 @@ export default function BusinessGoals({ completedJobs, totalBookings, totalRevie
             <View style={[styles.iconWrap, goal.done ? styles.iconDone : styles.iconTodo]}>
               <Ionicons
                 name={goal.done ? 'checkmark' : goal.icon}
-                size={16}
+                size={14}
                 color={goal.done ? COLORS.success : COLORS.primary}
               />
             </View>
@@ -116,5 +136,44 @@ const styles = StyleSheet.create({
   labelDone: {
     textDecorationLine: 'line-through',
     color: COLORS.textLight,
+  },
+  progressTrack: {
+    height: 6,
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.full,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: COLORS.success,
+    borderRadius: BORDER_RADIUS.full,
+  },
+  allDoneBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nextGoalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 6,
+  },
+  nextGoalLabel: {
+    fontSize: FONTS.sizes.xs,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.primary,
+  },
+  nextGoalText: {
+    fontSize: FONTS.sizes.xs,
+    fontFamily: FONTS.medium,
+    color: COLORS.text,
+    flex: 1,
   },
 });

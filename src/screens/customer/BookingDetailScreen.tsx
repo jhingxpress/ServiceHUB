@@ -44,7 +44,8 @@ export default function BookingDetailScreen() {
       .select(`
         *,
         provider:providers!bookings_provider_id_fkey(
-          *, users!providers_id_fkey(full_name, avatar_url, phone)
+          *, business_name, profile_photo_url, business_logo,
+          users!providers_id_fkey(full_name, avatar_url, phone)
         ),
         service:services(name, price),
         customer:users!bookings_customer_id_fkey(full_name, avatar_url)
@@ -120,7 +121,10 @@ export default function BookingDetailScreen() {
     );
   }
 
-  const providerUser = (booking.provider as unknown as { users: { full_name: string | null; avatar_url: string | null; phone: string | null } })?.users;
+  const providerData = booking.provider as unknown as { business_name: string | null; profile_photo_url: string | null; business_logo: string | null; users: { full_name: string | null; avatar_url: string | null; phone: string | null } } | null;
+  const providerUser = providerData?.users;
+  const providerName = providerData?.business_name ?? providerUser?.full_name ?? 'Provider';
+  const providerPhoto = providerData?.profile_photo_url ?? providerData?.business_logo ?? providerUser?.avatar_url;
   const currentStep = STEPS.indexOf(booking.status);
   const isCompleted = booking.status === 'completed';
   const isCancellable = ['pending', 'accepted', 'on_the_way', 'arrived'].includes(booking.status);
@@ -189,9 +193,9 @@ export default function BookingDetailScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Provider</Text>
           <View style={styles.providerRow}>
-            <Avatar uri={providerUser?.avatar_url} name={providerUser?.full_name} size={52} />
+            <Avatar uri={providerPhoto} name={providerName} size={52} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.providerName}>{providerUser?.full_name ?? 'Provider'}</Text>
+              <Text style={styles.providerName}>{providerName}</Text>
               {providerUser?.phone && (
                 <Text style={styles.providerPhone}>{providerUser.phone}</Text>
               )}

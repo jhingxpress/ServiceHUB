@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,6 +53,7 @@ export default function ProviderDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [showHealthModal, setShowHealthModal] = useState(false);
   const ONBOARDING_KEY = 'provider_onboarding_seen';
 
   const loadData = useCallback(async () => {
@@ -241,17 +243,6 @@ export default function ProviderDashboard() {
         {/* Onboarding Checklist or Business Ready */}
         <OnboardingChecklist checklist={checklist} provider={provider} />
 
-        {/* Business Goals (shown when onboarding complete) */}
-        {checklist && checklist.progress_percent >= 100 && (
-          <BusinessGoals
-            completedJobs={stats.completed}
-            totalBookings={stats.completed + stats.active + stats.pending}
-            totalReviews={provider?.total_reviews ?? 0}
-            earnings={stats.earnings}
-            rating={score?.score ?? 0}
-          />
-        )}
-
         {/* Stats */}
         <View style={styles.statsGrid}>
           {[
@@ -270,11 +261,26 @@ export default function ProviderDashboard() {
           ))}
         </View>
 
-        {/* Provider Score */}
-        <ProviderScoreRing score={score} />
+        {/* Provider Health — compact summary */}
+        {score && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => setShowHealthModal(true)}
+          >
+            <ProviderScoreRing score={score} compact />
+          </TouchableOpacity>
+        )}
 
-        {/* Business Performance */}
-        <PerformanceCard performance={performance} />
+        {/* Business Goals (shown when onboarding complete) */}
+        {checklist && checklist.progress_percent >= 100 && (
+          <BusinessGoals
+            completedJobs={stats.completed}
+            totalBookings={stats.completed + stats.active + stats.pending}
+            totalReviews={provider?.total_reviews ?? 0}
+            earnings={stats.earnings}
+            rating={score?.score ?? 0}
+          />
+        )}
 
         {/* Quick Actions with badges */}
         <View style={styles.quickSection}>
@@ -305,23 +311,10 @@ export default function ProviderDashboard() {
           </View>
         </View>
 
-        {/* Future Features Placeholders */}
-        <View style={styles.futureSection}>
-          <Text style={styles.sectionTitle}>Coming Soon</Text>
-          <View style={styles.futureRow}>
-            {[
-              { label: 'Top Rated', icon: 'trophy-outline' },
-              { label: 'Fast Responder', icon: 'flash-outline' },
-              { label: 'Verified Pro', icon: 'shield-checkmark-outline' },
-              { label: 'Boost', icon: 'rocket-outline' },
-            ].map((f) => (
-              <View key={f.label} style={styles.futureChip}>
-                <Ionicons name={f.icon as React.ComponentProps<typeof Ionicons>['name']} size={16} color={COLORS.textMuted} />
-                <Text style={styles.futureChipText}>{f.label}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
+        {/* Business Performance — hidden when no meaningful activity */}
+        {performance && (performance.profile_views > 0 || performance.total_bookings > 0 || performance.completion_rate > 0) && (
+          <PerformanceCard performance={performance} />
+        )}
 
         {/* Recent Bookings */}
         <View style={styles.section}>
@@ -360,6 +353,28 @@ export default function ProviderDashboard() {
 
         <View style={{ height: SPACING.xl }} />
       </ScrollView>
+
+      {/* Provider Health Detail Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showHealthModal}
+        onRequestClose={() => setShowHealthModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Provider Health</Text>
+              <TouchableOpacity onPress={() => setShowHealthModal(false)}>
+                <Ionicons name="close" size={24} color={COLORS.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <ProviderScoreRing score={score} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -435,21 +450,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badgeText: { fontSize: 9, color: COLORS.white, fontFamily: FONTS.bold },
-  futureSection: { paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
-  futureRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  futureChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-    backgroundColor: COLORS.surfaceTertiary,
-    borderRadius: BORDER_RADIUS.full,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    opacity: 0.6,
-  },
-  futureChipText: { fontSize: FONTS.sizes.xs, color: COLORS.textMuted, fontFamily: FONTS.medium },
   section: { paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm },
   sectionLink: { fontSize: FONTS.sizes.sm, color: COLORS.primary, fontFamily: FONTS.semiBold },
@@ -489,4 +489,29 @@ const styles = StyleSheet.create({
   profileCheckItem: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, width: '47%' },
   profileCheckLabel: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontFamily: FONTS.medium },
   profileCheckDone: { color: COLORS.success, textDecorationLine: 'line-through' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xl,
+    maxHeight: '85%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.md,
+  },
+  modalTitle: {
+    fontSize: FONTS.sizes.lg,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+  },
 });

@@ -49,6 +49,7 @@ export default function BookingHistoryScreen() {
       .select(`
         *,
         provider:providers!bookings_provider_id_fkey(
+          business_name, profile_photo_url, business_logo,
           users!providers_id_fkey(full_name, avatar_url)
         ),
         service:services(name)
@@ -76,7 +77,9 @@ export default function BookingHistoryScreen() {
   const onRefresh = () => { setRefreshing(true); fetch(); };
 
   const renderBooking = ({ item }: { item: Booking }) => {
-    const prov = (item.provider as unknown as { users: { full_name: string | null; avatar_url: string | null } })?.users;
+    const prov = item.provider as unknown as { business_name: string | null; profile_photo_url: string | null; business_logo: string | null; users: { full_name: string | null; avatar_url: string | null } } | null;
+    const provName = prov?.business_name ?? prov?.users?.full_name ?? 'Provider';
+    const provPhoto = prov?.profile_photo_url ?? prov?.business_logo ?? prov?.users?.avatar_url;
     return (
       <TouchableOpacity
         style={styles.card}
@@ -84,10 +87,10 @@ export default function BookingHistoryScreen() {
         activeOpacity={0.8}
       >
         <View style={styles.cardLeft}>
-          <Avatar uri={prov?.avatar_url} name={prov?.full_name} size={48} />
+          <Avatar uri={provPhoto} name={provName} size={48} />
           <View style={styles.info}>
             <Text style={styles.providerName} numberOfLines={1}>
-              {prov?.full_name ?? 'Provider'}
+              {provName}
             </Text>
             <Text style={styles.serviceName} numberOfLines={1}>
               {item.service?.name ?? 'Service'}

@@ -14,121 +14,100 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CustomerStackParamList } from '../../navigation/types';
 import { supabase } from '../../lib/supabase';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
-import Avatar from '../../components/ui/Avatar';
-import Badge from '../../components/ui/Badge';
+import ServiceCard from '../../components/marketplace/ServiceCard';
 import EmptyState from '../../components/ui/EmptyState';
 
 type Props = NativeStackScreenProps<CustomerStackParamList, 'CategoryList'>;
 
-interface ProviderItem {
+interface ServiceItem {
   id: string;
-  bio: string | null;
-  location: string | null;
-  hourly_rate: number | null;
-  rating: number | null;
-  total_reviews: number | null;
-  users: { full_name: string | null; avatar_url: string | null };
-  services: { name: string; price: number }[];
+  name: string;
+  price: number;
+  provider_name: string | null;
+  provider_rating: number | null;
+  provider_total_reviews: number | null;
+  image_url: string | null;
 }
 
-const SORT_OPTIONS = ['Top Rated', 'Nearest', 'Lowest Price', 'Most Reviews'];
+const SORT_OPTIONS = ['Top Rated', 'Lowest Price', 'Most Reviews'];
 
 export default function CategoryListScreen({ route, navigation }: Props) {
   const { categoryId, categoryName } = route.params;
-  const [providers, setProviders] = useState<ProviderItem[]>([]);
-  const [filtered, setFiltered] = useState<ProviderItem[]>([]);
+  const [services, setServices] = useState<ServiceItem[]>([]);
+  const [filtered, setFiltered] = useState<ServiceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [sortIdx, setSortIdx] = useState(0);
 
   useEffect(() => {
     supabase
-      .from('providers')
+      .from('services')
       .select(`
-        id, bio, location, hourly_rate, rating, total_reviews,
-        users!providers_id_fkey(full_name, avatar_url),
-        services(name, price)
+        id, name, price, provider_id,
+        provider:providers!services_provider_id_fkey(
+          business_name, rating, total_reviews, profile_photo_url, business_logo
+        )
       `)
-      .eq('category_id', categoryId)
-      .eq('is_verified', true)
-      .eq('is_available', true)
+      .eq('provider.category_id', categoryId)
+      .eq('provider.status', 'approved')
+      .eq('provider.is_available', true)
+      .eq('provider.marketplace_status', 'live')
+      .is('provider.deleted_at', null)
+      .eq('is_active', true)
       .is('deleted_at', null)
-      .then(({ data }) => {
-        const list = (data ?? []) as unknown as ProviderItem[];
-        setProviders(list);
+      .then(async ({ data }) => {
+        const rawServices = (data ?? []) as any[];
+        const serviceIds = rawServices.map((s) => s.id);
+
+        let imageMap: Record<string, string> = {};
+        if (serviceIds.length > 0) {
+          const { data: images } = await supabase
+            .from('service_images')
+            .select('service_id, image_url')
+            .in('service_id', serviceIds)
+            .order('sort_order');
+          (images ?? []).forEach((img: any) => {
+            if (!imageMap[img.service_id]) imageMap[img.service_id] = img.image_url;
+          });
+        }
+
+        const list: ServiceItem[] = rawServices.map((s) => ({
+          id: s.id,
+          name: s.name,
+          price: s.price ?? 0,
+          provider_name: s.provider?.business_name ?? null,
+          provider_rating: s.provider?.rating ?? null,
+          provider_total_reviews: s.provider?.total_reviews ?? null,
+          image_url: imageMap[s.id] ?? null,
+        }));
+
+        setServices(list);
         setFiltered(list);
         setLoading(false);
       });
   }, [categoryId]);
 
   useEffect(() => {
-    let list = providers;
+    let list = services;
     if (search.trim()) {
       const q = search.toLowerCase();
-      list = list.filter(
-        (p) =>
-          p.users?.full_name?.toLowerCase().includes(q) ||
-          p.location?.toLowerCase().includes(q)
-      );
+      list = list.filter((s) => s.name.toLowerCase().includes(q));
     }
     switch (sortIdx) {
-      case 0: list = [...list].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)); break;
-      case 2: list = [...list].sort((a, b) => (a.hourly_rate ?? 0) - (b.hourly_rate ?? 0)); break;
-      case 3: list = [...list].sort((a, b) => (b.total_reviews ?? 0) - (a.total_reviews ?? 0)); break;
+      case 0: list = [...list].sort((a, b) => (b.provider_rating ?? 0) - (a.provider_rating ?? 0)); break;
+      case 1: list = [...list].sort((a, b) => a.price - b.price); break;
+      case 2: list = [...list].sort((a, b) => (b.provider_total_reviews ?? 0) - (a.provider_total_reviews ?? 0)); break;
     }
     setFiltered(list);
-  }, [providers, search, sortIdx]);
+  }, [services, search, sortIdx]);
 
-  const renderProvider = ({ item }: { item: ProviderItem }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => navigation.navigate('ProviderStorefront', { providerId: item.id })}
-      activeOpacity={0.85}
-    >
-      <View style={styles.cardTop}>
-        <Avatar uri={item.users?.avatar_url} name={item.users?.full_name} size={64} borderColor={COLORS.primary} />
-        <View style={styles.cardInfo}>
-          <Text style={styles.providerName}>{item.users?.full_name ?? 'Provider'}</Text>
-          {item.location && (
-            <View style={styles.locRow}>
-              <Ionicons name="location-outline" size={12} color={COLORS.textLight} />
-              <Text style={styles.locText}>{item.location}</Text>
-            </View>
-          )}
-          <View style={styles.ratingRow}>
-            <Ionicons name="star" size={13} color="#F59E0B" />
-            <Text style={styles.ratingText}>
-              {item.rating ? Number(item.rating).toFixed(1) : 'New'}
-              {item.total_reviews ? ` (${item.total_reviews})` : ''}
-            </Text>
-            {item.hourly_rate && (
-              <Text style={styles.rateText}> · ₱{item.hourly_rate}/hr</Text>
-            )}
-          </View>
-        </View>
-        <TouchableOpacity
-          style={styles.bookBtn}
-          onPress={() => navigation.navigate('BookService', { providerId: item.id })}
-        >
-          <Text style={styles.bookBtnText}>Book</Text>
-        </TouchableOpacity>
-      </View>
-      {item.bio && (
-        <Text style={styles.bio} numberOfLines={2}>{item.bio}</Text>
-      )}
-      {item.services?.length > 0 && (
-        <View style={styles.serviceRow}>
-          {item.services.slice(0, 3).map((s) => (
-            <View key={s.name} style={styles.serviceChip}>
-              <Text style={styles.serviceChipText}>{s.name}</Text>
-            </View>
-          ))}
-          {item.services.length > 3 && (
-            <Text style={styles.moreServices}>+{item.services.length - 3} more</Text>
-          )}
-        </View>
-      )}
-    </TouchableOpacity>
+  const renderService = ({ item }: { item: ServiceItem }) => (
+    <ServiceCard
+      service={item}
+      onPress={() => navigation.navigate('ServiceDetail', { serviceId: item.id })}
+      showBookButton
+      onBook={() => navigation.navigate('ServiceDetail', { serviceId: item.id })}
+    />
   );
 
   return (
@@ -149,7 +128,7 @@ export default function CategoryListScreen({ route, navigation }: Props) {
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
-          placeholder={`Search ${categoryName} providers...`}
+          placeholder={`Search ${categoryName} services...`}
           placeholderTextColor={COLORS.textLight}
         />
         {search.length > 0 && (
@@ -181,13 +160,13 @@ export default function CategoryListScreen({ route, navigation }: Props) {
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
-          renderItem={renderProvider}
+          renderItem={renderService}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <EmptyState
               icon="search-outline"
-              title="No providers found"
+              title="No services found"
               subtitle="Try adjusting your search or filters"
             />
           }

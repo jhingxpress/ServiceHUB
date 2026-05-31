@@ -21,6 +21,7 @@ import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/
 import Avatar from '../../components/ui/Avatar';
 import StarRating from '../../components/ui/StarRating';
 import Badge from '../../components/ui/Badge';
+import ServiceCard from '../../components/marketplace/ServiceCard';
 import { CustomerStackParamList, CustomerTabParamList } from '../../navigation/types';
 
 type NavProp = CompositeNavigationProp<
@@ -40,34 +41,86 @@ export default function HomeScreen() {
   const { user } = useAuthStore();
   const [categories, setCategories] = useState<Category[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [featuredServices, setFeaturedServices] = useState<Array<{
+    id: string;
+    name: string;
+    price: number;
+    provider_name: string | null;
+    provider_rating: number | null;
+    provider_total_reviews: number | null;
+    image_url: string | null;
+  }>>([]);
   const [recentBookings, setRecentBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
-      const [catsRes, provsRes, booksRes] = await Promise.all([
+      const [catsRes, provsRes, srvsRes, booksRes] = await Promise.all([
         supabase.from('categories').select('*').order('name').limit(12),
         supabase
           .from('providers')
-          .select('*, users!providers_id_fkey(full_name, avatar_url), categories(name, icon, color)')
+          .select('*, users!providers_id_fkey(full_name, avatar_url), categories(name, icon, color), profile_photo_url, business_logo')
           .eq('is_verified', true)
           .eq('is_available', true)
           .eq('status', 'approved')
+          .eq('marketplace_status', 'live')
           .is('deleted_at', null)
           .order('rating', { ascending: false })
           .limit(8),
+        supabase
+          .from('services')
+          .select(`
+            id, name, price, provider_id,
+            provider:providers!services_provider_id_fkey(
+              business_name, rating, total_reviews, profile_photo_url, business_logo
+            )
+          `)
+          .eq('provider.status', 'approved')
+          .eq('provider.is_available', true)
+          .eq('provider.marketplace_status', 'live')
+          .is('provider.deleted_at', null)
+          .eq('is_active', true)
+          .is('deleted_at', null)
+          .limit(20),
         user
           ? supabase
               .from('bookings')
-              .select('*, providers!bookings_provider_id_fkey(users!providers_id_fkey(full_name, avatar_url)), services(name)')
+              .select('*, providers!bookings_provider_id_fkey(business_name, profile_photo_url, business_logo), services(name)')
               .eq('customer_id', user.id)
               .order('created_at', { ascending: false })
               .limit(3)
           : Promise.resolve({ data: [] }),
       ]);
+
+      // Fetch service images separately
+      const rawServices = (srvsRes.data ?? []) as any[];
+      const serviceIds = rawServices.map((s) => s.id);
+      let imageMap: Record<string, string> = {};
+      if (serviceIds.length > 0) {
+        const { data: images } = await supabase
+          .from('service_images')
+          .select('service_id, image_url')
+          .in('service_id', serviceIds)
+          .order('sort_order');
+        (images ?? []).forEach((img: any) => {
+          if (!imageMap[img.service_id]) imageMap[img.service_id] = img.image_url;
+        });
+      }
+
       setCategories(catsRes.data ?? []);
       setProviders(provsRes.data ?? []);
+      setFeaturedServices(
+        rawServices.map((s) => ({
+          id: s.id,
+          name: s.name,
+          price: s.price ?? 0,
+          provider_name: s.provider?.business_name ?? null,
+          provider_rating: s.provider?.rating ?? null,
+          provider_total_reviews: s.provider?.total_reviews ?? null,
+          image_url: imageMap[s.id] ?? null,
+        }))
+      );
       setRecentBookings((booksRes as { data: Booking[] | null }).data ?? []);
     } finally {
       setLoading(false);
@@ -140,10 +193,35 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Featured Services */}
+        {featuredServices.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Featured Services</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Search')}>
+                <Text style={styles.sectionLink}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={featuredServices}
+              keyExtractor={(item) => item.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.hscroll}
+              renderItem={({ item }) => (
+                <ServiceCard
+                  service={item}
+                  onPress={() => navigation.navigate('ServiceDetail', { serviceId: item.id })}
+                />
+              )}
+            />
+          </View>
+        )}
+
         {/* Categories */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Services</Text>
+            <Text style={styles.sectionTitle}>Browse Categories</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Search')}>
               <Text style={styles.sectionLink}>See all</Text>
             </TouchableOpacity>
@@ -186,12 +264,12 @@ export default function HomeScreen() {
                 activeOpacity={0.8}
               >
                 <Avatar
-                  uri={item.users?.avatar_url}
-                  name={item.users?.full_name}
+                  uri={item.profile_photo_url ?? item.business_logo ?? item.users?.avatar_url}
+                  name={item.business_name ?? item.users?.full_name}
                   size={52}
                 />
                 <Text style={styles.providerName} numberOfLines={1}>
-                  {item.users?.full_name ?? 'Provider'}
+                  {item.business_name ?? item.users?.full_name ?? 'Provider'}
                 </Text>
                 <Text style={styles.providerCategory} numberOfLines={1}>
                   {item.categories?.name ?? 'Services'}
@@ -226,13 +304,13 @@ export default function HomeScreen() {
               >
                 <View style={styles.bookingLeft}>
                   <Avatar
-                    uri={(booking.provider as unknown as { users: { avatar_url: string | null; full_name: string | null } })?.users?.avatar_url}
-                    name={(booking.provider as unknown as { users: { avatar_url: string | null; full_name: string | null } })?.users?.full_name}
+                    uri={(booking.provider as any)?.profile_photo_url ?? (booking.provider as any)?.business_logo}
+                    name={(booking.provider as any)?.business_name}
                     size={42}
                   />
                   <View style={styles.bookingInfo}>
                     <Text style={styles.bookingProvider} numberOfLines={1}>
-                      {(booking.provider as unknown as { users: { full_name: string | null } })?.users?.full_name ?? 'Provider'}
+                      {(booking.provider as any)?.business_name ?? 'Provider'}
                     </Text>
                     <Text style={styles.bookingService} numberOfLines={1}>
                       {booking.service?.name ?? 'Service'}

@@ -18,6 +18,7 @@ export type CustomerStackParamList = {
   CustomerTabs: NavigatorScreenParams<CustomerTabParamList>;
   ProviderProfile: { providerId: string };
   ProviderStorefront: { providerId: string };
+  ServiceDetail: { serviceId: string };
   BookService: {
     providerId: string;
     serviceId?: string;
@@ -66,6 +67,7 @@ export type ProviderStackParamList = {
   ProviderServicePreview: { serviceId: string };
   ProviderOnboarding: undefined;
   PendingApproval: undefined;
+  NotificationCenter: undefined;
   ReportScreen: { reportedUserId: string; bookingId?: string; reportedUserName?: string };
 };
 

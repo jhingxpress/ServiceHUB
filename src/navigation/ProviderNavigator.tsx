@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet } from 'react-native';
 import { ProviderStackParamList, ProviderTabParamList } from './types';
 import { COLORS, FONTS } from '../constants/theme';
+import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../stores/authStore';
 
 import ProviderDashboardScreen from '../screens/provider/ProviderDashboardScreen';
 import ActiveJobsScreen from '../screens/provider/ActiveJobsScreen';
@@ -20,13 +22,37 @@ import ServiceOptionsScreen from '../screens/provider/ServiceOptionsScreen';
 import ProviderServicePreviewScreen from '../screens/provider/ProviderServicePreviewScreen';
 import ProviderOnboardingScreen from '../screens/provider/ProviderOnboardingScreen';
 import PendingApprovalScreen from '../screens/provider/PendingApprovalScreen';
+import NotificationCenterScreen from '../screens/customer/NotificationCenterScreen';
 import ReportScreen from '../screens/shared/ReportScreen';
-import { useAuthStore } from '../stores/authStore';
 
 const Stack = createNativeStackNavigator<ProviderStackParamList>();
 const Tab = createBottomTabNavigator<ProviderTabParamList>();
 
 function ProviderTabs() {
+  const { user } = useAuthStore();
+  const [requestBadge, setRequestBadge] = useState(0);
+  const [notifBadge, setNotifBadge] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    const fetchBadges = async () => {
+      const [{ count: reqCount }, { count: notifCount }] = await Promise.all([
+        supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('provider_id', user.id).eq('status', 'pending'),
+        supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_read', false),
+      ]);
+      setRequestBadge(reqCount ?? 0);
+      setNotifBadge(notifCount ?? 0);
+    };
+    fetchBadges();
+
+    const channel = supabase
+      .channel(`provider-nav-${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `provider_id=eq.${user.id}` }, () => fetchBadges())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, () => fetchBadges())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -61,11 +87,19 @@ function ProviderTabs() {
       })}
     >
       <Tab.Screen name="Dashboard" component={ProviderDashboardScreen} />
-      <Tab.Screen name="Requests" component={BookingRequestsScreen} />
+      <Tab.Screen
+        name="Requests"
+        component={BookingRequestsScreen}
+        options={{ tabBarBadge: requestBadge > 0 ? (requestBadge > 99 ? '99+' : requestBadge) : undefined }}
+      />
       <Tab.Screen name="ActiveJobs" component={ActiveJobsScreen} />
       <Tab.Screen name="Earnings" component={EarningsScreen} />
       <Tab.Screen name="Schedule" component={ScheduleScreen} />
-      <Tab.Screen name="Settings" component={ProviderSettingsScreen} />
+      <Tab.Screen
+        name="Settings"
+        component={ProviderSettingsScreen}
+        options={{ tabBarBadge: notifBadge > 0 ? (notifBadge > 99 ? '99+' : notifBadge) : undefined }}
+      />
     </Tab.Navigator>
   );
 }
@@ -94,6 +128,7 @@ export default function ProviderNavigator() {
           <Stack.Screen name="ManageServices" component={ManageServicesScreen} />
           <Stack.Screen name="ServiceOptions" component={ServiceOptionsScreen} />
           <Stack.Screen name="ProviderServicePreview" component={ProviderServicePreviewScreen} />
+          <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} />
           <Stack.Screen name="ReportScreen" component={ReportScreen} />
         </>
       ) : isPending ? (

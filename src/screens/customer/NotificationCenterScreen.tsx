@@ -28,6 +28,7 @@ const TYPE_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> 
   document_rejected: 'document-outline',
   verification_approved: 'shield-checkmark-outline',
   verification_rejected: 'shield-outline',
+  chat_message: 'chatbubble-outline',
 };
 
 export default function NotificationCenterScreen() {

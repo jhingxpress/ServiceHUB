@@ -18,7 +18,7 @@ import Avatar from '../../components/ui/Avatar';
 import Badge from '../../components/ui/Badge';
 
 type NavProp = NativeStackNavigationProp<CustomerStackParamList>;
-type RouteType = RouteProp<CustomerStackParamList, 'ProviderProfile'>;
+type RouteType = RouteProp<CustomerStackParamList, 'ProviderStorefront'>;
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -55,13 +55,21 @@ export default function ProviderStorefrontScreen() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const { data: prov } = await supabase
+    const { data: prov, error: provError } = await supabase
       .from('providers')
-      .select('*, users(full_name, avatar_url, phone), categories(name, icon, color), provider_badges(*), provider_gallery(*), provider_stats(*)')
+      .select('*, users!providers_id_fkey(full_name, avatar_url, phone), categories(name, icon, color), provider_badges(*), provider_gallery(*), provider_stats(*), profile_photo_url, business_logo')
       .eq('id', providerId)
       .eq('status', 'approved')
+      .eq('marketplace_status', 'live')
       .is('deleted_at', null)
       .single();
+
+    if (provError) {
+      console.error('Provider lookup error:', provError);
+      Alert.alert('Not Found', 'This provider is not available.');
+      setLoading(false);
+      return;
+    }
 
     if (!prov) {
       Alert.alert('Not Found', 'This provider is not available.');
@@ -69,24 +77,45 @@ export default function ProviderStorefrontScreen() {
       return;
     }
 
-    const { data: srvs } = await supabase
+    const { data: srvs, error: srvError } = await supabase
       .from('services')
-      .select('*, service_options(*), service_images(*)')
+      .select('*')
       .eq('provider_id', providerId)
       .eq('is_active', true)
       .is('deleted_at', null)
       .order('sort_order');
 
+    if (srvError) {
+      console.error('[ProviderStorefront] Services query error:', srvError);
+    }
+
+    const serviceIds = (srvs ?? []).map((s) => s.id);
+
+    const [{ data: options }, { data: images }] = await Promise.all([
+      serviceIds.length > 0
+        ? supabase.from('service_options').select('*').in('service_id', serviceIds).eq('is_active', true)
+        : Promise.resolve({ data: [] }),
+      serviceIds.length > 0
+        ? supabase.from('service_images').select('*').in('service_id', serviceIds).order('sort_order')
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const servicesWithRelations: Service[] = (srvs ?? []).map((s) => ({
+      ...s,
+      service_options: (options ?? []).filter((o: any) => o.service_id === s.id),
+      service_images: (images ?? []).filter((i: any) => i.service_id === s.id),
+    }));
+
     const { data: revs } = await supabase
       .from('reviews')
-      .select('*, customer:users(full_name, avatar_url), review_media(*)')
+      .select('*, customer:users!reviews_customer_id_fkey(full_name, avatar_url), review_media(*)')
       .eq('provider_id', providerId)
       .eq('is_visible', true)
       .order('created_at', { ascending: false })
       .limit(10);
 
     setProvider(prov as unknown as Provider);
-    setServices(srvs ?? []);
+    setServices(servicesWithRelations);
     setReviews(revs ?? []);
     setLoading(false);
   }, [providerId]);
@@ -102,12 +131,11 @@ export default function ProviderStorefrontScreen() {
 
   const handleBook = (service?: Service) => {
     if (!user) { Alert.alert('Sign In', 'Please sign in to book a service.'); return; }
-    navigation.navigate('BookService', {
-      providerId,
-      serviceId: service?.id,
-      serviceName: service?.name,
-      price: service?.price,
-    });
+    if (service) {
+      navigation.navigate('ServiceDetail', { serviceId: service.id });
+    } else {
+      navigation.navigate('BookService', { providerId });
+    }
   };
 
   if (loading) {
@@ -151,7 +179,7 @@ export default function ProviderStorefrontScreen() {
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.logoWrap}>
-            <Avatar uri={provider.business_logo ?? userInfo?.avatar_url} name={userInfo?.full_name} size={80} borderColor={COLORS.primary} />
+            <Avatar uri={provider.profile_photo_url ?? provider.business_logo ?? userInfo?.avatar_url} name={provider.business_name ?? userInfo?.full_name} size={80} borderColor={COLORS.primary} />
             {provider.is_verified && (
               <View style={styles.verifiedBadge}>
                 <Ionicons name="checkmark-circle" size={18} color={COLORS.success} />

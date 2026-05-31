@@ -15,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
 import { Provider, Category } from '../../types';
+import ServiceCard from '../../components/marketplace/ServiceCard';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 import EmptyState from '../../components/ui/EmptyState';
@@ -42,6 +43,15 @@ export default function SearchScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [services, setServices] = useState<Array<{
+    id: string;
+    name: string;
+    price: number;
+    provider_name: string | null;
+    provider_rating: number | null;
+    provider_total_reviews: number | null;
+    image_url: string | null;
+  }>>([]);
   const [loading, setLoading] = useState(false);
   const [nearbyMode, setNearbyMode] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -55,9 +65,62 @@ export default function SearchScreen() {
   const search = useCallback(async () => {
     setLoading(true);
     try {
+      // Phase 1: Search services
+      let serviceQ = supabase
+        .from('services')
+        .select(`
+          id, name, price, provider_id,
+          provider:providers!services_provider_id_fkey(
+            business_name, rating, total_reviews, profile_photo_url, business_logo
+          )
+        `)
+        .eq('provider.status', 'approved')
+        .eq('provider.is_available', true)
+        .eq('provider.marketplace_status', 'live')
+        .is('provider.deleted_at', null)
+        .eq('is_active', true)
+        .is('deleted_at', null);
+
+      if (selectedCategory) {
+        serviceQ = serviceQ.eq('provider.category_id', selectedCategory);
+      }
+
+      if (query.trim()) {
+        serviceQ = serviceQ.or(`name.ilike.%${query.trim()}%,description.ilike.%${query.trim()}%`);
+      }
+
+      const { data: serviceData } = await serviceQ.limit(20);
+      const rawServices = (serviceData ?? []) as any[];
+      const serviceIds = rawServices.map((s) => s.id);
+
+      let imageMap: Record<string, string> = {};
+      if (serviceIds.length > 0) {
+        const { data: images } = await supabase
+          .from('service_images')
+          .select('service_id, image_url')
+          .in('service_id', serviceIds)
+          .order('sort_order');
+        (images ?? []).forEach((img: any) => {
+          if (!imageMap[img.service_id]) imageMap[img.service_id] = img.image_url;
+        });
+      }
+
+      setServices(
+        rawServices.map((s) => ({
+          id: s.id,
+          name: s.name,
+          price: s.price ?? 0,
+          provider_name: s.provider?.business_name ?? null,
+          provider_rating: s.provider?.rating ?? null,
+          provider_total_reviews: s.provider?.total_reviews ?? null,
+          image_url: imageMap[s.id] ?? null,
+        }))
+      );
+
+      // Phase 2: Search providers
       let q = supabase
         .from('providers')
-        .select('*, users!providers_id_fkey(full_name, avatar_url, email), categories(name, icon, color), provider_stats(*)')
+        .select('*, users!providers_id_fkey(full_name, avatar_url, email), categories(name, icon, color), provider_stats(*), profile_photo_url, business_logo')
         .eq('status', 'approved')
         .eq('is_available', true)
         .is('deleted_at', null);
@@ -112,11 +175,11 @@ export default function SearchScreen() {
       onPress={() => navigation.navigate('ProviderStorefront', { providerId: item.id })}
       activeOpacity={0.8}
     >
-      <Avatar uri={item.users?.avatar_url} name={item.users?.full_name} size={56} />
+      <Avatar uri={item.profile_photo_url ?? item.business_logo ?? item.users?.avatar_url} name={item.business_name ?? item.users?.full_name} size={56} />
       <View style={styles.cardInfo}>
         <View style={styles.cardRow}>
           <Text style={styles.providerName} numberOfLines={1}>
-            {item.users?.full_name ?? 'Provider'}
+            {item.business_name ?? item.users?.full_name ?? 'Provider'}
           </Text>
           {item.is_verified && (
             <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} />
@@ -160,7 +223,7 @@ export default function SearchScreen() {
           <Ionicons name="search-outline" size={18} color={COLORS.textLight} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search providers..."
+            placeholder="Search services or providers..."
             placeholderTextColor={COLORS.textLight}
             value={query}
             onChangeText={setQuery}
@@ -209,15 +272,54 @@ export default function SearchScreen() {
         </View>
       ) : (
         <FlatList
-          data={providers}
-          keyExtractor={(item) => item.id}
-          renderItem={renderProvider}
+          data={[
+            ...(services.length > 0
+              ? [{ _type: 'section_services' as const, label: 'Services' }]
+              : []),
+            ...services.map((s) => ({ _type: 'service' as const, data: s })),
+            ...(providers.length > 0
+              ? [{ _type: 'section_providers' as const, label: 'Providers' }]
+              : []),
+            ...providers.map((p) => ({ _type: 'provider' as const, data: p })),
+          ]}
+          keyExtractor={(item, index) =>
+            item._type.startsWith('section')
+              ? item._type
+              : `${item._type}-${(item as any).data.id}-${index}`
+          }
+          renderItem={({ item }) => {
+            if (item._type === 'section_services') {
+              return (
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitleText}>{item.label}</Text>
+                </View>
+              );
+            }
+            if (item._type === 'section_providers') {
+              return (
+                <View style={[styles.sectionHeaderRow, { marginTop: SPACING.lg }]}>
+                  <Text style={styles.sectionTitleText}>{item.label}</Text>
+                </View>
+              );
+            }
+            if (item._type === 'service') {
+              return (
+                <ServiceCard
+                  service={item.data}
+                  onPress={() => navigation.navigate('ServiceDetail', { serviceId: item.data.id })}
+                  showBookButton
+                  onBook={() => navigation.navigate('ServiceDetail', { serviceId: item.data.id })}
+                />
+              );
+            }
+            return renderProvider({ item: item.data });
+          }}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <EmptyState
               icon="search-outline"
-              title="No providers found"
+              title="No results found"
               subtitle="Try adjusting your search or category filter"
             />
           }
@@ -284,4 +386,6 @@ const styles = StyleSheet.create({
   priceUnit: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
   distanceRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   distance: { fontSize: FONTS.sizes.xs, color: COLORS.primary, fontFamily: FONTS.semiBold },
+  sectionHeaderRow: { paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.xs },
+  sectionTitleText: { fontFamily: FONTS.semiBold, fontSize: FONTS.sizes.lg, color: COLORS.text },
 });

@@ -27,6 +27,9 @@ interface ProviderItem {
   hourly_rate: number | null;
   rating: number | null;
   total_reviews: number | null;
+  business_name: string | null;
+  profile_photo_url: string | null;
+  business_logo: string | null;
   users: { full_name: string | null; avatar_url: string | null };
   category: { name: string; icon: string } | null;
   services: { name: string }[];
@@ -47,7 +50,8 @@ export default function ProviderListScreen({ route, navigation }: Props) {
         id, bio, location, hourly_rate, rating, total_reviews,
         users!providers_id_fkey(full_name, avatar_url),
         category:categories(name, icon),
-        services(name)
+        services(name),
+        profile_photo_url, business_logo
       `)
       .eq('is_verified', true)
       .eq('is_available', true)
@@ -84,9 +88,9 @@ export default function ProviderListScreen({ route, navigation }: Props) {
       onPress={() => navigation.navigate('ProviderStorefront', { providerId: item.id })}
       activeOpacity={0.85}
     >
-      <Avatar uri={item.users?.avatar_url} name={item.users?.full_name} size={56} borderColor={COLORS.primary} />
+      <Avatar uri={item.profile_photo_url ?? item.business_logo ?? item.users?.avatar_url} name={item.business_name ?? item.users?.full_name} size={56} borderColor={COLORS.primary} />
       <View style={styles.listCardInfo}>
-        <Text style={styles.providerName}>{item.users?.full_name ?? 'Provider'}</Text>
+        <Text style={styles.providerName}>{item.business_name ?? item.users?.full_name ?? 'Provider'}</Text>
         <Text style={styles.categoryText}>{item.category?.name ?? ''}</Text>
         <View style={styles.metaRow}>
           {item.rating && (
@@ -119,8 +123,8 @@ export default function ProviderListScreen({ route, navigation }: Props) {
       onPress={() => navigation.navigate('ProviderStorefront', { providerId: item.id })}
       activeOpacity={0.85}
     >
-      <Avatar uri={item.users?.avatar_url} name={item.users?.full_name} size={64} />
-      <Text style={styles.gridName} numberOfLines={1}>{item.users?.full_name?.split(' ')[0] ?? 'Pro'}</Text>
+      <Avatar uri={item.profile_photo_url ?? item.business_logo ?? item.users?.avatar_url} name={item.business_name ?? item.users?.full_name} size={64} />
+      <Text style={styles.gridName} numberOfLines={1}>{item.business_name ?? item.users?.full_name?.split(' ')[0] ?? 'Pro'}</Text>
       <Text style={styles.gridCategory} numberOfLines={1}>{item.category?.name ?? ''}</Text>
       {item.rating && (
         <View style={styles.gridRating}>

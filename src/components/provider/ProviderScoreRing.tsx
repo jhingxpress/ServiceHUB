@@ -5,6 +5,7 @@ import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/
 
 interface Props {
   score: ProviderScore | null;
+  compact?: boolean;
 }
 
 const TIER_COLORS = {
@@ -13,10 +14,34 @@ const TIER_COLORS = {
   red: { bg: '#FEE2E2', text: '#991B1B', ring: '#EF4444' },
 };
 
-export default function ProviderScoreRing({ score }: Props) {
+export default function ProviderScoreRing({ score, compact }: Props) {
   if (!score) return null;
 
   const tier = TIER_COLORS[score.color_tier] ?? TIER_COLORS.red;
+
+  if (compact) {
+    return (
+      <View style={[styles.compactCard, { borderColor: tier.ring }]}>
+        <View style={styles.compactRow}>
+          <View style={[styles.compactScoreRing, { borderColor: tier.ring }]}>
+            <Text style={[styles.compactScoreValue, { color: tier.ring }]}>{score.score}%</Text>
+          </View>
+          <View style={styles.compactInfo}>
+            <Text style={styles.compactTitle}>Provider Health</Text>
+            <Text style={styles.compactSubtitle}>
+              {score.color_tier === 'green' ? 'Excellent' : score.color_tier === 'yellow' ? 'Good' : 'Needs Work'}
+            </Text>
+          </View>
+          <View style={[styles.compactBadge, { backgroundColor: tier.bg }]}>
+            <Text style={[styles.compactBadgeText, { color: tier.text }]}>
+              {score.color_tier === 'green' ? 'A' : score.color_tier === 'yellow' ? 'B' : 'C'}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   const circumference = 2 * Math.PI * 40; // radius = 40
   const strokeDashoffset = circumference - (score.score / 100) * circumference;
 
@@ -194,5 +219,57 @@ const styles = StyleSheet.create({
   factorText: {
     fontSize: FONTS.sizes.sm,
     color: COLORS.textSecondary,
+  },
+  compactCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1.5,
+    padding: SPACING.md,
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.md,
+    ...SHADOWS.small,
+  },
+  compactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
+  compactScoreRing: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background,
+  },
+  compactScoreValue: {
+    fontSize: FONTS.sizes.base,
+    fontFamily: FONTS.bold,
+  },
+  compactInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  compactTitle: {
+    fontSize: FONTS.sizes.base,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.text,
+  },
+  compactSubtitle: {
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.textSecondary,
+    fontFamily: FONTS.medium,
+  },
+  compactBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compactBadgeText: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.bold,
   },
 });

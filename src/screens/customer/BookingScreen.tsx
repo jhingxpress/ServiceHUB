@@ -9,6 +9,7 @@ import {
   Platform,
   TextInput,
   Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,6 +57,48 @@ export default function BookingScreen() {
     }
   };
 
+  const uploadPhotos = async (): Promise<string[]> => {
+    if (photos.length === 0) return [];
+    const uploaded: string[] = [];
+    for (const uri of photos) {
+      const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
+      const path = `bookings/${providerId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const { error: upErr } = await supabase.storage
+        .from('booking-photos')
+        .upload(path, blob, { contentType: `image/${ext}` });
+      if (upErr) {
+        console.error('Photo upload error:', upErr);
+        continue;
+      }
+      const { data } = supabase.storage.from('booking-photos').getPublicUrl(path);
+      uploaded.push(data.publicUrl);
+    }
+    return uploaded;
+  };
+
+  const checkConflict = async (): Promise<boolean> => {
+    const scheduledDate = format(date, 'yyyy-MM-dd');
+    const scheduledTime = format(time, 'HH:mm:ss');
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('id, scheduled_time')
+      .eq('provider_id', providerId)
+      .eq('scheduled_date', scheduledDate)
+      .in('status', ['pending', 'accepted']);
+
+    if (error || !data || data.length === 0) return false;
+
+    const selectedMinutes = time.getHours() * 60 + time.getMinutes();
+    for (const b of data) {
+      const [h, m] = (b.scheduled_time as string).split(':').map(Number);
+      const existingMinutes = h * 60 + m;
+      if (Math.abs(selectedMinutes - existingMinutes) <= 60) return true;
+    }
+    return false;
+  };
+
   const handleSubmit = async () => {
     const validation = validateForm(
       { location },
@@ -72,6 +115,20 @@ export default function BookingScreen() {
     if (!user) return;
     setSubmitting(true);
     try {
+      // Conflict detection
+      const hasConflict = await checkConflict();
+      if (hasConflict) {
+        Alert.alert(
+          'Time Slot Unavailable',
+          'This provider already has a booking within 1 hour of your selected time. Please choose a different time.'
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      // Upload photos to storage
+      const photoUrls = await uploadPhotos();
+
       const { data, error } = await supabase
         .from('bookings')
         .insert({
@@ -82,7 +139,7 @@ export default function BookingScreen() {
           scheduled_time: format(time, 'HH:mm:ss'),
           location: location.trim(),
           notes: notes.trim() || null,
-          photo_urls: photos,
+          photo_urls: photoUrls,
           total_amount: price ?? null,
           status: 'pending',
         })

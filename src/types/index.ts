@@ -345,7 +345,7 @@ export interface Dispute {
 export interface Notification {
   id: string;
   user_id: string;
-  type: 'booking_submitted' | 'booking_accepted' | 'booking_rejected' | 'provider_on_the_way' | 'provider_arrived' | 'service_completed' | 'review_reminder' | 'document_approved' | 'document_rejected' | 'verification_approved' | 'verification_rejected';
+  type: 'booking_submitted' | 'booking_accepted' | 'booking_rejected' | 'provider_on_the_way' | 'provider_arrived' | 'service_completed' | 'review_reminder' | 'document_approved' | 'document_rejected' | 'verification_approved' | 'verification_rejected' | 'chat_message';
   title: string;
   body: string;
   data: Record<string, unknown>;

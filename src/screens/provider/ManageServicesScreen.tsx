@@ -17,10 +17,8 @@ import { ProviderStackParamList } from '../../navigation/types';
 
 type NavProp = NativeStackNavigationProp<ProviderStackParamList>;
 
-interface ServiceWithOptions extends Service {
-  option_count?: number;
+interface ServiceWithExtras extends Service {
   image_count?: number;
-  min_price?: number | null;
 }
 
 type CatalogStep = 'group' | 'template' | 'none';
@@ -28,7 +26,7 @@ type CatalogStep = 'group' | 'template' | 'none';
 export default function ManageServicesScreen() {
   const navigation = useNavigation<NavProp>();
   const { user } = useAuthStore();
-  const [services, setServices] = useState<ServiceWithOptions[]>([]);
+  const [services, setServices] = useState<ServiceWithExtras[]>([]);
   const [linkedCategories, setLinkedCategories] = useState<ProviderCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -61,30 +59,11 @@ export default function ManageServicesScreen() {
     if (srvRes.error) {
       console.error('ManageServices: services query failed', srvRes.error);
       Alert.alert('Error loading services', srvRes.error.message);
-    } else {
-      console.log('ManageServices: loaded', (srvRes.data ?? []).length, 'services for provider', user.id);
     }
 
     setLinkedCategories((pcRes.data ?? []) as ProviderCategory[]);
 
     const serviceIds = (srvRes.data ?? []).map((s: any) => s.id);
-
-    // Fetch active pricing options for all services
-    let optionCounts: Record<string, number> = {};
-    let minPrices: Record<string, number> = {};
-    if (serviceIds.length > 0) {
-      const { data: options } = await supabase
-        .from('service_options')
-        .select('service_id, price, is_active')
-        .in('service_id', serviceIds)
-        .eq('is_active', true);
-      (options ?? []).forEach((opt: any) => {
-        optionCounts[opt.service_id] = (optionCounts[opt.service_id] || 0) + 1;
-        if (opt.price != null && (minPrices[opt.service_id] == null || opt.price < minPrices[opt.service_id])) {
-          minPrices[opt.service_id] = opt.price;
-        }
-      });
-    }
 
     // Fetch image counts for all services
     let imageCounts: Record<string, number> = {};
@@ -98,11 +77,9 @@ export default function ManageServicesScreen() {
       });
     }
 
-    const mapped: ServiceWithOptions[] = (srvRes.data ?? []).map((s: any) => ({
+    const mapped: ServiceWithExtras[] = (srvRes.data ?? []).map((s: any) => ({
       ...s,
-      option_count: optionCounts[s.id] || 0,
       image_count: imageCounts[s.id] || 0,
-      min_price: minPrices[s.id] ?? null,
     }));
     setServices(mapped);
     setLoading(false);
@@ -128,7 +105,6 @@ export default function ManageServicesScreen() {
       .eq('provider_id', user.id);
 
     let categoryIds = (pcData ?? []).map((c: any) => c.category_id);
-    console.log('[Provider Categories]', categoryIds);
 
     // service_groups are linked to parent categories, but provider_categories
     // may store leaf categories. Trace up to parent IDs so groups appear.
@@ -137,13 +113,10 @@ export default function ManageServicesScreen() {
         .from('categories')
         .select('id, parent_id, name')
         .in('id', categoryIds);
-      console.log('[Category Lookup]', cats);
       const parentIds = (cats ?? [])
         .map((c: any) => c.parent_id)
         .filter((id: string | null): id is string => id != null);
-      console.log('[Parent IDs]', parentIds);
       categoryIds = Array.from(new Set([...categoryIds, ...parentIds]));
-      console.log('[Final Category IDs]', categoryIds);
     }
 
     if (categoryIds.length === 0) {
@@ -153,7 +126,6 @@ export default function ManageServicesScreen() {
         .select('id')
         .eq('is_parent', true);
       categoryIds = (allCats ?? []).map((c: any) => c.id);
-      console.log('[Fallback] all parent category IDs:', categoryIds);
     }
 
     const { data: groups, error } = await supabase
@@ -162,9 +134,6 @@ export default function ManageServicesScreen() {
       .in('category_id', categoryIds)
       .eq('is_active', true)
       .order('name');
-
-    console.log('[Groups]', groups);
-    console.log('[Groups Error]', error);
 
     setServiceGroups((groups ?? []) as ServiceGroup[]);
     setCatalogLoading(false);
@@ -295,17 +264,6 @@ export default function ManageServicesScreen() {
       if (error) {
         Alert.alert('Error', error.message);
       } else {
-        // Auto-create first pricing option if price was provided
-        const newServiceId = (newServices ?? [])[0]?.id;
-        if (newServiceId && hasPrice) {
-          await supabase.from('service_options').insert({
-            service_id: newServiceId,
-            name: 'Standard Service',
-            description: null,
-            price: priceNum,
-            is_active: true,
-          });
-        }
         setModalVisible(false);
         await Promise.all([
           supabase.rpc('refresh_provider_checklist', { p_provider_id: user.id }),
@@ -318,7 +276,7 @@ export default function ManageServicesScreen() {
   };
 
   const handleDelete = (id: string) => {
-    Alert.alert('Delete Sub-Service', 'This will also delete all its pricing options. Continue?', [
+    Alert.alert('Delete Sub-Service', 'Are you sure you want to delete this service?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => { await supabase.from('services').delete().eq('id', id); fetchServices(); } },
     ]);
@@ -418,19 +376,13 @@ export default function ManageServicesScreen() {
       return (
         <View style={{ flex: 1 }}>
           <Text style={styles.catalogSubtitle}>Select a service group to see available templates</Text>
-          {/* Fallback: if this shows but FlatList doesn't, bug is in FlatList */}
-          {serviceGroups.map((g) => (
-            <Text key={g.id} style={{ fontSize: 12, color: COLORS.textMuted, paddingVertical: 2 }}>[fallback] {g.name}</Text>
-          ))}
           <FlatList
             data={serviceGroups}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             style={{ flex: 1 }}
             contentContainerStyle={{ paddingBottom: 120 }}
-            renderItem={({ item }) => {
-              console.log('[Catalog Group]', item.name);
-              return (
+            renderItem={({ item }) => (
                 <TouchableOpacity style={styles.groupCard} onPress={() => selectGroup(item)} activeOpacity={0.8}>
                   <View style={styles.groupIconWrap}>
                     <Ionicons
@@ -447,8 +399,7 @@ export default function ManageServicesScreen() {
                   </View>
                   <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
                 </TouchableOpacity>
-              );
-            }}
+            )}
           />
           <Button
             title="Create Custom Service"
@@ -584,7 +535,7 @@ export default function ManageServicesScreen() {
 
       <View style={styles.hint}>
         <Ionicons name="information-circle-outline" size={15} color={COLORS.textSecondary} />
-        <Text style={styles.hintText}>Add services from your category catalog, or create custom services. Tap "Manage Pricing" to set labor fees.</Text>
+        <Text style={styles.hintText}>Add services from your category catalog, or create custom services. Set your price and duration in the edit modal.</Text>
       </View>
 
       {/* Empty state with catalog CTA */}
@@ -612,25 +563,34 @@ export default function ManageServicesScreen() {
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => {
             const portfolioPercent = Math.min(100, (item.image_count ?? 0) * 25);
-            const hasPricing = (item.option_count ?? 0) > 0 || item.price > 0;
-            const pricingLabel = hasPricing
-              ? (item.min_price != null ? `Starting at ₱${item.min_price.toLocaleString()}` : 'Set')
-              : 'Not Set';
+            const priceText = item.price > 0
+              ? `₱${item.price.toLocaleString()}`
+              : 'Price not set';
             return (
               <View style={[styles.card, !item.is_active && styles.cardDisabled]}>
                 <View style={styles.cardTop}>
                   <View style={styles.cardInfo}>
-                    <Text style={styles.serviceName}>{item.name}</Text>
-                    {item.description ? <Text style={styles.serviceDesc} numberOfLines={2}>{item.description}</Text> : null}
-                    <View style={styles.metaRow}>
+                    <View style={styles.cardHeaderRow}>
+                      <Text style={styles.serviceName}>{item.name}</Text>
                       <View style={[styles.statusBadge, item.is_active ? styles.statusActive : styles.statusInactive]}>
                         <Text style={[styles.statusText, item.is_active ? styles.statusActiveText : styles.statusInactiveText]}>
-                          {item.is_active ? 'Active' : 'Hidden'}
+                          {item.is_active ? 'ACTIVE' : 'HIDDEN'}
                         </Text>
                       </View>
-                      <Text style={styles.pricingText}>
-                        Pricing: {pricingLabel}
-                      </Text>
+                    </View>
+                    {item.description ? <Text style={styles.serviceDesc} numberOfLines={1}>{item.description}</Text> : null}
+                    <View style={styles.metaRow}>
+                      <Text style={styles.priceTag}>{priceText}</Text>
+                      {item.duration_minutes ? (
+                        <View style={styles.metaChip}>
+                          <Ionicons name="time-outline" size={12} color={COLORS.textSecondary} />
+                          <Text style={styles.metaChipText}>{item.duration_minutes} min</Text>
+                        </View>
+                      ) : null}
+                      <View style={styles.metaChip}>
+                        <Ionicons name="images-outline" size={12} color={COLORS.textSecondary} />
+                        <Text style={styles.metaChipText}>{item.image_count ?? 0} Photos</Text>
+                      </View>
                     </View>
                     <View style={styles.portfolioRow}>
                       <Text style={styles.portfolioLabel}>Portfolio</Text>
@@ -640,25 +600,15 @@ export default function ManageServicesScreen() {
                       <Text style={styles.portfolioPercent}>{portfolioPercent}%</Text>
                     </View>
                   </View>
-                  <View style={styles.actions}>
-                    <TouchableOpacity style={styles.iconBtn} onPress={() => openEdit(item)}>
-                      <Ionicons name="pencil-outline" size={16} color={COLORS.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('ProviderServicePreview', { serviceId: item.id })}>
-                      <Ionicons name="eye-outline" size={16} color={COLORS.textSecondary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.iconBtn, styles.deleteBtn]} onPress={() => handleDelete(item.id)}>
-                      <Ionicons name="trash-outline" size={16} color={COLORS.error} />
-                    </TouchableOpacity>
-                  </View>
                 </View>
                 <View style={styles.actionRow}>
-                  <TouchableOpacity
-                    style={[styles.actionBtn, { borderRightWidth: 1, borderRightColor: COLORS.border + '40' }]}
-                    onPress={() => navigation.navigate('ServiceOptions', { serviceId: item.id, serviceName: item.name })}
-                  >
-                    <Ionicons name="pricetag-outline" size={16} color={COLORS.primary} />
-                    <Text style={styles.actionBtnText}>Manage Pricing</Text>
+                  <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('ProviderServicePreview', { serviceId: item.id })}>
+                    <Ionicons name="eye-outline" size={16} color={COLORS.primary} />
+                    <Text style={styles.actionBtnText}>Preview</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionBtn} onPress={() => openEdit(item)}>
+                    <Ionicons name="pencil-outline" size={16} color={COLORS.primary} />
+                    <Text style={styles.actionBtnText}>Edit</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.actionBtn}
@@ -670,7 +620,10 @@ export default function ManageServicesScreen() {
                     ) : (
                       <Ionicons name="images-outline" size={16} color={COLORS.primary} />
                     )}
-                    <Text style={styles.actionBtnText}>Upload Photos</Text>
+                    <Text style={styles.actionBtnText}>Photos</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.actionBtn, styles.deleteActionBtn]} onPress={() => handleDelete(item.id)}>
+                    <Ionicons name="trash-outline" size={16} color={COLORS.error} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -740,9 +693,6 @@ export default function ManageServicesScreen() {
                 <Ionicons name="close" size={24} color={COLORS.text} />
               </TouchableOpacity>
             </View>
-            {catalogStep === 'group' && (
-              <Text style={styles.debugCounter}>Groups Loaded: {serviceGroups.length}</Text>
-            )}
             {renderCatalogContent()}
           </View>
         </KeyboardAvoidingView>
@@ -779,18 +729,19 @@ const styles = StyleSheet.create({
   statusText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold },
   statusActiveText: { color: '#065F46' },
   statusInactiveText: { color: COLORS.textSecondary },
-  actions: { flexDirection: 'row', gap: SPACING.xs, marginLeft: SPACING.sm },
-  iconBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: COLORS.border },
-  deleteBtn: { backgroundColor: '#FEE2E2', borderColor: '#FECACA' },
-  pricingText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontFamily: FONTS.medium },
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 },
+  priceTag: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.primary },
+  metaChip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: COLORS.background, borderRadius: BORDER_RADIUS.md, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: COLORS.border },
+  metaChipText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontFamily: FONTS.medium },
   portfolioRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.sm },
   portfolioLabel: { fontSize: FONTS.sizes.xs, color: COLORS.textLight, fontFamily: FONTS.medium, width: 48 },
   portfolioTrack: { flex: 1, height: 4, backgroundColor: COLORS.background, borderRadius: BORDER_RADIUS.full, overflow: 'hidden' },
   portfolioFill: { height: '100%', backgroundColor: COLORS.primary, borderRadius: BORDER_RADIUS.full },
   portfolioPercent: { fontSize: FONTS.sizes.xs, color: COLORS.primary, fontFamily: FONTS.semiBold, width: 32, textAlign: 'right' },
   actionRow: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: COLORS.border + '40' },
-  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs, paddingVertical: SPACING.sm, backgroundColor: COLORS.primaryLight },
-  actionBtnText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.primary },
+  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 10, backgroundColor: COLORS.primaryLight },
+  actionBtnText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: COLORS.primary },
+  deleteActionBtn: { backgroundColor: '#FEE2E2', maxWidth: 48 },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
   modal: { flex: 1, backgroundColor: COLORS.background, borderTopLeftRadius: BORDER_RADIUS.xl, borderTopRightRadius: BORDER_RADIUS.xl, padding: SPACING.lg, maxHeight: '90%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },
@@ -873,6 +824,5 @@ const styles = StyleSheet.create({
   templateExistsLabel: { fontSize: FONTS.sizes.xs, color: COLORS.success, fontFamily: FONTS.medium, marginTop: 2 },
   catalogFooter: { paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border },
   catalogCount: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginBottom: SPACING.sm, textAlign: 'center' },
-  debugCounter: { fontSize: FONTS.sizes.xs, color: COLORS.textMuted, textAlign: 'center', marginBottom: SPACING.sm },
   formRow: { flexDirection: 'row', marginBottom: SPACING.md },
 });

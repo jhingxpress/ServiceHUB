@@ -199,7 +199,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
     try {
       const updates: Record<string, unknown> = {};
       if (actionMode === 'approve') {
-        updates.status = 'approved'; updates.is_verified = true;
+        updates.status = 'approved'; updates.is_verified = true; updates.is_available = true;
         updates.approved_at = new Date().toISOString(); updates.approved_by = user?.id;
         updates.rejection_reason = null;
       } else if (actionMode === 'reject') {

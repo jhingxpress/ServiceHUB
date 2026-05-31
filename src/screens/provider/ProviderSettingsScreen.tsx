@@ -32,6 +32,7 @@ export default function ProviderSettingsScreen() {
         { label: 'Edit Provider Profile', icon: 'person-outline', onPress: () => navigation.navigate('ProfileSetup') },
         { label: 'Manage Services', icon: 'construct-outline', onPress: () => navigation.navigate('ManageServices') },
         { label: 'Availability Schedule', icon: 'calendar-outline', onPress: () => navigation.navigate('ProviderTabs', { screen: 'Schedule' }) },
+        { label: 'Notifications', icon: 'notifications-outline', onPress: () => navigation.navigate('NotificationCenter') },
       ],
     },
     {

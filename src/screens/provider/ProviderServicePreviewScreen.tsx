@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
-import { Service, ServiceImage, ServiceOption, Provider, ProviderCategory } from '../../types';
+import { Service, ServiceImage, Provider, ProviderCategory, ProviderPortfolio } from '../../types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 import { ProviderStackParamList } from '../../navigation/types';
@@ -25,9 +25,9 @@ export default function ProviderServicePreviewScreen() {
   const [loading, setLoading] = useState(true);
   const [service, setService] = useState<Service | null>(null);
   const [serviceImages, setServiceImages] = useState<ServiceImage[]>([]);
-  const [serviceOptions, setServiceOptions] = useState<ServiceOption[]>([]);
   const [provider, setProvider] = useState<Provider | null>(null);
   const [providerCategories, setProviderCategories] = useState<ProviderCategory[]>([]);
+  const [portfolio, setPortfolio] = useState<ProviderPortfolio[]>([]);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   const loadData = useCallback(async () => {
@@ -36,23 +36,29 @@ export default function ProviderServicePreviewScreen() {
       const { data: svc } = await supabase.from('services').select('*').eq('id', serviceId).single();
       setService(svc as Service | null);
 
-      const [{ data: imgs }, { data: opts }, { data: prov }] = await Promise.all([
+      const [{ data: imgs }, { data: prov }] = await Promise.all([
         supabase.from('service_images').select('*').eq('service_id', serviceId).order('sort_order'),
-        supabase.from('service_options').select('*').eq('service_id', serviceId).eq('is_active', true).order('price'),
         supabase.from('providers').select('*').eq('id', svc?.provider_id ?? user?.id).single(),
       ]);
 
       setServiceImages((imgs ?? []) as ServiceImage[]);
-      setServiceOptions((opts ?? []) as ServiceOption[]);
       setProvider(prov as Provider | null);
 
       if (prov?.id) {
-        const { data: cats } = await supabase
-          .from('provider_categories')
-          .select('*, categories(id, name)')
-          .eq('provider_id', prov.id)
-          .order('is_primary', { ascending: false });
+        const [{ data: cats }, { data: port }] = await Promise.all([
+          supabase
+            .from('provider_categories')
+            .select('*, categories(id, name)')
+            .eq('provider_id', prov.id)
+            .order('is_primary', { ascending: false }),
+          supabase
+            .from('provider_portfolio')
+            .select('*')
+            .eq('provider_id', prov.id)
+            .order('sort_order'),
+        ]);
         setProviderCategories((cats ?? []) as ProviderCategory[]);
+        setPortfolio((port ?? []) as ProviderPortfolio[]);
       }
     } catch (err: any) {
       console.error('[Preview] load error:', err);
@@ -66,13 +72,6 @@ export default function ProviderServicePreviewScreen() {
   const formatPrice = (amount: number) => `₱${amount.toLocaleString('en-PH')}`;
 
   const priceRange = () => {
-    if (serviceOptions.length > 0) {
-      const prices = serviceOptions.map((o) => o.price).filter((p) => p > 0);
-      if (prices.length === 0) return 'Price not set';
-      const min = Math.min(...prices);
-      const max = Math.max(...prices);
-      return min === max ? formatPrice(min) : `${formatPrice(min)} - ${formatPrice(max)}`;
-    }
     if (service && service.price > 0) return formatPrice(service.price);
     return 'Price not set';
   };
@@ -119,8 +118,13 @@ export default function ProviderServicePreviewScreen() {
                 setActiveImageIndex(idx);
               }}
             >
-              {serviceImages.map((img) => (
-                <Image key={img.id} source={{ uri: img.image_url }} style={styles.carouselImage} resizeMode="cover" />
+              {serviceImages.map((img, idx) => (
+                <View key={img.id}>
+                  <Image source={{ uri: img.image_url }} style={styles.carouselImage} resizeMode="cover" />
+                  <View style={styles.photoCountBadge}>
+                    <Text style={styles.photoCountText}>{idx + 1} / {serviceImages.length}</Text>
+                  </View>
+                </View>
               ))}
             </ScrollView>
             {serviceImages.length > 1 && (
@@ -156,22 +160,6 @@ export default function ProviderServicePreviewScreen() {
           ) : null}
         </View>
 
-        {/* Pricing Options */}
-        {serviceOptions.length > 0 && (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Pricing Options</Text>
-            {serviceOptions.map((opt) => (
-              <View key={opt.id} style={styles.optionRow}>
-                <View style={styles.optionInfo}>
-                  <Text style={styles.optionName}>{opt.name}</Text>
-                  {opt.description ? <Text style={styles.optionDesc}>{opt.description}</Text> : null}
-                </View>
-                <Text style={styles.optionPrice}>{formatPrice(opt.price)}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-
         {/* Provider Card */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Service Provider</Text>
@@ -186,10 +174,22 @@ export default function ProviderServicePreviewScreen() {
               {provider?.business_headline ? (
                 <Text style={styles.providerHeadline}>{provider.business_headline}</Text>
               ) : null}
+              {provider?.service_area ? (
+                <View style={styles.metaRow}>
+                  <Ionicons name="map-outline" size={13} color={COLORS.textSecondary} />
+                  <Text style={styles.metaText}>{provider.service_area}</Text>
+                </View>
+              ) : null}
               {provider?.city ? (
-                <View style={styles.locationRow}>
+                <View style={styles.metaRow}>
                   <Ionicons name="location-outline" size={13} color={COLORS.textSecondary} />
-                  <Text style={styles.locationText}>{provider.city}{provider?.province ? `, ${provider.province}` : ''}</Text>
+                  <Text style={styles.metaText}>{provider.city}{provider?.province ? `, ${provider.province}` : ''}</Text>
+                </View>
+              ) : null}
+              {provider?.years_of_experience ? (
+                <View style={styles.metaRow}>
+                  <Ionicons name="briefcase-outline" size={13} color={COLORS.textSecondary} />
+                  <Text style={styles.metaText}>{provider.years_of_experience} years experience</Text>
                 </View>
               ) : null}
             </View>
@@ -203,6 +203,18 @@ export default function ProviderServicePreviewScreen() {
             </View>
           )}
         </View>
+
+        {/* Portfolio Gallery */}
+        {portfolio.length > 0 && (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Portfolio</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {portfolio.map((p) => (
+                <Image key={p.id} source={{ uri: p.image_url }} style={styles.portfolioThumb} resizeMode="cover" />
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* CTA Buttons (disabled preview) */}
         <View style={styles.ctaRow}>
@@ -277,20 +289,28 @@ const styles = StyleSheet.create({
     ...SHADOWS.small,
   },
   sectionTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: SPACING.md },
-  optionRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: COLORS.divider,
-  },
-  optionInfo: { flex: 1, marginRight: SPACING.sm },
-  optionName: { fontSize: FONTS.sizes.base, fontFamily: FONTS.medium, color: COLORS.text },
-  optionDesc: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
-  optionPrice: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.primary },
   providerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   providerInfo: { flex: 1 },
   providerName: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
   providerHeadline: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
-  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
-  locationText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  metaText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
+  photoCountBadge: {
+    position: 'absolute',
+    bottom: 12,
+    right: SPACING.md + 12,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  photoCountText: { fontSize: FONTS.sizes.xs, color: COLORS.white, fontFamily: FONTS.semiBold },
+  portfolioThumb: {
+    width: 100,
+    height: 100,
+    borderRadius: BORDER_RADIUS.lg,
+    marginRight: SPACING.sm,
+  },
   availabilityBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: SPACING.md,
     paddingHorizontal: SPACING.sm, paddingVertical: 4, borderRadius: BORDER_RADIUS.full, alignSelf: 'flex-start',
