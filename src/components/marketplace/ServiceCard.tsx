@@ -13,10 +13,22 @@ export interface ServiceCardData {
   id: string;
   name: string;
   price: number;
+  min_option_price?: number | null;
   provider_name: string | null;
   provider_rating?: number | null;
   provider_total_reviews?: number | null;
   image_url?: string | null;
+}
+
+export function getServicePriceLabel(service: ServiceCardData): string {
+  const fmt = (n: number) => `₱${n.toLocaleString('en-PH')}`;
+  if (service.min_option_price && service.min_option_price > 0) {
+    return `From ${fmt(service.min_option_price)}`;
+  }
+  if (service.price > 0) {
+    return fmt(service.price);
+  }
+  return 'Request Quote';
 }
 
 interface Props {
@@ -76,7 +88,7 @@ export default function ServiceCard({
 
         <View style={styles.bottomRow}>
           <Text style={styles.priceText}>
-            {service.price > 0 ? formatPrice(service.price) : 'Price not set'}
+            {getServicePriceLabel(service)}
           </Text>
           {showBookButton && onBook && (
             <TouchableOpacity style={styles.bookBtn} onPress={onBook} activeOpacity={0.8}>

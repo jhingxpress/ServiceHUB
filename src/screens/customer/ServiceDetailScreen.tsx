@@ -138,9 +138,17 @@ export default function ServiceDetailScreen() {
         {/* Service Info */}
         <View style={styles.infoCard}>
           <Text style={styles.serviceName}>{service?.name ?? 'Service'}</Text>
-          <Text style={styles.priceText}>
-            {service && service.price > 0 ? formatPrice(service.price) : 'Price not set'}
-          </Text>
+          {(() => {
+            const activeOpts = serviceOptions.filter((o) => o.is_active);
+            if (activeOpts.length > 0) {
+              const min = Math.min(...activeOpts.map((o) => o.price));
+              return <Text style={styles.priceText}>From {formatPrice(min)}</Text>;
+            }
+            if (service && service.price > 0) {
+              return <Text style={styles.priceText}>{formatPrice(service.price)}</Text>;
+            }
+            return <Text style={[styles.priceText, { color: COLORS.textSecondary }]}>Request Quote</Text>;
+          })()}
           {service?.duration_minutes ? (
             <View style={styles.durationRow}>
               <Ionicons name="time-outline" size={14} color={COLORS.textSecondary} />

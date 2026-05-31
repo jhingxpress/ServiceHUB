@@ -296,7 +296,17 @@ export default function ProviderStorefrontScreen() {
                   ) : null}
                 </View>
                 <View style={styles.serviceRight}>
-                  <Text style={styles.servicePrice}>₱{s.price?.toLocaleString() ?? '0'}</Text>
+                  {(() => {
+                    const activeOpts = s.service_options?.filter((o) => o.is_active) ?? [];
+                    if (activeOpts.length > 0) {
+                      const min = Math.min(...activeOpts.map((o) => o.price));
+                      return <Text style={styles.servicePrice}>From ₱{min.toLocaleString('en-PH')}</Text>;
+                    }
+                    if (s.price > 0) {
+                      return <Text style={styles.servicePrice}>₱{s.price.toLocaleString('en-PH')}</Text>;
+                    }
+                    return <Text style={[styles.servicePrice, { color: COLORS.textSecondary }]}>Request Quote</Text>;
+                  })()}
                   <TouchableOpacity style={styles.bookBtn} onPress={() => handleBook(s)}>
                     <Text style={styles.bookBtnText}>Book</Text>
                   </TouchableOpacity>

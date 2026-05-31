@@ -45,6 +45,7 @@ export default function HomeScreen() {
     id: string;
     name: string;
     price: number;
+    min_option_price?: number | null;
     provider_name: string | null;
     provider_rating: number | null;
     provider_total_reviews: number | null;
@@ -57,7 +58,7 @@ export default function HomeScreen() {
   const loadData = useCallback(async () => {
     try {
       const [catsRes, provsRes, srvsRes, booksRes] = await Promise.all([
-        supabase.from('categories').select('*').order('name').limit(12),
+        supabase.from('categories').select('*').eq('is_parent', true).order('name'),
         supabase
           .from('providers')
           .select('*, users!providers_id_fkey(full_name, avatar_url), categories(name, icon, color), profile_photo_url, business_logo')
@@ -93,18 +94,32 @@ export default function HomeScreen() {
           : Promise.resolve({ data: [] }),
       ]);
 
-      // Fetch service images separately
+      // Fetch service images and options separately
       const rawServices = (srvsRes.data ?? []) as any[];
       const serviceIds = rawServices.map((s) => s.id);
       let imageMap: Record<string, string> = {};
+      let optionMap: Record<string, number> = {};
       if (serviceIds.length > 0) {
-        const { data: images } = await supabase
-          .from('service_images')
-          .select('service_id, image_url')
-          .in('service_id', serviceIds)
-          .order('sort_order');
+        const [{ data: images }, { data: options }] = await Promise.all([
+          supabase
+            .from('service_images')
+            .select('service_id, image_url')
+            .in('service_id', serviceIds)
+            .order('sort_order'),
+          supabase
+            .from('service_options')
+            .select('service_id, price')
+            .in('service_id', serviceIds)
+            .eq('is_active', true),
+        ]);
         (images ?? []).forEach((img: any) => {
           if (!imageMap[img.service_id]) imageMap[img.service_id] = img.image_url;
+        });
+        (options ?? []).forEach((opt: any) => {
+          const existing = optionMap[opt.service_id];
+          if (!existing || opt.price < existing) {
+            optionMap[opt.service_id] = opt.price;
+          }
         });
       }
 
@@ -115,6 +130,7 @@ export default function HomeScreen() {
           id: s.id,
           name: s.name,
           price: s.price ?? 0,
+          min_option_price: optionMap[s.id] ?? null,
           provider_name: s.provider?.business_name ?? null,
           provider_rating: s.provider?.rating ?? null,
           provider_total_reviews: s.provider?.total_reviews ?? null,
@@ -221,10 +237,7 @@ export default function HomeScreen() {
         {/* Categories */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Browse Categories</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Search')}>
-              <Text style={styles.sectionLink}>See all</Text>
-            </TouchableOpacity>
+            <Text style={styles.sectionTitle}>Browse by Category</Text>
           </View>
           <View style={styles.categoryGrid}>
             {categories.slice(0, 8).map((cat) => (

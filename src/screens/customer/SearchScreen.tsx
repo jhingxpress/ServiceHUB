@@ -47,6 +47,7 @@ export default function SearchScreen() {
     id: string;
     name: string;
     price: number;
+    min_option_price?: number | null;
     provider_name: string | null;
     provider_rating: number | null;
     provider_total_reviews: number | null;
@@ -94,14 +95,28 @@ export default function SearchScreen() {
       const serviceIds = rawServices.map((s) => s.id);
 
       let imageMap: Record<string, string> = {};
+      let optionMap: Record<string, number> = {};
       if (serviceIds.length > 0) {
-        const { data: images } = await supabase
-          .from('service_images')
-          .select('service_id, image_url')
-          .in('service_id', serviceIds)
-          .order('sort_order');
+        const [{ data: images }, { data: options }] = await Promise.all([
+          supabase
+            .from('service_images')
+            .select('service_id, image_url')
+            .in('service_id', serviceIds)
+            .order('sort_order'),
+          supabase
+            .from('service_options')
+            .select('service_id, price')
+            .in('service_id', serviceIds)
+            .eq('is_active', true),
+        ]);
         (images ?? []).forEach((img: any) => {
           if (!imageMap[img.service_id]) imageMap[img.service_id] = img.image_url;
+        });
+        (options ?? []).forEach((opt: any) => {
+          const existing = optionMap[opt.service_id];
+          if (!existing || opt.price < existing) {
+            optionMap[opt.service_id] = opt.price;
+          }
         });
       }
 
@@ -110,6 +125,7 @@ export default function SearchScreen() {
           id: s.id,
           name: s.name,
           price: s.price ?? 0,
+          min_option_price: optionMap[s.id] ?? null,
           provider_name: s.provider?.business_name ?? null,
           provider_rating: s.provider?.rating ?? null,
           provider_total_reviews: s.provider?.total_reviews ?? null,
