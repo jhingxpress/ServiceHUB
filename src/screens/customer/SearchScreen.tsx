@@ -66,12 +66,23 @@ export default function SearchScreen() {
   const search = useCallback(async () => {
     setLoading(true);
     try {
+      // Resolve selectedCategory to leaf category IDs
+      let categoryFilterIds: string[] = [];
+      if (selectedCategory) {
+        const { data: leafCats } = await supabase
+          .from('categories')
+          .select('id')
+          .eq('parent_id', selectedCategory);
+        const leafIds = (leafCats ?? []).map((c: any) => c.id);
+        categoryFilterIds = leafIds.length > 0 ? leafIds : [selectedCategory];
+      }
+
       // Phase 1: Search services
       let serviceQ = supabase
         .from('services')
         .select(`
           id, name, price, provider_id,
-          provider:providers!services_provider_id_fkey(
+          provider:providers!inner(
             business_name, rating, total_reviews, profile_photo_url, business_logo
           )
         `)
@@ -82,8 +93,8 @@ export default function SearchScreen() {
         .eq('is_active', true)
         .is('deleted_at', null);
 
-      if (selectedCategory) {
-        serviceQ = serviceQ.eq('provider.category_id', selectedCategory);
+      if (categoryFilterIds.length > 0) {
+        serviceQ = serviceQ.in('provider.category_id', categoryFilterIds);
       }
 
       if (query.trim()) {
@@ -141,8 +152,8 @@ export default function SearchScreen() {
         .eq('is_available', true)
         .is('deleted_at', null);
 
-      if (selectedCategory) {
-        q = q.eq('category_id', selectedCategory);
+      if (categoryFilterIds.length > 0) {
+        q = q.in('category_id', categoryFilterIds);
       }
 
       if (query.trim()) {

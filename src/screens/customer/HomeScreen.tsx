@@ -413,13 +413,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md, gap: SPACING.sm,
   },
   categoryCard: {
-    width: '22%',
+    width: '23%',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
     borderRadius: BORDER_RADIUS.xl,
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.xs,
     borderWidth: 1, borderColor: COLORS.border,
+    minHeight: 100,
     ...SHADOWS.small,
   },
   categoryIcon: {
@@ -430,7 +431,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: SPACING.xs,
   },
-  categoryName: { fontFamily: FONTS.medium, fontSize: FONTS.sizes.xs, color: COLORS.text, textAlign: 'center', lineHeight: 15 },
+  categoryName: { fontFamily: FONTS.medium, fontSize: FONTS.sizes.xs, color: COLORS.text, textAlign: 'center', lineHeight: 16 },
   providerCard: {
     width: 130,
     backgroundColor: COLORS.surface,

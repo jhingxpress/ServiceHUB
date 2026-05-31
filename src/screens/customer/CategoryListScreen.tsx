@@ -41,66 +41,81 @@ export default function CategoryListScreen({ route, navigation }: Props) {
   const [sortIdx, setSortIdx] = useState(0);
 
   useEffect(() => {
-    supabase
-      .from('services')
-      .select(`
-        id, name, price, provider_id,
-        provider:providers!services_provider_id_fkey(
-          business_name, rating, total_reviews, profile_photo_url, business_logo
-        )
-      `)
-      .eq('provider.category_id', categoryId)
-      .eq('provider.status', 'approved')
-      .eq('provider.is_available', true)
-      .eq('provider.marketplace_status', 'live')
-      .is('provider.deleted_at', null)
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .then(async ({ data }) => {
-        const rawServices = (data ?? []) as any[];
-        const serviceIds = rawServices.map((s) => s.id);
+    const load = async () => {
+      setLoading(true);
 
-        let imageMap: Record<string, string> = {};
-        let optionMap: Record<string, number> = {};
-        if (serviceIds.length > 0) {
-          const [{ data: images }, { data: options }] = await Promise.all([
-            supabase
-              .from('service_images')
-              .select('service_id, image_url')
-              .in('service_id', serviceIds)
-              .order('sort_order'),
-            supabase
-              .from('service_options')
-              .select('service_id, price')
-              .in('service_id', serviceIds)
-              .eq('is_active', true),
-          ]);
-          (images ?? []).forEach((img: any) => {
-            if (!imageMap[img.service_id]) imageMap[img.service_id] = img.image_url;
-          });
-          (options ?? []).forEach((opt: any) => {
-            const existing = optionMap[opt.service_id];
-            if (!existing || opt.price < existing) {
-              optionMap[opt.service_id] = opt.price;
-            }
-          });
-        }
+      // Step 1: Resolve parent category to leaf category IDs
+      const { data: leafCategories } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('parent_id', categoryId);
 
-        const list: ServiceItem[] = rawServices.map((s) => ({
-          id: s.id,
-          name: s.name,
-          price: s.price ?? 0,
-          min_option_price: optionMap[s.id] ?? null,
-          provider_name: s.provider?.business_name ?? null,
-          provider_rating: s.provider?.rating ?? null,
-          provider_total_reviews: s.provider?.total_reviews ?? null,
-          image_url: imageMap[s.id] ?? null,
-        }));
+      const leafIds = (leafCategories ?? []).map((c: any) => c.id);
+      const categoryIds = leafIds.length > 0 ? leafIds : [categoryId];
 
-        setServices(list);
-        setFiltered(list);
-        setLoading(false);
-      });
+      // Step 2: Query services using leaf category IDs with inner join
+      const { data } = await supabase
+        .from('services')
+        .select(`
+          id, name, price, provider_id,
+          provider:providers!inner(
+            business_name, rating, total_reviews, profile_photo_url, business_logo
+          )
+        `)
+        .in('provider.category_id', categoryIds)
+        .eq('provider.status', 'approved')
+        .eq('provider.is_available', true)
+        .eq('provider.marketplace_status', 'live')
+        .is('provider.deleted_at', null)
+        .eq('is_active', true)
+        .is('deleted_at', null);
+
+      const rawServices = (data ?? []) as any[];
+      const serviceIds = rawServices.map((s) => s.id);
+
+      let imageMap: Record<string, string> = {};
+      let optionMap: Record<string, number> = {};
+      if (serviceIds.length > 0) {
+        const [{ data: images }, { data: options }] = await Promise.all([
+          supabase
+            .from('service_images')
+            .select('service_id, image_url')
+            .in('service_id', serviceIds)
+            .order('sort_order'),
+          supabase
+            .from('service_options')
+            .select('service_id, price')
+            .in('service_id', serviceIds)
+            .eq('is_active', true),
+        ]);
+        (images ?? []).forEach((img: any) => {
+          if (!imageMap[img.service_id]) imageMap[img.service_id] = img.image_url;
+        });
+        (options ?? []).forEach((opt: any) => {
+          const existing = optionMap[opt.service_id];
+          if (!existing || opt.price < existing) {
+            optionMap[opt.service_id] = opt.price;
+          }
+        });
+      }
+
+      const list: ServiceItem[] = rawServices.map((s) => ({
+        id: s.id,
+        name: s.name,
+        price: s.price ?? 0,
+        min_option_price: optionMap[s.id] ?? null,
+        provider_name: s.provider?.business_name ?? null,
+        provider_rating: s.provider?.rating ?? null,
+        provider_total_reviews: s.provider?.total_reviews ?? null,
+        image_url: imageMap[s.id] ?? null,
+      }));
+
+      setServices(list);
+      setFiltered(list);
+      setLoading(false);
+    };
+
+    load();
   }, [categoryId]);
 
   useEffect(() => {
