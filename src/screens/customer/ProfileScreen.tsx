@@ -14,6 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
+import { uploadImageToStorage } from '../../utils/storageUpload';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 import { CustomerStackParamList } from '../../navigation/types';
@@ -60,22 +61,14 @@ export default function ProfileScreen() {
 
     const uri = result.assets[0].uri;
     const ext = uri.split('.').pop() ?? 'jpg';
-    const path = `avatars/${user?.id}.${ext}`;
+    const path = `${user?.id}/avatar.${ext}`;
 
-    const response = await fetch(uri);
-    const blob = await response.blob();
-
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(path, blob, { upsert: true, contentType: `image/${ext}` });
-
-    if (uploadError) {
-      Alert.alert('Upload failed', uploadError.message);
-      return;
+    try {
+      const publicUrl = await uploadImageToStorage('avatars', path, uri, `image/${ext}`);
+      await updateProfile({ avatar_url: publicUrl });
+    } catch (err: any) {
+      Alert.alert('Upload failed', err.message || 'Network request failed');
     }
-
-    const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
-    await updateProfile({ avatar_url: urlData.publicUrl });
   };
 
   const handleSignOut = () => {
@@ -86,6 +79,11 @@ export default function ProfileScreen() {
   };
 
   const menuItems: MenuItem[] = [
+    {
+      icon: 'person-outline',
+      label: 'Edit Profile',
+      onPress: () => navigation.navigate('EditProfile'),
+    },
     {
       icon: 'calendar-outline',
       label: 'My Bookings',
@@ -141,6 +139,14 @@ export default function ProfileScreen() {
           <Text style={styles.userEmail}>{user?.email ?? ''}</Text>
           {user?.phone && (
             <Text style={styles.userPhone}>{user.phone}</Text>
+          )}
+          {user?.address && (
+            <View style={styles.locationRow}>
+              <Ionicons name="location-outline" size={14} color={COLORS.primary} />
+              <Text style={styles.userLocation} numberOfLines={2}>
+                {user.address}{user.city ? `, ${user.city}` : ''}{user.province ? `, ${user.province}` : ''}
+              </Text>
+            </View>
           )}
           <View style={styles.roleBadge}>
             <Text style={styles.roleText}>{user?.role?.toUpperCase() ?? 'CUSTOMER'}</Text>
@@ -219,6 +225,8 @@ const styles = StyleSheet.create({
   userName: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.xl, color: COLORS.text },
   userEmail: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
   userPhone: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, paddingHorizontal: SPACING.md },
+  userLocation: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, flex: 1 },
   roleBadge: {
     marginTop: SPACING.sm, backgroundColor: COLORS.primaryLight,
     paddingHorizontal: SPACING.md, paddingVertical: 4, borderRadius: BORDER_RADIUS.full,

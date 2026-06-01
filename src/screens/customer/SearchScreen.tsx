@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import * as Location from 'expo-location';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
 import { Provider, Category } from '../../types';
@@ -56,6 +57,7 @@ export default function SearchScreen() {
   const [loading, setLoading] = useState(false);
   const [nearbyMode, setNearbyMode] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
 
   useEffect(() => {
     supabase.from('categories').select('*').order('name').then(({ data }) => {
@@ -147,7 +149,7 @@ export default function SearchScreen() {
       // Phase 2: Search providers
       let q = supabase
         .from('providers')
-        .select('*, users!providers_id_fkey(full_name, avatar_url, email), categories(name, icon, color), provider_stats(*), profile_photo_url, business_logo')
+        .select('*, business_name, categories(name, icon, color), provider_stats(*), profile_photo_url, business_logo')
         .eq('status', 'approved')
         .eq('is_available', true)
         .is('deleted_at', null);
@@ -157,7 +159,7 @@ export default function SearchScreen() {
       }
 
       if (query.trim()) {
-        q = q.or(`business_name.ilike.%${query.trim()}%,users.full_name.ilike.%${query.trim()}%`);
+        q = q.ilike('business_name', `%${query.trim()}%`);
       }
 
       const { data } = await q.order('rating', { ascending: false }).limit(50);
@@ -184,15 +186,26 @@ export default function SearchScreen() {
 
   useEffect(() => { search(); }, [search]);
 
-  const toggleNearby = () => {
-    if (!nearbyMode) {
-      // For MVP, use a hardcoded Davao del Sur center location
-      // In production, use expo-location to get real user location
-      setUserLocation({ lat: 6.7478, lng: 125.2943 }); // Digos City, Davao del Sur
-      setNearbyMode(true);
-    } else {
+  const toggleNearby = async () => {
+    if (nearbyMode) {
       setNearbyMode(false);
       setUserLocation(null);
+      return;
+    }
+    setLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location permission is required for Nearby Search.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setUserLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+      setNearbyMode(true);
+    } catch (err: any) {
+      Alert.alert('Location Error', err.message || 'Unable to get your current location.');
+    } finally {
+      setLocating(false);
     }
   };
 
@@ -202,11 +215,11 @@ export default function SearchScreen() {
       onPress={() => navigation.navigate('ProviderStorefront', { providerId: item.id })}
       activeOpacity={0.8}
     >
-      <Avatar uri={item.profile_photo_url ?? item.business_logo ?? item.users?.avatar_url} name={item.business_name ?? item.users?.full_name} size={56} />
+      <Avatar uri={item.profile_photo_url ?? item.business_logo} name={item.business_name} size={56} />
       <View style={styles.cardInfo}>
         <View style={styles.cardRow}>
           <Text style={styles.providerName} numberOfLines={1}>
-            {item.business_name ?? item.users?.full_name ?? 'Provider'}
+            {item.business_name ?? 'Provider'}
           </Text>
           {item.is_verified && (
             <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} />
@@ -258,8 +271,10 @@ export default function SearchScreen() {
             returnKeyType="search"
             onSubmitEditing={search}
           />
-          <TouchableOpacity onPress={toggleNearby}>
-            <Ionicons name={nearbyMode ? "locate" : "locate-outline"} size={20} color={nearbyMode ? COLORS.primary : COLORS.textLight} />
+          <TouchableOpacity onPress={toggleNearby} disabled={locating}>
+            {locating
+              ? <ActivityIndicator size="small" color={COLORS.primary} />
+              : <Ionicons name={nearbyMode ? 'locate' : 'locate-outline'} size={20} color={nearbyMode ? COLORS.primary : COLORS.textLight} />}
           </TouchableOpacity>
           {query.length > 0 && (
             <TouchableOpacity onPress={() => setQuery('')}>
@@ -344,11 +359,19 @@ export default function SearchScreen() {
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <EmptyState
-              icon="search-outline"
-              title="No results found"
-              subtitle="Try adjusting your search or category filter"
-            />
+            nearbyMode ? (
+              <EmptyState
+                icon="locate-outline"
+                title="No providers nearby"
+                subtitle="No providers have configured GPS coordinates yet. Try broadening your search or disabling Nearby mode."
+              />
+            ) : (
+              <EmptyState
+                icon="search-outline"
+                title="No results found"
+                subtitle="Try adjusting your search or category filter"
+              />
+            )
           }
         />
       )}

@@ -36,6 +36,24 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
+function getCategoryDisplayLabel(name: string): string {
+  const map: Record<string, string> = {
+    'HOME SERVICES': 'Home Services',
+    'HVAC & APPLIANCES': 'HVAC & Appliances',
+    'AUTOMOTIVE': 'Automotive',
+    'CONSTRUCTION & RENOVATION': 'Construction',
+    'EVENTS & ENTERTAINMENT': 'Events',
+    'BEAUTY & WELLNESS': 'Beauty',
+    'TECHNOLOGY & SECURITY': 'Technology',
+    'LOGISTICS & TRANSPORTATION': 'Logistics',
+    'BUSINESS SERVICES': 'Business',
+    'EDUCATION & TRAINING': 'Education',
+    'PET SERVICES': 'Pet Services',
+    'HEALTH & HOME CARE': 'Health & Home',
+  };
+  return map[name] ?? name;
+}
+
 export default function HomeScreen() {
   const navigation = useNavigation<NavProp>();
   const { user } = useAuthStore();
@@ -61,7 +79,7 @@ export default function HomeScreen() {
         supabase.from('categories').select('*').eq('is_parent', true).order('name'),
         supabase
           .from('providers')
-          .select('*, users!providers_id_fkey(full_name, avatar_url), categories(name, icon, color), profile_photo_url, business_logo')
+          .select('*, categories(name, icon, color), profile_photo_url, business_logo')
           .eq('is_verified', true)
           .eq('is_available', true)
           .eq('status', 'approved')
@@ -250,7 +268,7 @@ export default function HomeScreen() {
                 <View style={[styles.categoryIcon, { backgroundColor: (cat.color ?? COLORS.primary) + '18' }]}>
                   <Ionicons name={cat.icon as React.ComponentProps<typeof Ionicons>['name']} size={26} color={cat.color ?? COLORS.primary} />
                 </View>
-                <Text style={styles.categoryName} numberOfLines={2}>{cat.name}</Text>
+                <Text style={styles.categoryName} numberOfLines={2}>{getCategoryDisplayLabel(cat.name)}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -277,12 +295,12 @@ export default function HomeScreen() {
                 activeOpacity={0.8}
               >
                 <Avatar
-                  uri={item.profile_photo_url ?? item.business_logo ?? item.users?.avatar_url}
-                  name={item.business_name ?? item.users?.full_name}
+                  uri={item.profile_photo_url ?? item.business_logo}
+                  name={item.business_name}
                   size={52}
                 />
                 <Text style={styles.providerName} numberOfLines={1}>
-                  {item.business_name ?? item.users?.full_name ?? 'Provider'}
+                  {item.business_name ?? 'Provider'}
                 </Text>
                 <Text style={styles.providerCategory} numberOfLines={1}>
                   {item.categories?.name ?? 'Services'}

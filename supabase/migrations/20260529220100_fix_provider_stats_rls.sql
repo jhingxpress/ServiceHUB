@@ -82,17 +82,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================================
--- VERIFY
+-- VERIFY (diagnostic SELECT removed — run manually in SQL Editor if needed)
+-- Confirms: sync_provider_stats, sync_favorite_count,
+--           update_provider_response_time are SECURITY DEFINER
 -- ============================================================
-
--- Ensure provider_stats RLS is still enabled (not disabled globally)
--- and confirm triggers exist
-SELECT
-  tgname AS trigger_name,
-  tgenabled AS enabled,
-  proname AS function_name,
-  prosecdef AS security_definer
-FROM pg_trigger t
-JOIN pg_proc p ON t.tgfoid = p.oid
-WHERE tgrelid = 'public.provider_stats'::regclass
-   OR proname IN ('sync_provider_stats', 'sync_favorite_count', 'update_provider_response_time');

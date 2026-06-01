@@ -46,7 +46,7 @@ export default function BookingRequestsScreen() {
     if (!user) return;
     let q = supabase
       .from('bookings')
-      .select('*, customer:users!bookings_customer_id_fkey(full_name, avatar_url), service:services(name)')
+      .select('*, service:services(name)')
       .eq('provider_id', user.id)
       .order('created_at', { ascending: false });
     if (filter !== 'all') q = q.eq('status', filter);
@@ -108,7 +108,8 @@ export default function BookingRequestsScreen() {
   };
 
   const renderBooking = ({ item }: { item: Booking }) => {
-    const cust = item.customer as unknown as { full_name: string | null; avatar_url: string | null };
+    const custName = item.customer_name;
+    const custAvatar = item.customer_avatar_url;
     return (
       <TouchableOpacity
         style={styles.card}
@@ -116,9 +117,9 @@ export default function BookingRequestsScreen() {
         activeOpacity={0.8}
       >
         <View style={styles.cardTop}>
-          <Avatar uri={cust?.avatar_url} name={cust?.full_name} size={46} />
+          <Avatar uri={custAvatar} name={custName} size={46} />
           <View style={styles.cardInfo}>
-            <Text style={styles.custName} numberOfLines={1}>{cust?.full_name ?? 'Customer'}</Text>
+            <Text style={styles.custName} numberOfLines={1}>{custName ?? 'Customer'}</Text>
             <Text style={styles.serviceName} numberOfLines={1}>{item.service?.name ?? 'Service'}</Text>
             <View style={styles.metaRow}>
               <Ionicons name="calendar-outline" size={12} color={COLORS.textLight} />

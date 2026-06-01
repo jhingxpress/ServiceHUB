@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,13 @@ import {
   TextInput,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { format } from 'date-fns';
@@ -40,11 +42,69 @@ export default function BookingScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [location, setLocation] = useState('');
+  const [city, setCity] = useState('');
+  const [province, setProvince] = useState('');
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [useProfileLocation, setUseProfileLocation] = useState(false);
+  const latRef = useRef<number | null>(null);
+  const lngRef = useRef<number | null>(null);
+
+  const setCoords = (lat: number | null, lng: number | null) => {
+    latRef.current = lat;
+    lngRef.current = lng;
+    setLatitude(lat);
+    setLongitude(lng);
+  };
   const [notes, setNotes] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [detectingLocation, setDetectingLocation] = useState(false);
   const { showError, showSuccess } = useErrorHandler();
+
+  const applyProfileLocation = () => {
+    if (!user) return;
+    setUseProfileLocation(true);
+    setLocation(user.address ?? '');
+    setCity(user.city ?? '');
+    setProvince(user.province ?? '');
+    if (user.latitude != null && user.longitude != null) {
+      setCoords(user.latitude, user.longitude);
+    } else {
+      Alert.alert(
+        'No Saved Coordinates',
+        'Your saved address doesn\'t have GPS coordinates. Tap "Use Current Location" to capture them.'
+      );
+    }
+  };
+
+  const clearProfileLocation = () => {
+    setUseProfileLocation(false);
+    setLocation('');
+    setCity('');
+    setProvince('');
+    setCoords(null, null);
+  };
+
+  const handleDetectBookingLocation = async () => {
+    setDetectingLocation(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location permission is required to set your service location.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setCoords(loc.coords.latitude, loc.coords.longitude);
+      setUseProfileLocation(false);
+      Alert.alert('Location Captured', `Latitude: ${loc.coords.latitude.toFixed(5)}, Longitude: ${loc.coords.longitude.toFixed(5)}`);
+    } catch (err: any) {
+      Alert.alert('Location Error', err.message || 'Unable to detect location. Please enter manually.');
+    } finally {
+      setDetectingLocation(false);
+    }
+  };
 
   const handlePickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -58,16 +118,18 @@ export default function BookingScreen() {
   };
 
   const uploadPhotos = async (): Promise<string[]> => {
-    if (photos.length === 0) return [];
+    if (photos.length === 0 || !user) return [];
     const uploaded: string[] = [];
     for (const uri of photos) {
-      const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
-      const path = `bookings/${providerId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const rawExt = (uri.split('.').pop() ?? 'jpg').split('?')[0].split('#')[0].toLowerCase();
+      const ext = rawExt === 'jpg' || rawExt === 'jpeg' ? 'jpeg' : rawExt === 'png' ? 'png' : 'jpeg';
+      const mime = `image/${ext}`;
+      const path = `${user.id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
       const response = await fetch(uri);
       const blob = await response.blob();
       const { error: upErr } = await supabase.storage
         .from('booking-photos')
-        .upload(path, blob, { contentType: `image/${ext}` });
+        .upload(path, blob, { contentType: mime });
       if (upErr) {
         console.error('Photo upload error:', upErr);
         continue;
@@ -112,6 +174,14 @@ export default function BookingScreen() {
       return;
     }
 
+    if (latRef.current == null || lngRef.current == null) {
+      Alert.alert(
+        'GPS Coordinates Required',
+        'Please tap "Use Current Location" to capture GPS coordinates. This is required so the provider can navigate to your service address.'
+      );
+      return;
+    }
+
     if (!user) return;
     setSubmitting(true);
     try {
@@ -138,6 +208,10 @@ export default function BookingScreen() {
           scheduled_date: format(date, 'yyyy-MM-dd'),
           scheduled_time: format(time, 'HH:mm:ss'),
           location: location.trim(),
+          latitude: latRef.current,
+          longitude: lngRef.current,
+          booking_city: city.trim() || null,
+          booking_province: province.trim() || null,
           notes: notes.trim() || null,
           photo_urls: photoUrls,
           total_amount: price ?? null,
@@ -232,16 +306,96 @@ export default function BookingScreen() {
 
             {/* Location */}
             <Text style={styles.label}>Service Location *</Text>
+            {user?.address && (
+              <TouchableOpacity
+                style={[
+                  styles.profileLocationBtn,
+                  useProfileLocation && styles.profileLocationBtnActive,
+                ]}
+                onPress={useProfileLocation ? clearProfileLocation : applyProfileLocation}
+              >
+                <Ionicons
+                  name={useProfileLocation ? 'checkbox' : 'square-outline'}
+                  size={20}
+                  color={useProfileLocation ? COLORS.primary : COLORS.textLight}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.profileLocationTitle}>Use my saved address</Text>
+                  <Text style={styles.profileLocationSub} numberOfLines={1}>
+                    {user.address}, {user.city ?? ''}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
             <View style={styles.inputWrap}>
               <Ionicons name="location-outline" size={18} color={COLORS.textLight} style={styles.inputIcon} />
               <TextInput
                 style={styles.textInput}
                 value={location}
-                onChangeText={setLocation}
-                placeholder="Enter your address"
+                onChangeText={(text) => {
+                  setLocation(text);
+                  if (useProfileLocation) setUseProfileLocation(false);
+                }}
+                placeholder="Street address, barangay"
                 placeholderTextColor={COLORS.textLight}
               />
             </View>
+
+            <View style={styles.row}>
+              <View style={styles.half}>
+                <View style={styles.inputWrap}>
+                  <TextInput
+                    style={styles.textInput}
+                    value={city}
+                    onChangeText={(text) => {
+                      setCity(text);
+                      if (useProfileLocation) setUseProfileLocation(false);
+                    }}
+                    placeholder="City"
+                    placeholderTextColor={COLORS.textLight}
+                  />
+                </View>
+              </View>
+              <View style={styles.half}>
+                <View style={styles.inputWrap}>
+                  <TextInput
+                    style={styles.textInput}
+                    value={province}
+                    onChangeText={(text) => {
+                      setProvince(text);
+                      if (useProfileLocation) setUseProfileLocation(false);
+                    }}
+                    placeholder="Province"
+                    placeholderTextColor={COLORS.textLight}
+                  />
+                </View>
+              </View>
+            </View>
+
+            {/* Detect current location */}
+            <TouchableOpacity
+              style={styles.detectBtn}
+              onPress={handleDetectBookingLocation}
+              disabled={detectingLocation}
+            >
+              {detectingLocation ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : (
+                <Ionicons name="locate" size={18} color={COLORS.primary} />
+              )}
+              <Text style={styles.detectBtnText}>
+                {detectingLocation ? 'Detecting...' : 'Use Current Location'}
+              </Text>
+            </TouchableOpacity>
+
+            {latitude != null && longitude != null && (
+              <View style={styles.capturedRow}>
+                <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
+                <Text style={styles.capturedText}>
+                  Location Captured — Lat: {latitude.toFixed(5)}, Lng: {longitude.toFixed(5)}
+                </Text>
+              </View>
+            )}
 
             {/* Notes */}
             <Text style={styles.label}>Additional Notes</Text>
@@ -357,6 +511,25 @@ const styles = StyleSheet.create({
   },
   inputIcon: { marginLeft: SPACING.md },
   textInput: { flex: 1, height: 48, paddingHorizontal: SPACING.sm, fontSize: FONTS.sizes.base, color: COLORS.text },
+  profileLocationBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1.5, borderColor: COLORS.border, padding: SPACING.md,
+    marginBottom: SPACING.sm, ...SHADOWS.small,
+  },
+  profileLocationBtnActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primaryLight },
+  profileLocationTitle: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
+  profileLocationSub: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
+  row: { flexDirection: 'row', gap: SPACING.sm },
+  half: { flex: 1 },
+  detectBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm,
+    backgroundColor: COLORS.primaryLight, borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.md, marginTop: SPACING.sm, borderWidth: 1, borderColor: COLORS.primary,
+  },
+  detectBtnText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.primary },
+  capturedRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.xs },
+  capturedText: { fontSize: FONTS.sizes.xs, color: COLORS.success, fontFamily: FONTS.medium },
   notesInput: {
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.md,
     borderWidth: 1.5, borderColor: COLORS.border, padding: SPACING.md,

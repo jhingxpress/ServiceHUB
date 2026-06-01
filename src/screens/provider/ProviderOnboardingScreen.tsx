@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { Category } from '../../types';
@@ -116,6 +117,11 @@ export default function ProviderOnboardingScreen() {
   const [yearsExp, setYearsExp] = useState('');
   const [serviceArea, setServiceArea] = useState('');
 
+  // Step 1 — GPS location
+  const [providerLat, setProviderLat] = useState<number | null>(null);
+  const [providerLng, setProviderLng] = useState<number | null>(null);
+  const [detectingLoc, setDetectingLoc] = useState(false);
+
   // Step 2 — two-level category picker
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
@@ -154,6 +160,8 @@ export default function ProviderOnboardingScreen() {
       setYearsExp(data.years_of_experience ? String(data.years_of_experience) : '');
       setServiceArea(data.service_area ?? '');
       setSelectedCategoryId(data.category_id ?? null);
+      setProviderLat(data.latitude ?? null);
+      setProviderLng(data.longitude ?? null);
     }
     // Load existing provider category
     const { data: pcData } = await supabase
@@ -190,6 +198,24 @@ export default function ProviderOnboardingScreen() {
         if (ex) return { ...p, checked: true, uploadedUrl: ex.file_url, state: 'success' as UploadState };
         return p;
       }));
+    }
+  };
+
+  const handleDetectProviderLocation = async () => {
+    setDetectingLoc(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location permission is required to capture your business coordinates.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setProviderLat(loc.coords.latitude);
+      setProviderLng(loc.coords.longitude);
+    } catch (err: any) {
+      Alert.alert('Location Error', err.message || 'Unable to detect location.');
+    } finally {
+      setDetectingLoc(false);
     }
   };
 
@@ -379,6 +405,8 @@ export default function ProviderOnboardingScreen() {
         service_area: serviceArea.trim() || null,
         category_id: selectedCategoryId,
         location: `${city.trim()}, ${province.trim()}`,
+        latitude: providerLat,
+        longitude: providerLng,
         status: 'pending_review',
       };
       console.log('[handleSubmit] Payload:', payload);
@@ -505,6 +533,32 @@ export default function ProviderOnboardingScreen() {
         <View style={{ flex: 1 }}>
           {renderField('Service Area', serviceArea, setServiceArea, { placeholder: 'e.g. Metro Cebu', required: false })}
         </View>
+      </View>
+
+      {/* GPS Location */}
+      <View style={styles.fieldWrap}>
+        <Text style={styles.label}>GPS Location (optional)</Text>
+        <TouchableOpacity
+          style={styles.locBtn}
+          onPress={handleDetectProviderLocation}
+          disabled={detectingLoc}
+          activeOpacity={0.8}
+        >
+          {detectingLoc
+            ? <ActivityIndicator size="small" color={COLORS.primary} />
+            : <Ionicons name="locate-outline" size={18} color={COLORS.primary} />}
+          <Text style={styles.locBtnText}>
+            {detectingLoc ? 'Detecting...' : providerLat != null ? 'Update Location' : 'Use Current Location'}
+          </Text>
+        </TouchableOpacity>
+        {providerLat != null && providerLng != null && (
+          <View style={styles.locCaptured}>
+            <Ionicons name="checkmark-circle" size={14} color={COLORS.success} />
+            <Text style={styles.locCapturedText}>
+              Captured — {providerLat.toFixed(5)}, {providerLng.toFixed(5)}
+            </Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -795,6 +849,9 @@ export default function ProviderOnboardingScreen() {
           <ReviewRow icon="mail-outline" label="Email" value={businessEmail} />
           {serviceArea ? <ReviewRow icon="map-outline" label="Service Area" value={serviceArea} /> : null}
           {yearsExp ? <ReviewRow icon="time-outline" label="Experience" value={`${yearsExp} years`} /> : null}
+          {providerLat != null && providerLng != null
+            ? <ReviewRow icon="navigate-outline" label="GPS" value={`${providerLat.toFixed(5)}, ${providerLng.toFixed(5)}`} />
+            : null}
         </View>
         <View style={styles.reviewCard}>
           <Text style={styles.reviewSection}>Service Category</Text>
@@ -1045,4 +1102,16 @@ const styles = StyleSheet.create({
   nextBtnText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.white },
   backToParents: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm },
   backToParentsText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.primary },
+  locBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    borderWidth: 1.5, borderColor: COLORS.primary, borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md, paddingVertical: 11, backgroundColor: COLORS.primaryLight,
+  },
+  locBtnText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.primary },
+  locCaptured: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8,
+    paddingHorizontal: 10, paddingVertical: 7,
+    backgroundColor: COLORS.successLight, borderRadius: BORDER_RADIUS.md,
+  },
+  locCapturedText: { fontSize: FONTS.sizes.xs, color: COLORS.success, fontFamily: FONTS.medium },
 });

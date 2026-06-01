@@ -57,7 +57,7 @@ export default function ProviderStorefrontScreen() {
     setLoading(true);
     const { data: prov, error: provError } = await supabase
       .from('providers')
-      .select('*, users!providers_id_fkey(full_name, avatar_url, phone), categories(name, icon, color), provider_badges(*), provider_gallery(*), provider_stats(*), profile_photo_url, business_logo')
+      .select('*, categories(name, icon, color), provider_badges(*), provider_gallery(*), provider_stats(*), profile_photo_url, business_logo')
       .eq('id', providerId)
       .eq('status', 'approved')
       .eq('marketplace_status', 'live')
@@ -77,16 +77,37 @@ export default function ProviderStorefrontScreen() {
       return;
     }
 
-    const { data: srvs, error: srvError } = await supabase
+    let srvs: any[] | null = null;
+    let srvError: any = null;
+
+    // Try sort_order first (preferred), fallback to created_at if column missing
+    const sortQuery = supabase
       .from('services')
       .select('*')
       .eq('provider_id', providerId)
       .eq('is_active', true)
-      .is('deleted_at', null)
       .order('sort_order');
+    const fallbackQuery = supabase
+      .from('services')
+      .select('*')
+      .eq('provider_id', providerId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
 
-    if (srvError) {
-      console.error('[ProviderStorefront] Services query error:', srvError);
+    const sortRes = await sortQuery;
+    if (sortRes.error && sortRes.error.code === '42703') {
+      const fallbackRes = await fallbackQuery;
+      srvs = fallbackRes.data;
+      srvError = fallbackRes.error;
+      if (srvError) {
+        console.error('[ProviderStorefront] Services fallback query error:', srvError.code, srvError.message);
+      }
+    } else {
+      srvs = sortRes.data;
+      srvError = sortRes.error;
+      if (srvError) {
+        console.error('[ProviderStorefront] Services query error:', srvError.code, srvError.message);
+      }
     }
 
     const serviceIds = (srvs ?? []).map((s) => s.id);
@@ -106,13 +127,16 @@ export default function ProviderStorefrontScreen() {
       service_images: (images ?? []).filter((i: any) => i.service_id === s.id),
     }));
 
-    const { data: revs } = await supabase
+    const { data: revs, error: revError } = await supabase
       .from('reviews')
-      .select('*, customer:users!reviews_customer_id_fkey(full_name, avatar_url), review_media(*)')
+      .select('id, booking_id, customer_id, provider_id, rating, title, comment, photo_urls, customer_name, customer_avatar_url, is_visible, created_at')
       .eq('provider_id', providerId)
       .eq('is_visible', true)
       .order('created_at', { ascending: false })
       .limit(10);
+    if (revError) {
+      console.error('[ProviderStorefront] Reviews query error:', revError.code, revError.message, revError.details);
+    }
 
     setProvider(prov as unknown as Provider);
     setServices(servicesWithRelations);
@@ -148,7 +172,7 @@ export default function ProviderStorefrontScreen() {
 
   if (!provider) return null;
 
-  const userInfo = provider.users as unknown as { full_name: string | null; avatar_url: string | null; phone: string | null };
+  const providerName = provider.business_name ?? 'Provider';
   const cat = provider.categories as unknown as { name: string; icon: string; color: string } | undefined;
   const badges = (provider.provider_badges ?? []) as ProviderBadge[];
   const gallery = provider.provider_gallery ?? [];
@@ -179,14 +203,14 @@ export default function ProviderStorefrontScreen() {
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.logoWrap}>
-            <Avatar uri={provider.profile_photo_url ?? provider.business_logo ?? userInfo?.avatar_url} name={provider.business_name ?? userInfo?.full_name} size={80} borderColor={COLORS.primary} />
+            <Avatar uri={provider.profile_photo_url ?? provider.business_logo} name={providerName} size={80} borderColor={COLORS.primary} />
             {provider.is_verified && (
               <View style={styles.verifiedBadge}>
                 <Ionicons name="checkmark-circle" size={18} color={COLORS.success} />
               </View>
             )}
           </View>
-          <Text style={styles.providerName}>{provider.business_name ?? userInfo?.full_name ?? 'Provider'}</Text>
+          <Text style={styles.providerName}>{providerName}</Text>
           <Text style={styles.categoryName}>{cat?.name ?? 'Service Provider'}</Text>
 
           {/* Online Status + Response Time */}
@@ -261,10 +285,10 @@ export default function ProviderStorefrontScreen() {
               <Ionicons name="location-outline" size={16} color={COLORS.textSecondary} />
               <Text style={styles.infoText}>{provider.business_address ?? provider.location ?? 'Davao del Sur'}</Text>
             </View>
-            {userInfo?.phone && (
+            {provider.business_phone && (
               <View style={styles.infoItem}>
                 <Ionicons name="call-outline" size={16} color={COLORS.textSecondary} />
-                <Text style={styles.infoText}>{userInfo.phone}</Text>
+                <Text style={styles.infoText}>{provider.business_phone}</Text>
               </View>
             )}
             <View style={styles.infoItem}>
@@ -345,13 +369,12 @@ export default function ProviderStorefrontScreen() {
             <Text style={styles.emptyText}>No reviews yet.</Text>
           ) : (
             reviews.map((r) => {
-              const cust = r.customer as unknown as { full_name: string | null; avatar_url: string | null };
               return (
                 <View key={r.id} style={styles.reviewCard}>
                   <View style={styles.reviewHeader}>
-                    <Avatar uri={cust?.avatar_url} name={cust?.full_name} size={36} />
+                    <Avatar uri={r.customer_avatar_url} name={r.customer_name} size={36} />
                     <View style={styles.reviewMeta}>
-                      <Text style={styles.reviewName}>{cust?.full_name ?? 'Customer'}</Text>
+                      <Text style={styles.reviewName}>{r.customer_name ?? 'Customer'}</Text>
                       <View style={styles.ratingRow}>
                         {[1, 2, 3, 4, 5].map((star) => (
                           <Ionicons key={star} name={star <= r.rating ? 'star' : 'star-outline'} size={12} color="#F59E0B" />
@@ -360,7 +383,15 @@ export default function ProviderStorefrontScreen() {
                       </View>
                     </View>
                   </View>
+                  {r.title ? <Text style={styles.reviewTitle}>{r.title}</Text> : null}
                   {r.comment ? <Text style={styles.reviewText}>{r.comment}</Text> : null}
+                  {r.photo_urls && r.photo_urls.length > 0 && (
+                    <View style={styles.reviewPhotos}>
+                      {r.photo_urls.map((url, idx) => (
+                        <Image key={idx} source={{ uri: url }} style={styles.reviewPhotoThumb} />
+                      ))}
+                    </View>
+                  )}
                 </View>
               );
             })
@@ -373,7 +404,7 @@ export default function ProviderStorefrontScreen() {
 
       {/* Floating Book Button */}
       <View style={styles.floatingBar}>
-        <TouchableOpacity style={styles.reportBtn} onPress={() => navigation.navigate('ReportScreen', { reportedUserId: provider.id, reportedUserName: (provider.business_name ?? userInfo?.full_name) ?? undefined })}>
+        <TouchableOpacity style={styles.reportBtn} onPress={() => navigation.navigate('ReportScreen', { reportedUserId: provider.id, reportedUserName: providerName })}>
           <Ionicons name="flag-outline" size={18} color={COLORS.textLight} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.chatBtn} onPress={() => Alert.alert('Chat', 'Chat feature coming soon')}>
@@ -508,4 +539,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center',
   },
   mainBookBtnText: { fontFamily: FONTS.bold, color: COLORS.white, fontSize: FONTS.sizes.base },
+  reviewTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text, marginTop: SPACING.sm },
+  reviewPhotos: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm, flexWrap: 'wrap' },
+  reviewPhotoThumb: { width: 80, height: 80, borderRadius: BORDER_RADIUS.md },
 });

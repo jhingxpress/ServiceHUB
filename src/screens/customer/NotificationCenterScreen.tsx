@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
@@ -59,11 +59,27 @@ export default function NotificationCenterScreen() {
     );
   };
 
-  const markAllRead = async () => {
+  const markAllRead = useCallback(async () => {
     if (!user) return;
-    await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id).eq('is_read', false);
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-  };
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('user_id', user.id)
+      .eq('is_read', false);
+    if (!error) {
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    }
+  }, [user]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const run = async () => {
+        await fetchNotifications();   // fetch first so user sees their notifications
+        await markAllRead();          // then mark all read — this is the LAST state write
+      };
+      run();
+    }, [fetchNotifications, markAllRead])
+  );
 
   const filtered = activeFilter === 'unread'
     ? notifications.filter((n) => !n.is_read)

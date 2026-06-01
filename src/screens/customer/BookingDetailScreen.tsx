@@ -44,11 +44,9 @@ export default function BookingDetailScreen() {
       .select(`
         *,
         provider:providers!bookings_provider_id_fkey(
-          *, business_name, profile_photo_url, business_logo,
-          users!providers_id_fkey(full_name, avatar_url, phone)
+          business_name, profile_photo_url, business_logo
         ),
-        service:services(name, price),
-        customer:users!bookings_customer_id_fkey(full_name, avatar_url)
+        service:services(name, price)
       `)
       .eq('id', bookingId)
       .single();
@@ -121,10 +119,10 @@ export default function BookingDetailScreen() {
     );
   }
 
-  const providerData = booking.provider as unknown as { business_name: string | null; profile_photo_url: string | null; business_logo: string | null; users: { full_name: string | null; avatar_url: string | null; phone: string | null } } | null;
-  const providerUser = providerData?.users;
-  const providerName = providerData?.business_name ?? providerUser?.full_name ?? 'Provider';
-  const providerPhoto = providerData?.profile_photo_url ?? providerData?.business_logo ?? providerUser?.avatar_url;
+  const providerData = booking.provider as unknown as { business_name: string | null; profile_photo_url: string | null; business_logo: string | null } | null;
+  const providerName = providerData?.business_name ?? 'Provider';
+  const providerPhoto = providerData?.profile_photo_url ?? providerData?.business_logo ?? null;
+  const customerName = booking.customer_name ?? 'Customer';
   const currentStep = STEPS.indexOf(booking.status);
   const isCompleted = booking.status === 'completed';
   const isCancellable = ['pending', 'accepted', 'on_the_way', 'arrived'].includes(booking.status);
@@ -196,8 +194,8 @@ export default function BookingDetailScreen() {
             <Avatar uri={providerPhoto} name={providerName} size={52} />
             <View style={{ flex: 1 }}>
               <Text style={styles.providerName}>{providerName}</Text>
-              {providerUser?.phone && (
-                <Text style={styles.providerPhone}>{providerUser.phone}</Text>
+              {booking.customer_phone && (
+                <Text style={styles.providerPhone}>{booking.customer_phone}</Text>
               )}
             </View>
             <TouchableOpacity
@@ -206,7 +204,8 @@ export default function BookingDetailScreen() {
                 navigation.navigate('ChatRoom', {
                   bookingId,
                   otherUserId: booking.provider_id,
-                  otherUserName: providerUser?.full_name ?? 'Provider',
+                  otherUserName: providerName,
+                  otherUserAvatar: providerPhoto,
                 })
               }
             >
@@ -272,7 +271,7 @@ export default function BookingDetailScreen() {
                 navigation.navigate('ReviewService', {
                   bookingId,
                   providerId: booking.provider_id,
-                  providerName: providerUser?.full_name ?? 'Provider',
+                  providerName: providerName,
                 })
               }
               fullWidth

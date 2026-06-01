@@ -24,6 +24,8 @@ import ProviderOnboardingScreen from '../screens/provider/ProviderOnboardingScre
 import PendingApprovalScreen from '../screens/provider/PendingApprovalScreen';
 import NotificationCenterScreen from '../screens/customer/NotificationCenterScreen';
 import ReportScreen from '../screens/shared/ReportScreen';
+import ProviderReviewsScreen from '../screens/provider/ProviderReviewsScreen';
+import ProviderMessagesScreen from '../screens/provider/ProviderMessagesScreen';
 
 const Stack = createNativeStackNavigator<ProviderStackParamList>();
 const Tab = createBottomTabNavigator<ProviderTabParamList>();
@@ -32,16 +34,19 @@ function ProviderTabs() {
   const { user } = useAuthStore();
   const [requestBadge, setRequestBadge] = useState(0);
   const [notifBadge, setNotifBadge] = useState(0);
+  const [messageBadge, setMessageBadge] = useState(0);
 
   useEffect(() => {
     if (!user) return;
     const fetchBadges = async () => {
-      const [{ count: reqCount }, { count: notifCount }] = await Promise.all([
+      const [{ count: reqCount }, { count: notifCount }, { count: msgCount }] = await Promise.all([
         supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('provider_id', user.id).eq('status', 'pending'),
-        supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_read', false),
+        supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_read', false).neq('type', 'chat_message'), // chat_message already counted by Messages badge
+        supabase.from('messages').select('*', { count: 'exact', head: true }).eq('receiver_id', user.id).eq('is_read', false),
       ]);
       setRequestBadge(reqCount ?? 0);
       setNotifBadge(notifCount ?? 0);
+      setMessageBadge(msgCount ?? 0);
     };
     fetchBadges();
 
@@ -49,6 +54,7 @@ function ProviderTabs() {
       .channel(`provider-nav-${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `provider_id=eq.${user.id}` }, () => fetchBadges())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, () => fetchBadges())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` }, () => fetchBadges())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user]);
@@ -79,6 +85,9 @@ function ProviderTabs() {
             case 'Schedule':
               iconName = focused ? 'time' : 'time-outline';
               break;
+            case 'Messages':
+              iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
+              break;
             default:
               iconName = focused ? 'settings' : 'settings-outline';
           }
@@ -93,6 +102,11 @@ function ProviderTabs() {
         options={{ tabBarBadge: requestBadge > 0 ? (requestBadge > 99 ? '99+' : requestBadge) : undefined }}
       />
       <Tab.Screen name="ActiveJobs" component={ActiveJobsScreen} />
+      <Tab.Screen
+        name="Messages"
+        component={ProviderMessagesScreen}
+        options={{ tabBarBadge: messageBadge > 0 ? (messageBadge > 99 ? '99+' : messageBadge) : undefined }}
+      />
       <Tab.Screen name="Earnings" component={EarningsScreen} />
       <Tab.Screen name="Schedule" component={ScheduleScreen} />
       <Tab.Screen
@@ -129,6 +143,7 @@ export default function ProviderNavigator() {
           <Stack.Screen name="ServiceOptions" component={ServiceOptionsScreen} />
           <Stack.Screen name="ProviderServicePreview" component={ProviderServicePreviewScreen} />
           <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} />
+          <Stack.Screen name="ProviderReviews" component={ProviderReviewsScreen} />
           <Stack.Screen name="ReportScreen" component={ReportScreen} />
         </>
       ) : isPending ? (

@@ -13,6 +13,7 @@ interface MessageInputProps {
   value: string;
   onChangeText: (text: string) => void;
   onSend: () => void;
+  onAttachment?: () => void;
   disabled?: boolean;
   sending?: boolean;
   placeholder?: string;
@@ -22,6 +23,7 @@ export default function MessageInput({
   value,
   onChangeText,
   onSend,
+  onAttachment,
   disabled = false,
   sending = false,
   placeholder = 'Type a message...',
@@ -35,6 +37,15 @@ export default function MessageInput({
 
   return (
     <View style={styles.container}>
+      {onAttachment && (
+        <TouchableOpacity
+          style={styles.attachBtn}
+          onPress={onAttachment}
+          disabled={disabled || sending}
+        >
+          <Ionicons name="camera-outline" size={22} color={COLORS.primary} />
+        </TouchableOpacity>
+      )}
       <TextInput
         style={[styles.input, { height: Math.max(40, height) }]}
         value={value}
@@ -95,5 +106,15 @@ const styles = StyleSheet.create({
   },
   sendBtnDisabled: {
     opacity: 0.5,
+  },
+  attachBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

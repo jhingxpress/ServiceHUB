@@ -18,6 +18,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
+import { uploadImageToStorage } from '../../utils/storageUpload';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import StarRating from '../../components/ui/StarRating';
 import Button from '../../components/ui/Button';
@@ -76,15 +77,19 @@ export default function ReviewScreen() {
     setPhotos((prev) => prev.filter((p) => p !== uri));
   };
 
-  const uploadPhotoAndRecord = async (reviewId: string, uri: string) => {
-    const ext = uri.split('.').pop() ?? 'jpg';
-    const path = `reviews/${reviewId}/${Date.now()}.${ext}`;
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const { error: upErr } = await supabase.storage.from('review-media').upload(path, blob, { contentType: `image/${ext}` });
-    if (upErr) return;
-    const { data } = supabase.storage.from('review-media').getPublicUrl(path);
-    await supabase.from('review_media').insert({ review_id: reviewId, url: data.publicUrl, media_type: 'image' });
+  const uploadReviewPhoto = async (uri: string): Promise<string | null> => {
+    if (!user) return null;
+    const rawExt = (uri.split('.').pop() ?? 'jpg').split('?')[0].split('#')[0].toLowerCase();
+    const ext = rawExt === 'jpg' || rawExt === 'jpeg' ? 'jpeg' : rawExt === 'png' ? 'png' : 'jpeg';
+    const mime = `image/${ext}`;
+    const path = `${user.id}/${Date.now()}.${ext}`;
+    try {
+      const publicUrl = await uploadImageToStorage('review-media', path, uri, mime);
+      return publicUrl;
+    } catch (err: any) {
+      console.error('[ReviewScreen] Photo upload failed:', err.message);
+      return null;
+    }
   };
 
   const handleSubmit = async () => {
@@ -95,27 +100,44 @@ export default function ReviewScreen() {
     if (!user) return;
     setSubmitting(true);
     try {
-      const { data, error } = await supabase
-        .from('reviews')
-        .insert({
-          booking_id: bookingId,
-          provider_id: providerId,
-          customer_id: user.id,
-          rating,
-          title: title.trim() || null,
-          comment: comment.trim() || null,
-        })
-        .select('id')
-        .single();
-      if (error) throw error;
-
-      if (data?.id && photos.length > 0) {
-        await Promise.allSettled(photos.map((uri) => uploadPhotoAndRecord(data.id, uri)));
+      // 1. Upload photos first and collect URLs
+      let photoUrls: string[] = [];
+      if (photos.length > 0) {
+        const uploadResults = await Promise.all(photos.map((uri) => uploadReviewPhoto(uri)));
+        photoUrls = uploadResults.filter((url): url is string => url !== null);
+        console.log('[ReviewScreen] Uploaded photo URLs:', photoUrls);
       }
 
+      // 2. Build complete payload
+      const payload = {
+        booking_id: bookingId,
+        provider_id: providerId,
+        customer_id: user.id,
+        customer_name: user.full_name ?? 'Customer',
+        customer_avatar_url: user.avatar_url,
+        rating,
+        title: title.trim() || null,
+        comment: comment.trim() || null,
+        photo_urls: photoUrls.length > 0 ? photoUrls : [],
+      };
+      console.log('[ReviewScreen] Insert payload:', payload);
+
+      const { data, error } = await supabase
+        .from('reviews')
+        .insert(payload)
+        .select('id')
+        .single();
+
+      if (error) {
+        console.error('[ReviewScreen] Insert error:', error.code, error.message, error.details);
+        throw error;
+      }
+
+      console.log('[ReviewScreen] Insert success:', data);
       showSuccess('Review submitted! Thank you for your feedback.');
       navigation.goBack();
     } catch (err) {
+      console.error('[ReviewScreen] Submit catch:', err);
       showError(err, 'Failed to submit review. Please try again.');
     } finally {
       setSubmitting(false);

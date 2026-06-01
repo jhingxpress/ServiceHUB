@@ -19,7 +19,7 @@ interface EarningRecord {
   id: string;
   amount: number;
   created_at: string;
-  booking: { scheduled_date: string; customer: { full_name: string | null } };
+  booking: { scheduled_date: string; customer_name: string | null };
 }
 
 export default function EarningsScreen() {
@@ -37,7 +37,7 @@ export default function EarningsScreen() {
         supabase.from('providers').select('earnings_total').eq('id', user.id).single(),
         supabase
           .from('payments')
-          .select('id, amount, created_at, booking:bookings(scheduled_date, customer:users!bookings_customer_id_fkey(full_name))')
+          .select('id, amount, created_at, booking:bookings(scheduled_date, customer_name)')
           .eq('provider_id', user.id)
           .eq('status', 'completed')
           .order('created_at', { ascending: false }),
@@ -122,7 +122,7 @@ export default function EarningsScreen() {
                 </View>
                 <View style={styles.txInfo}>
                   <Text style={styles.txTitle}>
-                    {r.booking?.customer?.full_name ?? 'Customer'} booking
+                    {r.booking?.customer_name ?? 'Customer'} booking
                   </Text>
                   <Text style={styles.txDate}>
                     {format(new Date(r.created_at), 'MMM d, yyyy')}

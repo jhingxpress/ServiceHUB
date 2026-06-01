@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { REVIEWS_LAST_SEEN_KEY } from './ProviderReviewsScreen';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { Booking, Provider, ProviderChecklist, ProviderPerformance, ProviderScore, BusinessStatus } from '../../types';
@@ -54,6 +55,7 @@ export default function ProviderDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [showHealthModal, setShowHealthModal] = useState(false);
+  const [newReviewCount, setNewReviewCount] = useState(0);
   const ONBOARDING_KEY = 'provider_onboarding_seen';
 
   const loadData = useCallback(async () => {
@@ -62,7 +64,7 @@ export default function ProviderDashboard() {
     const [bookingsRes, providerRes, checklistRes, perfRes, scoreRes] = await Promise.all([
       supabase
         .from('bookings')
-        .select('*, customer:users!bookings_customer_id_fkey(full_name, avatar_url), service:services(name)')
+        .select('*, service:services(name)')
         .eq('provider_id', user.id)
         .order('created_at', { ascending: false })
         .limit(20),
@@ -86,6 +88,16 @@ export default function ProviderDashboard() {
     setChecklist(checklistRes.data ?? null);
     setPerformance(perfRes.data ?? null);
     setScore(scoreRes.data ?? null);
+
+    // Load new-review badge count
+    const lastSeen = await AsyncStorage.getItem(REVIEWS_LAST_SEEN_KEY);
+    let revQuery = supabase
+      .from('reviews')
+      .select('*', { count: 'exact', head: true })
+      .eq('provider_id', user.id);
+    if (lastSeen) revQuery = revQuery.gt('created_at', lastSeen);
+    const { count: revCount } = await revQuery;
+    setNewReviewCount(revCount ?? 0);
 
     // Show approval modal once if provider is approved and hasn't seen it
     const checklistData = checklistRes.data as ProviderChecklist | null;
@@ -291,6 +303,7 @@ export default function ProviderDashboard() {
               { label: 'Active Jobs', icon: 'play-circle-outline', action: () => navigation.getParent()?.navigate('ActiveJobs'), badge: stats.active > 0 ? stats.active.toString() : undefined },
               { label: 'Services', icon: 'construct-outline', action: () => navigation.navigate('ManageServices') },
               { label: 'Earnings', icon: 'wallet-outline', action: () => navigation.getParent()?.navigate('Earnings'), badge: stats.earnings > 0 ? `₱${stats.earnings}` : undefined },
+              { label: 'Reviews', icon: 'star-outline', action: () => navigation.navigate('ProviderReviews'), badge: newReviewCount > 0 ? newReviewCount.toString() : undefined },
             ].map((q) => (
               <TouchableOpacity
                 key={q.label}
@@ -316,6 +329,38 @@ export default function ProviderDashboard() {
           <PerformanceCard performance={performance} />
         )}
 
+        {/* My Reviews Tap Card */}
+        <TouchableOpacity
+          style={styles.reviewsBanner}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('ProviderReviews')}
+        >
+          <View style={styles.reviewsBannerLeft}>
+            <View style={styles.reviewsBannerIcon}>
+              <Ionicons name="star" size={22} color="#F59E0B" />
+            </View>
+            <View>
+              <Text style={styles.reviewsBannerTitle}>My Reviews</Text>
+              {provider?.total_reviews != null && provider.total_reviews > 0 ? (
+                <Text style={styles.reviewsBannerSub}>
+                  {provider.total_reviews} review{provider.total_reviews !== 1 ? 's' : ''}
+                  {provider.rating > 0 ? `  ·  ${Number(provider.rating).toFixed(1)} ★` : ''}
+                </Text>
+              ) : (
+                <Text style={styles.reviewsBannerSub}>No reviews yet</Text>
+              )}
+            </View>
+          </View>
+          <View style={styles.reviewsBannerRight}>
+            {newReviewCount > 0 && (
+              <View style={styles.reviewsNewBadge}>
+                <Text style={styles.reviewsNewBadgeText}>{newReviewCount} new</Text>
+              </View>
+            )}
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textLight} />
+          </View>
+        </TouchableOpacity>
+
         {/* Recent Bookings */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -330,7 +375,6 @@ export default function ProviderDashboard() {
             </View>
           ) : (
             recentBookings.map((booking) => {
-              const cust = booking.customer as unknown as { full_name: string | null; avatar_url: string | null };
               return (
                 <TouchableOpacity
                   key={booking.id}
@@ -338,9 +382,9 @@ export default function ProviderDashboard() {
                   onPress={() => navigation.navigate('BookingDetail', { bookingId: booking.id })}
                   activeOpacity={0.8}
                 >
-                  <Avatar uri={cust?.avatar_url} name={cust?.full_name} size={44} />
+                  <Avatar uri={booking.customer_avatar_url} name={booking.customer_name} size={44} />
                   <View style={styles.bookingInfo}>
-                    <Text style={styles.bookingCustomer} numberOfLines={1}>{cust?.full_name ?? 'Customer'}</Text>
+                    <Text style={styles.bookingCustomer} numberOfLines={1}>{booking.customer_name ?? 'Customer'}</Text>
                     <Text style={styles.bookingService} numberOfLines={1}>{booking.service?.name ?? 'Service'}</Text>
                     <Text style={styles.bookingDate}>{booking.scheduled_date} at {booking.scheduled_time?.slice(0, 5)}</Text>
                   </View>
@@ -429,9 +473,9 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
   quickSection: { paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
   sectionTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: SPACING.sm },
-  quickRow: { flexDirection: 'row', gap: SPACING.sm },
+  quickRow: { flexDirection: 'row', gap: SPACING.sm, flexWrap: 'wrap' },
   quickCard: {
-    flex: 1, backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
+    flexBasis: '18%', flexGrow: 1, backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md, alignItems: 'center', gap: SPACING.xs,
     borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
   },
@@ -514,4 +558,36 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.bold,
     color: COLORS.text,
   },
+  reviewsBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.small,
+  },
+  reviewsBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  reviewsBannerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reviewsBannerTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
+  reviewsBannerSub: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
+  reviewsBannerRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  reviewsNewBadge: {
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+  },
+  reviewsNewBadgeText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.bold, color: COLORS.white },
 });

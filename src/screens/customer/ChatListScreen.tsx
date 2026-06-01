@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { formatDistanceToNow } from 'date-fns';
 import { supabase } from '../../lib/supabase';
@@ -38,59 +38,107 @@ export default function ChatListScreen() {
   const [loading, setLoading] = useState(true);
   const { showError } = useErrorHandler();
 
-  useEffect(() => {
-    const load = async () => {
-      if (!user) return;
+  const load = useCallback(async () => {
+    if (!user) return;
 
-      const { data: bookings, error: bookingsError } = await supabase
-        .from('bookings')
-        .select(`
-          id,
-          provider:providers!bookings_provider_id_fkey(
-            id, users!providers_id_fkey(full_name, avatar_url)
-          )
-        `)
-        .eq('customer_id', user.id)
-        .in('status', ['accepted', 'in_progress', 'completed']);
+    const { data: bookings, error: bookingsError } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        provider:providers!bookings_provider_id_fkey(
+          id, business_name, profile_photo_url, business_logo
+        )
+      `)
+      .eq('customer_id', user.id)
+      .in('status', ['accepted', 'in_progress', 'completed']);
 
-      if (bookingsError) { showError(bookingsError, 'Failed to load messages.'); setLoading(false); return; }
-      if (!bookings) { setLoading(false); return; }
+    if (bookingsError) { showError(bookingsError, 'Failed to load messages.'); setLoading(false); return; }
+    if (!bookings) { setLoading(false); return; }
 
-      const threadList: ChatThread[] = await Promise.all(
-        bookings.map(async (b) => {
-          const prov = (b.provider as unknown as { id: string; users: { full_name: string | null; avatar_url: string | null } });
-          const { data: msgs } = await supabase
-            .from('messages')
-            .select('content, created_at, sender_id, is_read')
-            .eq('booking_id', b.id)
-            .order('created_at', { ascending: false })
-            .limit(1);
+    const threadList: ChatThread[] = await Promise.all(
+      bookings.map(async (b) => {
+        const prov = (b.provider as unknown as { id: string; business_name: string | null; profile_photo_url: string | null; business_logo: string | null });
+        const { data: msgs } = await supabase
+          .from('messages')
+          .select('content, message_type, created_at, sender_id, is_read')
+          .eq('booking_id', b.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-          const { data: unreadData } = await supabase
-            .from('messages')
-            .select('id')
-            .eq('booking_id', b.id)
-            .eq('receiver_id', user.id)
-            .eq('is_read', false);
+        const { data: unreadData } = await supabase
+          .from('messages')
+          .select('id')
+          .eq('booking_id', b.id)
+          .eq('receiver_id', user.id)
+          .eq('is_read', false);
 
-          const lastMsg = msgs?.[0];
-          return {
-            bookingId: b.id,
-            otherUserId: prov?.id ?? '',
-            otherUserName: prov?.users?.full_name ?? null,
-            otherUserAvatar: prov?.users?.avatar_url ?? null,
-            lastMessage: lastMsg?.content ?? null,
-            lastMessageAt: lastMsg?.created_at ?? null,
-            unreadCount: unreadData?.length ?? 0,
-          };
+        const lastMsg = msgs?.[0];
+        const previewText =
+          (lastMsg as any)?.message_type === 'image'
+            ? '📷 Photo'
+            : lastMsg?.content ?? null;
+        return {
+          bookingId: b.id,
+          otherUserId: prov?.id ?? '',
+          otherUserName: prov?.business_name ?? null,
+          otherUserAvatar: prov?.profile_photo_url ?? prov?.business_logo ?? null,
+          lastMessage: previewText,
+          lastMessageAt: lastMsg?.created_at ?? null,
+          unreadCount: unreadData?.length ?? 0,
+        };
+      })
+    );
+
+    setThreads(
+      threadList
+        .filter((t) => t.lastMessage)
+        .sort((a, b) => {
+          if (!a.lastMessageAt) return 1;
+          if (!b.lastMessageAt) return -1;
+          return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
         })
-      );
+    );
+    setLoading(false);
+  }, [user, showError]);
 
-      setThreads(threadList.filter((t) => t.lastMessage));
-      setLoading(false);
-    };
+  useEffect(() => {
     load();
-  }, [user]);
+  }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[ChatList] focus → re-fetching threads');
+      load();
+    }, [load])
+  );
+
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`customer-inbox-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
+        (payload) => {
+          console.log('[ChatList] realtime INSERT', payload.new.id);
+          load();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
+        (payload) => {
+          console.log('[ChatList] realtime UPDATE', payload.new.id, 'is_read=', (payload.new as any).is_read);
+          load();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[ChatList] realtime connected');
+        }
+      });
+    return () => { supabase.removeChannel(channel); };
+  }, [user, load]);
 
   if (loading) {
     return (
@@ -120,6 +168,7 @@ export default function ChatListScreen() {
                 bookingId: item.bookingId,
                 otherUserId: item.otherUserId,
                 otherUserName: item.otherUserName ?? 'Provider',
+                otherUserAvatar: item.otherUserAvatar,
               })
             }
             activeOpacity={0.8}

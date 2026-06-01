@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { Provider } from '../../types';
@@ -41,6 +42,10 @@ export default function ProfileSetupScreen() {
   const [certifications, setCertifications] = useState('');
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
   const [coverPhotoUrl, setCoverPhotoUrl] = useState<string | null>(null);
+  const [providerLat, setProviderLat] = useState<number | null>(null);
+  const [providerLng, setProviderLng] = useState<number | null>(null);
+  const [detectingLoc, setDetectingLoc] = useState(false);
+  const [serviceRadiusKm, setServiceRadiusKm] = useState(10);
 
   useEffect(() => {
     if (!user) return;
@@ -62,6 +67,9 @@ export default function ProfileSetupScreen() {
           setCertifications(data.certifications ?? '');
           setProfilePhotoUrl(data.profile_photo_url ?? null);
           setCoverPhotoUrl(data.cover_photo_url ?? null);
+          setProviderLat(data.latitude ?? null);
+          setProviderLng(data.longitude ?? null);
+          setServiceRadiusKm(data.service_radius_km ?? 10);
         }
         setLoading(false);
       });
@@ -124,6 +132,25 @@ export default function ProfileSetupScreen() {
     }
   };
 
+  const handleDetectLocation = async () => {
+    setDetectingLoc(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location permission is required to capture your coordinates.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setProviderLat(loc.coords.latitude);
+      setProviderLng(loc.coords.longitude);
+      Alert.alert('Location Updated', `GPS captured: ${loc.coords.latitude.toFixed(5)}, ${loc.coords.longitude.toFixed(5)}`);
+    } catch (err: any) {
+      Alert.alert('Location Error', err.message || 'Unable to detect location.');
+    } finally {
+      setDetectingLoc(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!user) return;
 
@@ -176,6 +203,9 @@ export default function ProfileSetupScreen() {
           certifications: certifications.trim() || null,
           profile_photo_url: profilePhotoUrl,
           cover_photo_url: coverPhotoUrl,
+          latitude: providerLat,
+          longitude: providerLng,
+          service_radius_km: serviceRadiusKm,
           profile_completed: isComplete,
           updated_at: new Date().toISOString(),
         })
@@ -328,13 +358,71 @@ export default function ProfileSetupScreen() {
               containerStyle={{ marginBottom: SPACING.md }}
             />
 
+            {/* Service Location */}
+            <Text style={styles.sectionLabel}>Service Location</Text>
+            <TouchableOpacity
+              style={styles.locBtn}
+              onPress={handleDetectLocation}
+              disabled={detectingLoc}
+              activeOpacity={0.8}
+            >
+              {detectingLoc
+                ? <ActivityIndicator size="small" color={COLORS.primary} />
+                : <Ionicons name="locate-outline" size={20} color={providerLat != null ? COLORS.success : COLORS.primary} />}
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.locBtnTitle, providerLat != null && styles.locBtnTitleActive]}>
+                  {providerLat != null ? 'Update Current Location' : 'Set Current Location'}
+                </Text>
+                <Text style={styles.locBtnSub}>
+                  {providerLat != null && providerLng != null
+                    ? `${providerLat.toFixed(5)}, ${providerLng.toFixed(5)}`
+                    : 'Not set — customers nearby cannot find you'}
+                </Text>
+              </View>
+              {providerLat != null && <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />}
+            </TouchableOpacity>
+            {providerLat == null && (
+              <View style={styles.locWarning}>
+                <Ionicons name="warning-outline" size={14} color={COLORS.warning} />
+                <Text style={styles.locWarningText}>
+                  Location not configured — Nearby Search will not include your profile.
+                </Text>
+              </View>
+            )}
+
+            {/* Service Radius */}
+            <Text style={[styles.sectionLabel, { marginTop: SPACING.md }]}>Service Radius</Text>
+            <View style={styles.radiusRow}>
+              <TouchableOpacity
+                style={styles.radiusBtn}
+                onPress={() => setServiceRadiusKm(v => Math.max(1, v - 5))}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="remove" size={22} color={COLORS.text} />
+              </TouchableOpacity>
+              <View style={styles.radiusValueWrap}>
+                <Text style={styles.radiusValue}>{serviceRadiusKm}</Text>
+                <Text style={styles.radiusUnit}>km</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.radiusBtn}
+                onPress={() => setServiceRadiusKm(v => Math.min(100, v + 5))}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="add" size={22} color={COLORS.text} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.radiusHint}>
+              Customers within {serviceRadiusKm} km of your location can find your profile.
+            </Text>
+
             <Button
               title="Save Profile"
               onPress={handleSave}
               loading={saving}
               fullWidth
               size="lg"
-              style={{ marginTop: SPACING.sm }}
+              style={{ marginTop: SPACING.md }}
             />
           </View>
           <View style={{ height: SPACING.xl }} />
@@ -436,4 +524,38 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   row: { flexDirection: 'row', alignItems: 'flex-start' },
+  locBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1, borderColor: COLORS.border,
+    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm + 2,
+    marginBottom: SPACING.sm,
+  },
+  locBtnTitle: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
+  locBtnTitleActive: { color: COLORS.success },
+  locBtnSub: { fontSize: FONTS.sizes.xs, color: COLORS.textMuted, marginTop: 2 },
+  locWarning: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    backgroundColor: '#FFFBEB', borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1, borderColor: '#FDE68A',
+    paddingHorizontal: SPACING.sm + 2, paddingVertical: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  locWarningText: { flex: 1, fontSize: FONTS.sizes.xs, color: '#92400E', lineHeight: 18 },
+  radiusRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: SPACING.md, marginBottom: SPACING.sm,
+  },
+  radiusBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  radiusValueWrap: { alignItems: 'center', minWidth: 72 },
+  radiusValue: { fontSize: 32, fontFamily: FONTS.bold, color: COLORS.primary },
+  radiusUnit: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: -4 },
+  radiusHint: {
+    fontSize: FONTS.sizes.xs, color: COLORS.textMuted,
+    textAlign: 'center', marginBottom: SPACING.md,
+  },
 });

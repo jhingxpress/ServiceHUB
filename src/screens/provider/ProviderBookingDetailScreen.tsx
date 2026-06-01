@@ -36,8 +36,7 @@ export default function ProviderBookingDetailScreen() {
       .from('bookings')
       .select(`
         *,
-        service:services(name, price),
-        customer:users!bookings_customer_id_fkey(full_name, avatar_url, phone)
+        service:services(name, price)
       `)
       .eq('id', bookingId)
       .single();
@@ -96,9 +95,11 @@ export default function ProviderBookingDetailScreen() {
     );
   }
 
-  const customer = (booking.customer as unknown as { full_name: string | null; avatar_url: string | null; phone: string | null }) ?? {};
   const currentStep = STEPS.indexOf(booking.status);
   const photos: string[] = (booking.photo_urls as any) ?? [];
+  const customerName = booking.customer_name;
+  const customerPhone = booking.customer_phone;
+  const customerAvatar = booking.customer_avatar_url;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -164,12 +165,12 @@ export default function ProviderBookingDetailScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Customer</Text>
           <View style={styles.customerRow}>
-            <Avatar uri={customer.avatar_url ?? null} name={customer.full_name} size={52} />
+            <Avatar uri={customerAvatar ?? null} name={customerName} size={52} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.customerName}>{customer.full_name ?? 'Customer'}</Text>
-              {customer.phone && (
-                <TouchableOpacity onPress={() => Linking.openURL(`tel:${customer.phone}`)}>
-                  <Text style={styles.customerPhone}>{customer.phone}</Text>
+              <Text style={styles.customerName}>{customerName ?? 'Customer'}</Text>
+              {customerPhone && (
+                <TouchableOpacity onPress={() => Linking.openURL(`tel:${customerPhone}`)}>
+                  <Text style={styles.customerPhone}>{customerPhone}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -179,7 +180,8 @@ export default function ProviderBookingDetailScreen() {
                 navigation.navigate('ChatRoom', {
                   bookingId,
                   otherUserId: booking.customer_id,
-                  otherUserName: customer.full_name ?? 'Customer',
+                  otherUserName: customerName ?? 'Customer',
+                  otherUserAvatar: customerAvatar,
                 })
               }
             >
@@ -204,8 +206,36 @@ export default function ProviderBookingDetailScreen() {
           <View style={styles.infoRow}>
             <Ionicons name="location-outline" size={16} color={COLORS.textSecondary} />
             <Text style={styles.infoLabel}>Address</Text>
-            <Text style={styles.infoValue} numberOfLines={3}>{booking.location}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.infoValue}>{booking.location}</Text>
+              {(booking.booking_city || booking.booking_province) && (
+                <Text style={styles.locationSub}>
+                  {booking.booking_city}{booking.booking_city && booking.booking_province ? ', ' : ''}{booking.booking_province}
+                </Text>
+              )}
+            </View>
           </View>
+          {booking.latitude != null && booking.longitude != null && (
+            <>
+              <View style={styles.infoRow}>
+                <Ionicons name="navigate-outline" size={16} color={COLORS.textSecondary} />
+                <Text style={styles.infoLabel}>Coordinates</Text>
+                <Text style={styles.infoValue}>
+                  {booking.latitude.toFixed(5)}, {booking.longitude.toFixed(5)}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.mapsBtn}
+                onPress={() => {
+                  const url = `https://www.google.com/maps/dir/?api=1&destination=${booking.latitude},${booking.longitude}`;
+                  Linking.openURL(url);
+                }}
+              >
+                <Ionicons name="map-outline" size={18} color={COLORS.primary} />
+                <Text style={styles.mapsBtnText}>Open in Maps</Text>
+              </TouchableOpacity>
+            </>
+          )}
           {booking.service && (
             <View style={styles.infoRow}>
               <Ionicons name="construct-outline" size={16} color={COLORS.textSecondary} />
@@ -359,6 +389,14 @@ const styles = StyleSheet.create({
   },
   infoLabel: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, width: 70 },
   infoValue: { flex: 1, fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
+  locationSub: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
+  mapsBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    backgroundColor: COLORS.primaryLight, borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
+    marginTop: SPACING.xs, alignSelf: 'flex-start',
+  },
+  mapsBtnText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.primary },
   notesText: { fontSize: FONTS.sizes.base, color: COLORS.textSecondary, lineHeight: 22 },
   photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   photoThumb: { width: 80, height: 80, borderRadius: BORDER_RADIUS.md, backgroundColor: COLORS.background },

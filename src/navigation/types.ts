@@ -31,6 +31,7 @@ export type CustomerStackParamList = {
     bookingId: string;
     otherUserId: string;
     otherUserName: string;
+    otherUserAvatar?: string | null;
   };
   ReviewService: {
     bookingId: string;
@@ -39,8 +40,15 @@ export type CustomerStackParamList = {
   };
   CategoryList: { categoryId: string; categoryName: string; icon?: string };
   ProviderList: { categoryId?: string; categoryName?: string; search?: string };
+  EditProfile: undefined;
   NotificationCenter: undefined;
   MyReviews: undefined;
+  ReviewDetail: {
+    reviewId: string;
+    providerName?: string;
+    serviceName?: string;
+    bookingDate?: string;
+  };
   MyFavorites: undefined;
   ReportScreen: { reportedUserId: string; bookingId?: string; reportedUserName?: string };
 };
@@ -60,6 +68,7 @@ export type ProviderStackParamList = {
     bookingId: string;
     otherUserId: string;
     otherUserName: string;
+    otherUserAvatar?: string | null;
   };
   ProfileSetup: undefined;
   ManageServices: undefined;
@@ -68,6 +77,7 @@ export type ProviderStackParamList = {
   ProviderOnboarding: undefined;
   PendingApproval: undefined;
   NotificationCenter: undefined;
+  ProviderReviews: undefined;
   ReportScreen: { reportedUserId: string; bookingId?: string; reportedUserName?: string };
 };
 
@@ -75,6 +85,7 @@ export type ProviderTabParamList = {
   Dashboard: undefined;
   Requests: undefined;
   ActiveJobs: undefined;
+  Messages: undefined;
   Earnings: undefined;
   Schedule: undefined;
   Settings: undefined;

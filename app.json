@@ -5,9 +5,10 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "splash": {
       "resizeMode": "contain",
-      "backgroundColor": "#6366F1"
+      "backgroundColor": "#B91C1C"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -18,9 +19,19 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#6366F1"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#B91C1C"
       },
-      "package": "com.servicehub.app"
+      "package": "com.servicehub.app",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES"
+      ]
     },
     "web": {},
     "plugins": [
@@ -31,7 +42,19 @@
           "cameraPermission": "Allow ServiceHub to use your camera."
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow ServiceHub to use your location.",
+          "locationWhenInUsePermission": "Allow ServiceHub to use your location while using the app."
+        }
+      ],
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "8fcfed4e-bbe6-4787-a1c1-88ae62fbf65d"
+      }
+    }
   }
 }

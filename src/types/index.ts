@@ -52,6 +52,11 @@ export interface User {
   status: 'active' | 'suspended' | 'banned';
   city: string | null;
   province: string | null;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  gender: 'male' | 'female' | 'other' | 'prefer_not_to_say' | null;
+  date_of_birth: string | null;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -263,9 +268,14 @@ export interface Booking {
   location: string;
   latitude: number | null;
   longitude: number | null;
+  booking_city: string | null;
+  booking_province: string | null;
   notes: string | null;
   photo_urls: string[] | null;
   total_amount: number | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  customer_avatar_url: string | null;
   created_at: string;
   updated_at: string;
   customer?: User;
@@ -284,6 +294,9 @@ export interface Review {
   comment: string | null;
   is_visible: boolean;
   created_at: string;
+  customer_name: string | null;
+  customer_avatar_url: string | null;
+  photo_urls: string[] | null;
   customer?: User;
   review_media?: ReviewMedia[];
 }
@@ -301,7 +314,9 @@ export interface Message {
   booking_id: string;
   sender_id: string;
   receiver_id: string;
-  content: string;
+  content: string | null;
+  image_url: string | null;
+  message_type: 'text' | 'image';
   is_read: boolean;
   created_at: string;
   sender?: User;
@@ -345,7 +360,7 @@ export interface Dispute {
 export interface Notification {
   id: string;
   user_id: string;
-  type: 'booking_submitted' | 'booking_accepted' | 'booking_rejected' | 'provider_on_the_way' | 'provider_arrived' | 'service_completed' | 'review_reminder' | 'document_approved' | 'document_rejected' | 'verification_approved' | 'verification_rejected' | 'chat_message';
+  type: 'booking_submitted' | 'booking_accepted' | 'booking_rejected' | 'provider_on_the_way' | 'provider_arrived' | 'service_completed' | 'review_reminder' | 'document_approved' | 'document_rejected' | 'verification_approved' | 'verification_rejected' | 'chat_message' | 'review_received' | 'system';
   title: string;
   body: string;
   data: Record<string, unknown>;

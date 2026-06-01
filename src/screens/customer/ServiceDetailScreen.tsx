@@ -47,7 +47,7 @@ export default function ServiceDetailScreen() {
         supabase.from('providers').select('*').eq('id', (svc as any)?.provider_id).single(),
         supabase
           .from('reviews')
-          .select('*, customer:users!reviews_customer_id_fkey(full_name, avatar_url)')
+          .select('*')
           .eq('provider_id', (svc as any)?.provider_id)
           .eq('is_visible', true)
           .order('created_at', { ascending: false })
@@ -208,9 +208,9 @@ export default function ServiceDetailScreen() {
             {reviews.slice(0, 3).map((r) => (
               <View key={r.id} style={styles.reviewRow}>
                 <View style={styles.reviewHeader}>
-                  <Avatar uri={(r as any).customer?.avatar_url ?? null} name={(r as any).customer?.full_name} size={32} />
+                  <Avatar uri={r.customer_avatar_url} name={r.customer_name} size={32} />
                   <View style={styles.reviewMeta}>
-                    <Text style={styles.reviewAuthor}>{(r as any).customer?.full_name ?? 'Customer'}</Text>
+                    <Text style={styles.reviewAuthor}>{r.customer_name ?? 'Customer'}</Text>
                     <View style={styles.starRow}>
                       {Array.from({ length: 5 }).map((_, i) => (
                         <Ionicons key={i} name={i < r.rating ? 'star' : 'star-outline'} size={12} color={COLORS.warning} />

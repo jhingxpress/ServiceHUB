@@ -49,8 +49,7 @@ export default function BookingHistoryScreen() {
       .select(`
         *,
         provider:providers!bookings_provider_id_fkey(
-          business_name, profile_photo_url, business_logo,
-          users!providers_id_fkey(full_name, avatar_url)
+          business_name, profile_photo_url, business_logo
         ),
         service:services(name)
       `)
@@ -77,9 +76,9 @@ export default function BookingHistoryScreen() {
   const onRefresh = () => { setRefreshing(true); fetch(); };
 
   const renderBooking = ({ item }: { item: Booking }) => {
-    const prov = item.provider as unknown as { business_name: string | null; profile_photo_url: string | null; business_logo: string | null; users: { full_name: string | null; avatar_url: string | null } } | null;
-    const provName = prov?.business_name ?? prov?.users?.full_name ?? 'Provider';
-    const provPhoto = prov?.profile_photo_url ?? prov?.business_logo ?? prov?.users?.avatar_url;
+    const prov = item.provider as unknown as { business_name: string | null; profile_photo_url: string | null; business_logo: string | null } | null;
+    const provName = prov?.business_name ?? 'Provider';
+    const provPhoto = prov?.profile_photo_url ?? prov?.business_logo ?? null;
     return (
       <TouchableOpacity
         style={styles.card}

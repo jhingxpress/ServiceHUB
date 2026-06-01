@@ -25,7 +25,7 @@ type RouteType = RouteProp<CustomerStackParamList, 'ProviderProfile'>;
 
 interface ServiceOption { id: string; name: string; description: string | null; price: number; is_active: boolean; }
 interface SubService { id: string; name: string; description: string | null; is_active: boolean; service_options: ServiceOption[]; }
-interface ReviewWithMedia extends Omit<Review, 'customer' | 'review_media'> { review_media?: { id: string; url: string; media_type: string }[]; customer?: { full_name: string; avatar_url: string | null }; }
+interface ReviewWithMedia extends Omit<Review, 'review_media'> { review_media?: { id: string; file_url: string; media_type: string }[]; }
 
 const formatPrice = (amount: number) =>
   `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -46,7 +46,7 @@ export default function ProviderProfileScreen() {
       const [provRes, srvRes, revRes] = await Promise.all([
         supabase
           .from('providers')
-          .select('*, users!providers_id_fkey(full_name, avatar_url, phone, email), categories(name, icon, color)')
+          .select('*, categories(name, icon, color)')
           .eq('id', providerId)
           .is('deleted_at', null)
           .single(),
@@ -55,12 +55,10 @@ export default function ProviderProfileScreen() {
           .select('*, service_options(*)')
           .eq('provider_id', providerId)
           .eq('is_active', true)
-          .is('deleted_at', null)
-          .order('sort_order')
-          .order('created_at'),
+          .order('created_at', { ascending: false }),
         supabase
           .from('reviews')
-          .select('*, customer:users!reviews_customer_id_fkey(full_name, avatar_url), review_media(*)')
+          .select('*')
           .eq('provider_id', providerId)
           .eq('is_visible', true)
           .order('created_at', { ascending: false })
@@ -95,7 +93,6 @@ export default function ProviderProfileScreen() {
     );
   }
 
-  const providerUser = (provider as any).users;
   const lowestPrice = services
     .flatMap((s) => s.service_options.map((o) => o.price))
     .reduce((min, p) => (p < min ? p : min), Infinity);
@@ -113,10 +110,10 @@ export default function ProviderProfileScreen() {
         {/* Profile card */}
         <View style={styles.profileCard}>
           <View style={styles.avatarRow}>
-            <Avatar uri={providerUser?.avatar_url} name={providerUser?.full_name} size={72} borderColor={COLORS.white} />
+            <Avatar uri={provider.profile_photo_url ?? provider.business_logo} name={provider.business_name} size={72} borderColor={COLORS.white} />
             <View style={styles.profileMeta}>
               <View style={styles.nameRow}>
-                <Text style={styles.providerName}>{(provider as any).business_name || providerUser?.full_name || 'Provider'}</Text>
+                <Text style={styles.providerName}>{provider.business_name || 'Provider'}</Text>
                 {provider.is_verified && <Ionicons name="checkmark-circle" size={18} color={COLORS.primary} />}
               </View>
               <Text style={styles.categoryText}>{(provider as any).categories?.name ?? 'Services'}</Text>
@@ -274,9 +271,9 @@ export default function ProviderProfileScreen() {
             {reviews.map((review) => (
               <View key={review.id} style={styles.reviewCard}>
                 <View style={styles.reviewHeader}>
-                  <Avatar uri={review.customer?.avatar_url} name={review.customer?.full_name} size={36} />
+                  <Avatar uri={review.customer_avatar_url} name={review.customer_name} size={36} />
                   <View style={styles.reviewMeta}>
-                    <Text style={styles.reviewerName}>{review.customer?.full_name ?? 'Customer'}</Text>
+                    <Text style={styles.reviewerName}>{review.customer_name ?? 'Customer'}</Text>
                     <StarRating rating={review.rating} size={12} />
                   </View>
                   <Text style={styles.reviewDate}>
@@ -291,8 +288,8 @@ export default function ProviderProfileScreen() {
                 ) : null}
                 {review.review_media && review.review_media.length > 0 && (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mediaRow}>
-                    {review.review_media.filter((m) => m.media_type === 'image').map((m) => (
-                      <Image key={m.id} source={{ uri: m.url }} style={styles.reviewImage} />
+                    {review.review_media.filter((m) => m.media_type === 'photo').map((m) => (
+                      <Image key={m.id} source={{ uri: m.file_url }} style={styles.reviewImage} />
                     ))}
                   </ScrollView>
                 )}

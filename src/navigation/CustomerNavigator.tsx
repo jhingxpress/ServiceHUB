@@ -24,6 +24,8 @@ import ProviderListScreen from '../screens/customer/ProviderListScreen';
 import ServiceDetailScreen from '../screens/customer/ServiceDetailScreen';
 import NotificationCenterScreen from '../screens/customer/NotificationCenterScreen';
 import MyReviewsScreen from '../screens/customer/MyReviewsScreen';
+import ReviewDetailScreen from '../screens/customer/ReviewDetailScreen';
+import EditProfileScreen from '../screens/customer/EditProfileScreen';
 import ReportScreen from '../screens/shared/ReportScreen';
 
 const Stack = createNativeStackNavigator<CustomerStackParamList>();
@@ -32,16 +34,26 @@ const Tab = createBottomTabNavigator<CustomerTabParamList>();
 function CustomerTabs() {
   const { user } = useAuthStore();
   const [notifBadge, setNotifBadge] = useState(0);
+  const [msgBadge, setMsgBadge] = useState(0);
 
   useEffect(() => {
     if (!user) return;
     const fetchBadge = async () => {
-      const { count } = await supabase
-        .from('notifications')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('is_read', false);
-      setNotifBadge(count ?? 0);
+      const [{ count: notifCount }, { count: msgCount }] = await Promise.all([
+        supabase
+          .from('notifications')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('is_read', false)
+          .neq('type', 'chat_message'),   // chat_message already counted by Messages badge
+        supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('receiver_id', user.id)
+          .eq('is_read', false),
+      ]);
+      setNotifBadge(notifCount ?? 0);
+      setMsgBadge(msgCount ?? 0);
     };
     fetchBadge();
 
@@ -50,11 +62,21 @@ function CustomerTabs() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
-        () => setNotifBadge((c) => c + 1)
+        () => fetchBadge()   // refetch so chat_message inserts don't inflate the count
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+        () => fetchBadge()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
+        () => fetchBadge()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
         () => fetchBadge()
       )
       .subscribe();
@@ -98,7 +120,11 @@ function CustomerTabs() {
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
       <Tab.Screen name="Bookings" component={BookingHistoryScreen} />
-      <Tab.Screen name="Messages" component={ChatListScreen} />
+      <Tab.Screen
+        name="Messages"
+        component={ChatListScreen}
+        options={{ tabBarBadge: msgBadge > 0 ? (msgBadge > 99 ? '99+' : msgBadge) : undefined }}
+      />
       <Tab.Screen
         name="Profile"
         component={CustomerProfileScreen}
@@ -130,6 +156,8 @@ export default function CustomerNavigator() {
       <Stack.Screen name="ServiceDetail" component={ServiceDetailScreen} />
       <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} />
       <Stack.Screen name="MyReviews" component={MyReviewsScreen} />
+      <Stack.Screen name="ReviewDetail" component={ReviewDetailScreen} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="ReportScreen" component={ReportScreen} />
     </Stack.Navigator>
   );

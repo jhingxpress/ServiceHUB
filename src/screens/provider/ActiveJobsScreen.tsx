@@ -39,7 +39,6 @@ export default function ActiveJobsScreen() {
       .from('bookings')
       .select(`
         *,
-        customer:users!bookings_customer_id_fkey(full_name, avatar_url, phone),
         service:services(name, price)
       `)
       .eq('provider_id', user.id)
@@ -74,7 +73,8 @@ export default function ActiveJobsScreen() {
   };
 
   const renderJob = ({ item }: { item: Booking }) => {
-    const cust = item.customer as unknown as { full_name: string | null; avatar_url: string | null; phone: string | null };
+    const custName = item.customer_name;
+    const custAvatar = item.customer_avatar_url;
     const isActive = item.status === 'in_progress';
 
     return (
@@ -95,7 +95,8 @@ export default function ActiveJobsScreen() {
               onPress={() => navigation.navigate('ChatRoom', {
                 bookingId: item.id,
                 otherUserId: item.customer_id,
-                otherUserName: cust?.full_name ?? 'Customer',
+                otherUserName: custName ?? 'Customer',
+                otherUserAvatar: custAvatar,
               })}
               style={styles.chatBtn}
             >
@@ -106,9 +107,9 @@ export default function ActiveJobsScreen() {
 
           {/* Customer */}
           <View style={styles.custRow}>
-            <Avatar uri={cust?.avatar_url} name={cust?.full_name} size={48} borderColor={isActive ? COLORS.success : COLORS.warning} />
+            <Avatar uri={custAvatar} name={custName} size={48} borderColor={isActive ? COLORS.success : COLORS.warning} />
             <View style={styles.custInfo}>
-              <Text style={styles.custName}>{cust?.full_name ?? 'Customer'}</Text>
+              <Text style={styles.custName}>{custName ?? 'Customer'}</Text>
               <Text style={styles.serviceName}>{item.service?.name ?? 'Service'}</Text>
             </View>
             <Text style={styles.price}>₱{item.total_amount ?? item.service?.price ?? '—'}</Text>

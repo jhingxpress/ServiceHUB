@@ -8,12 +8,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import { RouteProp, useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { format } from 'date-fns';
+import * as ImagePicker from 'expo-image-picker';
+import ImageView from 'react-native-image-viewing';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../../constants/theme';
@@ -26,9 +30,10 @@ interface Message {
   booking_id: string;
   sender_id: string;
   receiver_id: string;
-  content: string;
+  content: string | null;
+  image_url: string | null;
+  message_type: 'text' | 'image';
   is_read: boolean;
-  delivery_status: 'sent' | 'delivered' | 'read';
   created_at: string;
   sender?: { full_name: string | null; avatar_url: string | null };
 }
@@ -39,7 +44,7 @@ type RouteType = RouteProp<CustomerStackParamList, 'ChatRoom'>;
 export default function ChatRoomScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RouteType>();
-  const { bookingId, otherUserId, otherUserName } = route.params;
+  const { bookingId, otherUserId, otherUserName, otherUserAvatar } = route.params;
   const { user } = useAuthStore();
   const flatListRef = useRef<FlatList>(null);
   const channelRef = useRef<any>(null);
@@ -47,23 +52,51 @@ export default function ChatRoomScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+  const [viewerImages, setViewerImages] = useState<{ uri: string }[]>([]);
 
   const markAsRead = useCallback(async () => {
     if (!user) return;
-    await supabase.rpc('mark_messages_read', {
-      p_booking_id: bookingId,
-      p_user_id: user.id,
-    });
+    console.log('[ChatRoom] markAsRead START bookingId=', bookingId, 'userId=', user.id);
+    const { error } = await supabase
+      .rpc('mark_messages_read', {
+        p_booking_id: bookingId,
+        p_user_id: user.id,
+      });
+    if (error) {
+      console.error('[ChatRoom] markAsRead error:', error.code, error.message);
+    } else {
+      console.log('[ChatRoom] markAsRead SUCCESS bookingId=', bookingId);
+    }
+  }, [bookingId, user]);
+
+  const markChatNotificationsRead = useCallback(async () => {
+    if (!user) return;
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('user_id', user.id)
+      .eq('type', 'chat_message')
+      .eq('is_read', false)
+      .filter('data->>booking_id', 'eq', bookingId);
+    if (error) console.error('[ChatRoom] markChatNotificationsRead error:', error.message);
   }, [bookingId, user]);
 
   const fetchMessages = useCallback(async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('messages')
-      .select('*, sender:users!messages_sender_id_fkey(full_name, avatar_url)')
+      .select('id, booking_id, sender_id, receiver_id, content, image_url, message_type, is_read, created_at')
       .eq('booking_id', bookingId)
       .order('created_at', { ascending: true });
-    setMessages(data ?? []);
+
+    if (error) {
+      console.error('Chat fetch error:', error);
+    }
+    setMessages((data ?? []) as Message[]);
     setLoading(false);
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
   }, [bookingId]);
@@ -71,6 +104,7 @@ export default function ChatRoomScreen() {
   useEffect(() => {
     fetchMessages();
     markAsRead();
+    markChatNotificationsRead();
 
     const channel = supabase
       .channel(`chat-${bookingId}`)
@@ -106,53 +140,309 @@ export default function ChatRoomScreen() {
     };
   }, [bookingId, fetchMessages, markAsRead]);
 
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[ChatRoom] focus → re-marking as read');
+      markAsRead();
+      markChatNotificationsRead();
+    }, [markAsRead, markChatNotificationsRead])
+  );
+
   const handleSend = async () => {
     if (!text.trim() || !user) return;
-    setSending(true);
     const content = text.trim();
     setText('');
-    
-    const { error } = await supabase.from('messages').insert({
+
+    // Optimistic update — show immediately
+    const optimisticMsg: Message = {
+      id: `temp-${Date.now()}`,
       booking_id: bookingId,
       sender_id: user.id,
       receiver_id: otherUserId,
       content,
-      delivery_status: 'sent',
-    });
-    
+      image_url: null,
+      message_type: 'text',
+      is_read: false,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+
+    setSending(true);
+    const payload = {
+      booking_id: bookingId,
+      sender_id: user.id,
+      receiver_id: otherUserId,
+      content,
+      message_type: 'text',
+    };
+    console.log('[ChatRoom] Sending payload:', payload);
+    const { data, error } = await supabase
+      .from('messages')
+      .insert(payload)
+      .select('id, booking_id, sender_id, receiver_id, content, image_url, message_type, is_read, created_at')
+      .single();
+
     if (error) {
       setText(content);
-      console.error('Send error:', error);
+      // Revert optimistic message
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+      console.error('[ChatRoom] Send error', { code: error.code, message: error.message, details: error.details, hint: error.hint });
+    } else if (data) {
+      // Replace optimistic with real message
+      setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? (data as Message) : m)));
+      console.log('[ChatRoom] Send success', { id: data.id, booking_id: data.booking_id, created_at: data.created_at });
     }
     setSending(false);
   };
 
+  const openImageViewer = (imageUrl: string, allImageUrls: string[]) => {
+    const idx = allImageUrls.indexOf(imageUrl);
+    setViewerImages(allImageUrls.map((uri) => ({ uri })));
+    setViewerIndex(idx >= 0 ? idx : 0);
+    setViewerVisible(true);
+  };
+
+  const pickImage = async (source: 'camera' | 'gallery') => {
+    const permission =
+      source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission denied', 'We need access to send photos.');
+      return;
+    }
+
+    const result =
+      source === 'camera'
+        ? await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 0.7,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 0.7,
+          });
+
+    if (!result.canceled && result.assets?.[0]) {
+      const asset = result.assets[0];
+      console.log('[ChatRoom] Selected image URI:', asset.uri);
+      console.log('[ChatRoom] Asset:', JSON.stringify(asset, null, 2));
+      await uploadAndSendImage(asset.uri);
+    }
+  };
+
+  const uploadAndSendImage = async (uri: string) => {
+    if (!user) return;
+
+    // ── CHECKPOINT 1: URI inspection ──────────────────────────────────────
+    console.log('[ChatRoom] Selected image URI:', uri);
+    console.log('[ChatRoom] URI scheme:', uri.split(':')[0]);
+
+    setUploadingImage(true);
+
+    const tempId = `temp-img-${Date.now()}`;
+    const optimisticMsg: Message = {
+      id: tempId,
+      booking_id: bookingId,
+      sender_id: user.id,
+      receiver_id: otherUserId,
+      content: null,
+      image_url: uri,
+      message_type: 'image',
+      is_read: false,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+
+    try {
+      const cleanUri = uri.split('?')[0];
+      const rawExt = cleanUri.split('.').pop()?.toLowerCase() ?? 'jpg';
+      const fileExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(rawExt)
+        ? rawExt
+        : 'jpg';
+      const mimeType = `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`;
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${bookingId}/${fileName}`;
+
+      console.log('[ChatRoom] Upload path:', filePath);
+      console.log('[ChatRoom] MIME type:', mimeType);
+      console.log('[ChatRoom] User ID:', user?.id);
+      console.log('[ChatRoom] Booking ID:', bookingId);
+
+      // ── STEP 1: read auth token ────────────────────────────────────────
+      // FileSystem.uploadAsync requires the bearer token directly.
+      console.log('[ChatRoom] STEP 1: reading auth session...');
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token ?? '';
+      console.log('[ChatRoom] STEP 1 OK — token present:', accessToken.length > 0);
+
+      // ── STEP 2: prepare upload payload ────────────────────────────────
+      // Build the Supabase Storage REST endpoint directly.
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+      const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+      const endpoint = `${supabaseUrl}/storage/v1/object/chat-media/${filePath}`;
+      console.log('[ChatRoom] STEP 2: prepare upload payload');
+      console.log('[ChatRoom] STEP 2 endpoint:', endpoint);
+
+      // ── STEP 3: upload via FormData + fetch (Hermes-compatible) ──────────
+      // WHY THIS APPROACH:
+      //   new Blob([ArrayBuffer]) and new Blob([ArrayBufferView]) throw
+      //   "Creating blobs from ArrayBuffer and ArrayBufferView are not supported"
+      //   on Hermes (Expo SDK 51 / RN 0.74).
+      //
+      //   React Native FormData accepts { uri, type, name } objects natively.
+      //   The native networking layer reads the file via Android's
+      //   ContentResolver, handling both file:// and content:// URIs without
+      //   any Blob, ArrayBuffer, or atob in JS. fetch() with a FormData body
+      //   sets Content-Type: multipart/form-data automatically with the
+      //   correct boundary — do NOT override it manually.
+      console.log('[ChatRoom] STEP 3: uploading via FormData + fetch...');
+      const formData = new FormData();
+      formData.append('cacheControl', '3600');
+      formData.append('', { uri, type: mimeType, name: fileName } as any);
+
+      const uploadResponse = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          apikey: anonKey,
+        },
+        body: formData,
+      });
+      const uploadBody = await uploadResponse.text();
+      console.log('[ChatRoom] STEP 3 status:', uploadResponse.status);
+      console.log('[ChatRoom] STEP 3 body:', uploadBody);
+
+      if (!uploadResponse.ok) {
+        throw new Error(
+          `Storage upload failed: HTTP ${uploadResponse.status} — ${uploadBody}`
+        );
+      }
+
+      // ── STEP 4: get public URL ─────────────────────────────────────────
+      console.log('[ChatRoom] STEP 4: getting public URL...');
+      const { data: urlData } = supabase.storage
+        .from('chat-media')
+        .getPublicUrl(filePath);
+      const publicUrl = urlData?.publicUrl ?? null;
+      console.log('[ChatRoom] STEP 4 OK — Public URL:', publicUrl);
+
+      // ── STEP 5: insert message row ─────────────────────────────────────
+      console.log('[ChatRoom] STEP 5: inserting message row...');
+      const { data: insertData, error: insertError } = await supabase
+        .from('messages')
+        .insert({
+          booking_id: bookingId,
+          sender_id: user.id,
+          receiver_id: otherUserId,
+          content: null,
+          image_url: publicUrl,
+          message_type: 'image',
+        })
+        .select('id, booking_id, sender_id, receiver_id, content, image_url, message_type, is_read, created_at')
+        .single();
+
+      console.log('[ChatRoom] STEP 5 insert data:', JSON.stringify(insertData));
+      console.log('[ChatRoom] STEP 5 insert error:', JSON.stringify(insertError));
+
+      if (insertError) {
+        console.error('[ChatRoom] STEP 5 FAILED — code:', insertError.code,
+          '| message:', insertError.message,
+          '| details:', insertError.details,
+          '| hint:', insertError.hint);
+        throw insertError;
+      }
+
+      console.log('[ChatRoom] STEP 5 OK — image message sent');
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? (insertData as Message) : m))
+      );
+    } catch (err: any) {
+      // JSON.stringify({}) on Error instances returns {} because message/name/stack
+      // are non-enumerable. Read properties explicitly.
+      console.error('[ChatRoom] ERROR TYPE:', typeof err);
+      console.error('[ChatRoom] ERROR NAME:', err?.name);
+      console.error('[ChatRoom] ERROR MESSAGE:', err?.message);
+      console.error('[ChatRoom] ERROR CODE:', err?.code ?? err?.statusCode);
+      console.error('[ChatRoom] ERROR DETAILS:', err?.details);
+      console.error('[ChatRoom] ERROR STACK:', err?.stack);
+
+      Alert.alert(
+        'Upload Failed',
+        [
+          `Name: ${err?.name ?? 'unknown'}`,
+          `Message: ${err?.message ?? 'unknown'}`,
+          `Code: ${err?.code ?? err?.statusCode ?? 'none'}`,
+          `Details: ${err?.details ?? 'none'}`,
+        ].join('\n')
+      );
+
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleAttachment = () => {
+    Alert.alert(
+      'Send Photo',
+      undefined,
+      [
+        { text: 'Camera', onPress: () => pickImage('camera') },
+        { text: 'Gallery', onPress: () => pickImage('gallery') },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isOwn = item.sender_id === user?.id;
-    const showReadStatus = isOwn && item.delivery_status === 'read';
-    const showDelivered = isOwn && item.delivery_status === 'delivered';
-    
+    const isImage = item.message_type === 'image';
+    if (isImage) console.log('[ChatRoom] Rendering image URL:', item.image_url);
+    const allImageUrls = messages
+      .filter((m) => m.message_type === 'image' && m.image_url)
+      .map((m) => m.image_url!);
+
     return (
       <View style={[styles.msgRow, isOwn && styles.msgRowOwn]}>
         {!isOwn && (
           <Avatar
-            uri={item.sender?.avatar_url}
-            name={item.sender?.full_name}
+            uri={otherUserAvatar ?? null}
+            name={otherUserName}
             size={28}
           />
         )}
         <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
-          <Text style={[styles.bubbleText, isOwn && styles.bubbleTextOwn]}>{item.content}</Text>
+          {isImage && item.image_url ? (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => openImageViewer(item.image_url!, allImageUrls)}
+            >
+              <Image
+                source={{ uri: item.image_url }}
+                style={styles.chatImage}
+                resizeMode="cover"
+                onLoad={() =>
+                  console.log('[ChatRoom] Image loaded:', item.image_url)
+                }
+                onError={(e) =>
+                  console.log('[ChatRoom] Image failed:', item.image_url, e.nativeEvent)
+                }
+              />
+            </TouchableOpacity>
+          ) : (
+            <Text style={[styles.bubbleText, isOwn && styles.bubbleTextOwn]}>{item.content}</Text>
+          )}
           <View style={styles.msgMeta}>
             <Text style={[styles.msgTime, isOwn && styles.msgTimeOwn]}>
               {format(new Date(item.created_at), 'HH:mm')}
             </Text>
-            {showReadStatus && (
-              <Ionicons name="checkmark-done" size={12} color={COLORS.primary} />
-            )}
-            {showDelivered && (
-              <Ionicons name="checkmark" size={12} color={COLORS.textLight} />
-            )}
           </View>
         </View>
       </View>
@@ -198,13 +488,41 @@ export default function ChatRoomScreen() {
           />
         )}
 
+        {uploadingImage && (
+          <View style={styles.uploadOverlay}>
+            <ActivityIndicator color={COLORS.primary} />
+            <Text style={styles.uploadText}>Sending photo…</Text>
+          </View>
+        )}
         <MessageInput
           value={text}
           onChangeText={setText}
           onSend={handleSend}
-          sending={sending}
+          onAttachment={handleAttachment}
+          sending={sending || uploadingImage}
         />
       </KeyboardAvoidingView>
+        <ImageView
+          images={viewerImages}
+          imageIndex={viewerIndex}
+          visible={viewerVisible}
+          onRequestClose={() => setViewerVisible(false)}
+          swipeToCloseEnabled
+          doubleTapToZoomEnabled
+          HeaderComponent={({ imageIndex }) => (
+            <View style={styles.imageViewerHeader}>
+              <TouchableOpacity
+                style={styles.imageViewerCloseBtn}
+                onPress={() => setViewerVisible(false)}
+              >
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+              <Text style={styles.imageViewerCounter}>
+                {imageIndex + 1} / {viewerImages.length}
+              </Text>
+            </View>
+          )}
+        />
     </SafeAreaView>
   );
 }
@@ -239,4 +557,48 @@ const styles = StyleSheet.create({
   msgMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 3 },
   msgTime: { fontSize: 10, color: COLORS.textLight },
   msgTimeOwn: { color: 'rgba(255,255,255,0.7)' },
+  chatImage: {
+    width: 200,
+    height: 200,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.background,
+  },
+  uploadOverlay: {
+    position: 'absolute',
+    bottom: 70,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    flexDirection: 'row',
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.surface,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    zIndex: 10,
+  },
+  uploadText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
+  imageViewerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.sm,
+    width: '100%',
+  },
+  imageViewerCloseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageViewerCounter: {
+    fontSize: FONTS.sizes.base,
+    color: '#fff',
+    fontFamily: FONTS.semiBold,
+  },
 });

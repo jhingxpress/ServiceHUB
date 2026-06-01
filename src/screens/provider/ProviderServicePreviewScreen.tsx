@@ -12,6 +12,17 @@ import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/
 import Avatar from '../../components/ui/Avatar';
 import { ProviderStackParamList } from '../../navigation/types';
 
+interface ProviderReview {
+  id: string;
+  rating: number;
+  title: string | null;
+  comment: string | null;
+  photo_urls: string[] | null;
+  customer_name: string | null;
+  customer_avatar_url: string | null;
+  created_at: string;
+}
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type RouteType = RouteProp<ProviderStackParamList, 'ProviderServicePreview'>;
@@ -28,6 +39,7 @@ export default function ProviderServicePreviewScreen() {
   const [provider, setProvider] = useState<Provider | null>(null);
   const [providerCategories, setProviderCategories] = useState<ProviderCategory[]>([]);
   const [portfolio, setPortfolio] = useState<ProviderPortfolio[]>([]);
+  const [reviews, setReviews] = useState<ProviderReview[]>([]);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   const loadData = useCallback(async () => {
@@ -45,7 +57,7 @@ export default function ProviderServicePreviewScreen() {
       setProvider(prov as Provider | null);
 
       if (prov?.id) {
-        const [{ data: cats }, { data: port }] = await Promise.all([
+        const [{ data: cats }, { data: port }, { data: revs }] = await Promise.all([
           supabase
             .from('provider_categories')
             .select('*, categories(id, name)')
@@ -56,9 +68,18 @@ export default function ProviderServicePreviewScreen() {
             .select('*')
             .eq('provider_id', prov.id)
             .order('sort_order'),
+          supabase
+            .from('reviews')
+            .select('id, rating, title, comment, photo_urls, customer_name, customer_avatar_url, created_at')
+            .eq('provider_id', prov.id)
+            .eq('is_visible', true)
+            .order('created_at', { ascending: false })
+            .limit(20),
         ]);
+        console.log('[Preview] reviews loaded:', revs?.length ?? 0);
         setProviderCategories((cats ?? []) as ProviderCategory[]);
         setPortfolio((port ?? []) as ProviderPortfolio[]);
+        setReviews((revs ?? []) as ProviderReview[]);
       }
     } catch (err: any) {
       console.error('[Preview] load error:', err);
@@ -216,6 +237,40 @@ export default function ProviderServicePreviewScreen() {
           </View>
         )}
 
+        {/* Customer Reviews */}
+        {reviews.length > 0 && (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Customer Reviews ({reviews.length})</Text>
+            {reviews.map((r) => (
+              <View key={r.id} style={styles.reviewItem}>
+                <View style={styles.reviewHeader}>
+                  <View style={styles.reviewStars}>
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Ionicons key={s} name={s <= r.rating ? 'star' : 'star-outline'} size={13} color="#F59E0B" />
+                    ))}
+                  </View>
+                  <Text style={styles.reviewCustomer}>{r.customer_name ?? 'Customer'}</Text>
+                  <Text style={styles.reviewDate}>{new Date(r.created_at).toLocaleDateString()}</Text>
+                </View>
+                {r.title ? <Text style={styles.reviewTitle}>{r.title}</Text> : null}
+                {r.comment ? <Text style={styles.reviewComment}>{r.comment}</Text> : null}
+                {r.photo_urls && r.photo_urls.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.reviewPhotosRow}>
+                    {r.photo_urls.map((url, i) => (
+                      <Image
+                        key={i}
+                        source={{ uri: url }}
+                        style={styles.reviewPhotoThumb}
+                        onError={() => console.warn('[Preview] Review photo load error', url)}
+                      />
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* CTA Buttons (disabled preview) */}
         <View style={styles.ctaRow}>
           <TouchableOpacity style={[styles.ctaBtn, styles.ctaSecondary]} activeOpacity={0.8} onPress={() => Alert.alert('Preview', 'This is a preview. Customers will be able to contact you here.')}>
@@ -318,6 +373,15 @@ const styles = StyleSheet.create({
   availabilityActive: { backgroundColor: '#D1FAE5' },
   availabilityInactive: { backgroundColor: '#FEE2E2' },
   availabilityText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold },
+  reviewItem: { paddingVertical: SPACING.sm, borderTopWidth: 1, borderTopColor: COLORS.border },
+  reviewHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: 4 },
+  reviewStars: { flexDirection: 'row', gap: 2 },
+  reviewCustomer: { flex: 1, fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
+  reviewDate: { fontSize: FONTS.sizes.xs, color: COLORS.textLight },
+  reviewTitle: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: 2 },
+  reviewComment: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, lineHeight: 18 },
+  reviewPhotosRow: { marginTop: SPACING.xs },
+  reviewPhotoThumb: { width: 72, height: 72, borderRadius: BORDER_RADIUS.md, marginRight: SPACING.xs },
   ctaRow: { flexDirection: 'row', gap: SPACING.sm, marginHorizontal: SPACING.md, marginTop: SPACING.lg },
   ctaBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm,

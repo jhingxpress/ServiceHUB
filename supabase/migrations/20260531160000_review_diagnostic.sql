@@ -1,0 +1,6 @@
+-- ============================================================
+-- NO-OP: Diagnostic script — converted for safe migration chain
+-- Original file contained only SELECT statements for manual
+-- SQL Editor inspection. Never intended as a migration.
+-- Preserved as no-op to keep timestamp slot intact.
+-- ============================================================

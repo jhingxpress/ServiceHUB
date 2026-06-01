@@ -1,0 +1,22 @@
+-- ============================================================
+-- NO-OP MIGRATION — all logic moved to 20260601070000
+--
+-- This file originally attempted:
+--   1. CREATE OR REPLACE FUNCTION public.get_provider_conversations
+--      adding last_message_type TEXT to RETURNS TABLE (8 → 9 columns)
+--   2. CREATE OR REPLACE FUNCTION public.create_message_notification
+--      adding image-message body text
+--
+-- Item 1 fails with SQLSTATE 42P13 because PostgreSQL forbids
+-- CREATE OR REPLACE when the return type changes.  The function
+-- must be DROPped first.
+--
+-- Rather than repair in-place (which risks re-running on a DB
+-- where 050000 was already recorded as applied), all executable
+-- SQL has been moved to:
+--   20260601070000_repair_get_provider_conversations.sql
+--
+-- This file is intentionally left with no executable statements
+-- so that supabase db push marks it applied and proceeds to
+-- 060000 → 070000 without error.
+-- ============================================================
