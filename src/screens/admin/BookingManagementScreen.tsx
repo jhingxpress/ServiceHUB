@@ -12,10 +12,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
+import { AdminStackParamList } from '../../navigation/types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
+
+type NavProp = NativeStackNavigationProp<AdminStackParamList>;
 
 type BookingStatus = 'all' | 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
 
@@ -50,6 +55,7 @@ const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
 };
 
 export default function BookingManagementScreen() {
+  const navigation = useNavigation<NavProp>();
   const [bookings, setBookings] = useState<BookingItem[]>([]);
   const [filtered, setFiltered] = useState<BookingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,7 +118,11 @@ export default function BookingManagementScreen() {
     const cust = item.customer as unknown as { full_name: string | null; avatar_url: string | null };
 
     return (
-      <View style={styles.card}>
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => navigation.navigate('BookingDetail', { bookingId: item.id })}
+        activeOpacity={0.8}
+      >
         <View style={styles.cardTop}>
           <Avatar uri={cust?.avatar_url} name={cust?.full_name} size={44} />
           <View style={styles.cardInfo}>
@@ -140,12 +150,15 @@ export default function BookingManagementScreen() {
           </View>
         )}
         {item.status !== 'cancelled' && item.status !== 'completed' && (
-          <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancel(item.id)}>
+          <TouchableOpacity
+            style={styles.cancelBtn}
+            onPress={(e) => { e.stopPropagation(); handleCancel(item.id); }}
+          >
             <Ionicons name="close-circle-outline" size={14} color={COLORS.error} />
             <Text style={styles.cancelText}>Cancel Booking</Text>
           </TouchableOpacity>
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
 

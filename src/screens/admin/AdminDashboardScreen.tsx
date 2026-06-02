@@ -96,6 +96,7 @@ export default function AdminDashboardScreen() {
   const QUICK_LINKS = [
     { label: 'Pending Providers', icon: 'shield-checkmark-outline', screen: 'PendingProviders' as const, badge: stats.pendingProviders, isTab: false as const },
     { label: 'Reports', icon: 'flag-outline', screen: 'AdminReports' as const, isTab: false as const },
+    { label: 'Review Moderation', icon: 'star-outline', screen: 'AdminReviews' as const, isTab: false as const },
     { label: 'Manage Users', icon: 'people-outline', screen: 'Users' as const, isTab: true as const },
     { label: 'Disputes', icon: 'alert-circle-outline', screen: 'Disputes' as const, isTab: true as const },
     { label: 'Analytics', icon: 'bar-chart-outline', screen: 'Analytics' as const, isTab: true as const },
@@ -219,8 +220,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: SPACING.md, gap: SPACING.sm, marginBottom: SPACING.md,
   },
   statCard: {
-    width: '30.5%', backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md, alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
+    flex: 1, minWidth: '30%', maxWidth: '32%', minHeight: 110,
+    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
   },
   statIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.xs },
   statValue: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.bold, color: COLORS.text },
@@ -229,6 +232,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: SPACING.sm },
   linkCard: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
+    minHeight: 64,
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
   },

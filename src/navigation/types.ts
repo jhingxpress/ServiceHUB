@@ -101,6 +101,7 @@ export type AdminStackParamList = {
   BookingManagement: undefined;
   DisputeDetail: { disputeId: string };
   AdminReports: undefined;
+  AdminReviews: undefined;
 };
 
 export type AdminTabParamList = {

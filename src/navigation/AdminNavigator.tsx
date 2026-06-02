@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet } from 'react-native';
 import { AdminStackParamList, AdminTabParamList } from './types';
 import { COLORS, FONTS } from '../constants/theme';
+import { supabase } from '../lib/supabase';
 
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
 import PendingProvidersScreen from '../screens/admin/PendingProvidersScreen';
@@ -14,13 +15,54 @@ import ProviderDetailScreen from '../screens/admin/ProviderDetailScreen';
 import UserDetailScreen from '../screens/admin/UserDetailScreen';
 import BookingManagementScreen from '../screens/admin/BookingManagementScreen';
 import DisputesScreen from '../screens/admin/DisputesScreen';
-import AdminKYCScreen from '../screens/admin/AdminKYCScreen';
 import AdminReportsScreen from '../screens/admin/AdminReportsScreen';
+import AdminReviewsScreen from '../screens/admin/AdminReviewsScreen';
+import DisputeDetailScreen from '../screens/admin/DisputeDetailScreen';
+import AdminBookingDetailScreen from '../screens/admin/AdminBookingDetailScreen';
 
 const Stack = createNativeStackNavigator<AdminStackParamList>();
 const Tab = createBottomTabNavigator<AdminTabParamList>();
 
 function AdminTabs() {
+  const [providerBadge, setProviderBadge] = useState(0);
+  const [disputeBadge, setDisputeBadge] = useState(0);
+  const [reportBadge, setReportBadge] = useState(0);
+
+  useEffect(() => {
+    const fetchBadges = async () => {
+      const [provRes, dispRes, repRes] = await Promise.all([
+        supabase
+          .from('providers')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'pending_review'),
+        supabase
+          .from('disputes')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'open'),
+        supabase
+          .from('reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'pending'),
+      ]);
+      setProviderBadge(provRes.count ?? 0);
+      setDisputeBadge(dispRes.count ?? 0);
+      setReportBadge(repRes.count ?? 0);
+    };
+
+    fetchBadges();
+
+    const channel = supabase
+      .channel('admin-badges')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'providers' }, fetchBadges)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'disputes' }, fetchBadges)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, fetchBadges)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  const badge = (n: number) => (n > 0 ? (n > 99 ? '99+' : n) : undefined);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -55,10 +97,18 @@ function AdminTabs() {
       })}
     >
       <Tab.Screen name="Dashboard" component={AdminDashboardScreen} />
-      <Tab.Screen name="Providers" component={PendingProvidersScreen} />
+      <Tab.Screen
+        name="Providers"
+        component={PendingProvidersScreen}
+        options={{ tabBarBadge: badge(providerBadge) }}
+      />
       <Tab.Screen name="Bookings" component={BookingManagementScreen} />
       <Tab.Screen name="Users" component={UsersScreen} />
-      <Tab.Screen name="Disputes" component={DisputesScreen} />
+      <Tab.Screen
+        name="Disputes"
+        component={DisputesScreen}
+        options={{ tabBarBadge: badge(disputeBadge + reportBadge) }}
+      />
       <Tab.Screen name="Analytics" component={AnalyticsScreen} />
     </Tab.Navigator>
   );
@@ -66,8 +116,8 @@ function AdminTabs() {
 
 export default function AdminNavigator() {
   return (
-    <Stack.Navigator 
-      screenOptions={{ 
+    <Stack.Navigator
+      screenOptions={{
         headerShown: false,
         animation: 'slide_from_right',
         gestureEnabled: true,
@@ -80,7 +130,10 @@ export default function AdminNavigator() {
       <Stack.Screen name="ProviderDetail" component={ProviderDetailScreen} />
       <Stack.Screen name="UserDetail" component={UserDetailScreen} />
       <Stack.Screen name="BookingManagement" component={BookingManagementScreen} />
+      <Stack.Screen name="BookingDetail" component={AdminBookingDetailScreen} />
+      <Stack.Screen name="DisputeDetail" component={DisputeDetailScreen} />
       <Stack.Screen name="AdminReports" component={AdminReportsScreen} />
+      <Stack.Screen name="AdminReviews" component={AdminReviewsScreen} />
     </Stack.Navigator>
   );
 }

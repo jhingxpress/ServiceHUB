@@ -133,7 +133,6 @@ export interface Provider {
   profile_completed: boolean;
   // Storefront
   provider_type: ProviderType;
-  cover_photo: string | null;
   business_logo: string | null;
   member_since: string;
   response_rate: number;

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
+import ImageViewerModal from '../../components/ui/ImageViewerModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -40,6 +41,16 @@ export default function ProviderProfileScreen() {
   const [reviews, setReviews] = useState<ReviewWithMedia[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedService, setExpandedService] = useState<string | null>(null);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerUrl, setViewerUrl] = useState('');
+  const [viewerTitle, setViewerTitle] = useState('');
+
+  const openViewer = (url: string | null | undefined, title: string) => {
+    if (!url) return;
+    setViewerUrl(url);
+    setViewerTitle(title);
+    setViewerVisible(true);
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -100,17 +111,41 @@ export default function ProviderProfileScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.headerBg}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={22} color={COLORS.white} />
-          </TouchableOpacity>
-        </View>
+        {/* Header / Cover Photo */}
+        <TouchableOpacity
+          style={styles.headerBg}
+          activeOpacity={provider.cover_photo_url ? 0.85 : 1}
+          onPress={() => openViewer(provider.cover_photo_url, 'Cover Photo')}
+        >
+          {provider.cover_photo_url ? (
+            <Image
+              source={{ uri: provider.cover_photo_url }}
+              style={StyleSheet.absoluteFillObject}
+              resizeMode="cover"
+            />
+          ) : null}
+          <View style={styles.headerOverlay} />
+          <View style={styles.headerActions}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+              <Ionicons name="arrow-back" size={22} color={COLORS.white} />
+            </TouchableOpacity>
+            {provider.cover_photo_url && (
+              <View style={styles.coverZoomHint}>
+                <Ionicons name="expand-outline" size={15} color={COLORS.white} />
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
 
         {/* Profile card */}
         <View style={styles.profileCard}>
           <View style={styles.avatarRow}>
-            <Avatar uri={provider.profile_photo_url ?? provider.business_logo} name={provider.business_name} size={72} borderColor={COLORS.white} />
+            <TouchableOpacity
+              activeOpacity={(provider.profile_photo_url ?? provider.business_logo) ? 0.8 : 1}
+              onPress={() => openViewer(provider.profile_photo_url ?? provider.business_logo, provider.business_name ?? 'Provider')}
+            >
+              <Avatar uri={provider.profile_photo_url ?? provider.business_logo} name={provider.business_name} size={72} borderColor={COLORS.white} />
+            </TouchableOpacity>
             <View style={styles.profileMeta}>
               <View style={styles.nameRow}>
                 <Text style={styles.providerName}>{provider.business_name || 'Provider'}</Text>
@@ -301,6 +336,13 @@ export default function ProviderProfileScreen() {
         <View style={styles.bottomPad} />
       </ScrollView>
 
+      <ImageViewerModal
+        visible={viewerVisible}
+        imageUrl={viewerUrl}
+        onClose={() => setViewerVisible(false)}
+        title={viewerTitle}
+      />
+
       {/* Book CTA */}
       {provider.is_available && (
         <View style={styles.ctaBar}>
@@ -328,7 +370,17 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   errorText: { fontSize: FONTS.sizes.base, color: COLORS.textSecondary },
-  headerBg: { height: 140, backgroundColor: COLORS.primary, padding: SPACING.md },
+  headerBg: { height: 160, backgroundColor: COLORS.primary, overflow: 'hidden' },
+  headerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.25)' },
+  headerActions: {
+    position: 'absolute', top: 0, left: 0, right: 0,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: SPACING.md,
+  },
+  coverZoomHint: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center',
+  },
   backBtn: {
     width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center', justifyContent: 'center',

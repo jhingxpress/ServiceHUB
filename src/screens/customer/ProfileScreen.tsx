@@ -249,6 +249,7 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.md + 2,
+    minHeight: 56,
   },
   menuItemBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.border },
   menuIcon: {

@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Image, ActivityIndicator, Alert, Dimensions,
 } from 'react-native';
+import ImageViewerModal from '../../components/ui/ImageViewerModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -52,6 +53,16 @@ export default function ProviderStorefrontScreen() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingFavorite, setSavingFavorite] = useState(false);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerUrl, setViewerUrl] = useState('');
+  const [viewerTitle, setViewerTitle] = useState('');
+
+  const openViewer = (url: string | null | undefined, title: string) => {
+    if (!url) return;
+    setViewerUrl(url);
+    setViewerTitle(title);
+    setViewerVisible(true);
+  };
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -191,25 +202,38 @@ export default function ProviderStorefrontScreen() {
         </View>
 
         {/* Cover Photo */}
-        <View style={styles.coverWrap}>
+        <TouchableOpacity
+          style={styles.coverWrap}
+          activeOpacity={provider.cover_photo_url ? 0.85 : 1}
+          onPress={() => openViewer(provider.cover_photo_url, 'Cover Photo')}
+        >
           <Image
-            source={{ uri: provider.cover_photo ?? 'https://images.unsplash.com/photo-1581578731117-104f2a4128bc?w=800' }}
+            source={{ uri: provider.cover_photo_url ?? 'https://images.unsplash.com/photo-1581578731117-104f2a4128bc?w=800' }}
             style={styles.coverPhoto}
             resizeMode="cover"
           />
           <View style={styles.coverOverlay} />
-        </View>
+          {provider.cover_photo_url && (
+            <View style={styles.coverZoomHint}>
+              <Ionicons name="expand-outline" size={16} color={COLORS.white} />
+            </View>
+          )}
+        </TouchableOpacity>
 
         {/* Profile Card */}
         <View style={styles.profileCard}>
-          <View style={styles.logoWrap}>
+          <TouchableOpacity
+            style={styles.logoWrap}
+            activeOpacity={(provider.profile_photo_url ?? provider.business_logo) ? 0.8 : 1}
+            onPress={() => openViewer(provider.profile_photo_url ?? provider.business_logo, providerName)}
+          >
             <Avatar uri={provider.profile_photo_url ?? provider.business_logo} name={providerName} size={80} borderColor={COLORS.primary} />
             {provider.is_verified && (
               <View style={styles.verifiedBadge}>
                 <Ionicons name="checkmark-circle" size={18} color={COLORS.success} />
               </View>
             )}
-          </View>
+          </TouchableOpacity>
           <Text style={styles.providerName}>{providerName}</Text>
           <Text style={styles.categoryName}>{cat?.name ?? 'Service Provider'}</Text>
 
@@ -402,6 +426,13 @@ export default function ProviderStorefrontScreen() {
         <View style={styles.bottomSpace} />
       </ScrollView>
 
+      <ImageViewerModal
+        visible={viewerVisible}
+        imageUrl={viewerUrl}
+        onClose={() => setViewerVisible(false)}
+        title={viewerTitle}
+      />
+
       {/* Floating Book Button */}
       <View style={styles.floatingBar}>
         <TouchableOpacity style={styles.reportBtn} onPress={() => navigation.navigate('ReportScreen', { reportedUserId: provider.id, reportedUserName: providerName })}>
@@ -435,6 +466,11 @@ const styles = StyleSheet.create({
   coverWrap: { height: 200, position: 'relative' },
   coverPhoto: { width: '100%', height: '100%' },
   coverOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.15)' },
+  coverZoomHint: {
+    position: 'absolute', bottom: 10, right: 10,
+    backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 16,
+    padding: 6,
+  },
   profileCard: {
     backgroundColor: COLORS.surface, marginHorizontal: SPACING.md,
     marginTop: -50, borderRadius: BORDER_RADIUS.xl,

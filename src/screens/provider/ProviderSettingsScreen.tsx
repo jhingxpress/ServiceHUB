@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface, marginHorizontal: SPACING.md,
     borderRadius: BORDER_RADIUS.xl, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
   },
-  menuRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: SPACING.md },
+  menuRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: SPACING.md, minHeight: 56 },
   menuIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center' },
   menuLabel: { flex: 1, fontSize: FONTS.sizes.base, color: COLORS.text, fontFamily: FONTS.medium },
   divider: { height: 1, backgroundColor: COLORS.border, marginLeft: SPACING.md + 36 + SPACING.md },

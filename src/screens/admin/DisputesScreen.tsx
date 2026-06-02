@@ -111,7 +111,11 @@ export default function DisputesScreen() {
   const renderDispute = ({ item }: { item: Dispute }) => {
     const booking = item.booking as Dispute['booking'];
     return (
-      <View style={styles.card}>
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => navigation.navigate('DisputeDetail', { disputeId: item.id })}
+        activeOpacity={0.8}
+      >
         <View style={styles.cardTop}>
           <View style={styles.parties}>
             <Avatar uri={booking?.customer?.avatar_url} name={booking?.customer?.full_name} size={36} />
@@ -154,7 +158,7 @@ export default function DisputesScreen() {
             </TouchableOpacity>
           </View>
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
 
