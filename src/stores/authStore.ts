@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import { User, Provider } from '../types';
+import { registerPushToken, removePushToken } from '../services/notificationService';
 
 interface SignUpData {
   email: string;
@@ -56,6 +57,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             ? await fetchProviderProfile(session.user.id)
             : null;
         set({ user: profile ?? null, providerProfile, isInitialized: true });
+        if (profile) {
+          registerPushToken(profile.id).catch(() => {});
+        }
       } else {
         set({ isInitialized: true });
       }
@@ -75,6 +79,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             ? await fetchProviderProfile(session.user.id)
             : null;
         set({ user: profile ?? null, providerProfile });
+        if (profile) {
+          registerPushToken(profile.id).catch(() => {});
+        }
       } else if (event === 'SIGNED_OUT') {
         set({ user: null, providerProfile: null });
       }
@@ -151,6 +158,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
+    const { user } = get();
+    if (user) {
+      removePushToken(user.id).catch(() => {});
+    }
     await supabase.auth.signOut();
     set({ user: null, providerProfile: null });
   },

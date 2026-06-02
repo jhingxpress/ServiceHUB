@@ -49,7 +49,16 @@
           "locationWhenInUsePermission": "Allow ServiceHub to use your location while using the app."
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#B91C1C",
+          "iosDisplayInForeground": true,
+          "androidMode": "default"
+        }
+      ]
     ],
     "extra": {
       "eas": {

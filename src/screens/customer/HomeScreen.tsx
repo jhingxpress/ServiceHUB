@@ -317,6 +317,60 @@ export default function HomeScreen() {
           />
         </View>
 
+        {/* Recently Booked Providers */}
+        {recentBookings.length > 0 && (() => {
+          const seen = new Set<string>();
+          const recentProviders = recentBookings
+            .filter((b) => {
+              const pid = (b.provider as any)?.id ?? b.provider_id;
+              if (!pid || seen.has(pid)) return false;
+              seen.add(pid);
+              return true;
+            })
+            .slice(0, 6);
+          if (recentProviders.length === 0) return null;
+          return (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Book Again</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Bookings')}>
+                  <Text style={styles.sectionLink}>See bookings</Text>
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={recentProviders}
+                keyExtractor={(b) => b.id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.hscroll}
+                renderItem={({ item: booking }) => {
+                  const prov = booking.provider as any;
+                  return (
+                    <TouchableOpacity
+                      style={styles.recentProvCard}
+                      onPress={() => navigation.navigate('ProviderStorefront', { providerId: (prov?.id ?? booking.provider_id) as string })}
+                      activeOpacity={0.8}
+                    >
+                      <Avatar
+                        uri={prov?.profile_photo_url ?? prov?.business_logo}
+                        name={prov?.business_name}
+                        size={48}
+                      />
+                      <Text style={styles.recentProvName} numberOfLines={2}>
+                        {prov?.business_name ?? 'Provider'}
+                      </Text>
+                      <View style={styles.recentProvBtn}>
+                        <Ionicons name="refresh-outline" size={11} color={COLORS.primary} />
+                        <Text style={styles.recentProvBtnText}>Rebook</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            </View>
+          );
+        })()}
+
         {/* Recent Bookings */}
         {recentBookings.length > 0 && (
           <View style={styles.section}>
@@ -484,4 +538,16 @@ const styles = StyleSheet.create({
   bookingService: { fontFamily: FONTS.regular, fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 1 },
   bookingDate: { fontFamily: FONTS.regular, fontSize: FONTS.sizes.xs, color: COLORS.textLight, marginTop: 2 },
   bottomPad: { height: SPACING.xl },
+  recentProvCard: {
+    width: 100, alignItems: 'center', gap: SPACING.xs,
+    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.sm, borderWidth: 1, borderColor: COLORS.border,
+  },
+  recentProvName: { fontFamily: FONTS.medium, fontSize: FONTS.sizes.xs, color: COLORS.text, textAlign: 'center', lineHeight: 15 },
+  recentProvBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: COLORS.primaryLight, borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: SPACING.sm, paddingVertical: 3,
+  },
+  recentProvBtnText: { fontFamily: FONTS.semiBold, fontSize: 10, color: COLORS.primary },
 });

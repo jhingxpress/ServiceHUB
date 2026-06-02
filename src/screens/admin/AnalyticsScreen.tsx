@@ -1,40 +1,61 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 
+type Period = '7d' | '30d' | '90d' | 'all';
+
+const PERIOD_OPTIONS: { label: string; value: Period; days: number | null }[] = [
+  { label: '7 Days',   value: '7d',  days: 7 },
+  { label: '30 Days',  value: '30d', days: 30 },
+  { label: '90 Days',  value: '90d', days: 90 },
+  { label: 'All Time', value: 'all', days: null },
+];
+
 interface Analytics {
   bookingsByStatus: Record<string, number>;
   topCategories: { name: string; count: number }[];
   recentSignups: number;
+  totalProviders: number;
   avgRating: number;
+  totalBookings: number;
 }
 
 export default function AnalyticsScreen() {
   const [data, setData] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<Period>('30d');
 
-  useEffect(() => {
-    const load = async () => {
-      const [bookingsRes, catsRes, signupsRes, reviewsRes] = await Promise.all([
-        supabase.from('bookings').select('status'),
-        supabase
-          .from('bookings')
-          .select('providers!bookings_provider_id_fkey(category:categories(name))')
-          .eq('status', 'completed'),
-        supabase
-          .from('users')
-          .select('id', { count: 'exact', head: true })
-          .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+  const load = useCallback(async () => {
+    setLoading(true);
+    const days = PERIOD_OPTIONS.find((p) => p.value === period)?.days ?? null;
+    const since = days ? new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString() : null;
+
+    const bookingsQ = since
+      ? supabase.from('bookings').select('status').gte('created_at', since)
+      : supabase.from('bookings').select('status');
+    const catsQ = since
+      ? supabase.from('bookings').select('providers!bookings_provider_id_fkey(category:categories(name))').eq('status', 'completed').gte('created_at', since)
+      : supabase.from('bookings').select('providers!bookings_provider_id_fkey(category:categories(name))').eq('status', 'completed');
+    const signupsQ = since
+      ? supabase.from('users').select('id', { count: 'exact', head: true }).gte('created_at', since)
+      : supabase.from('users').select('id', { count: 'exact', head: true });
+
+    const [bookingsRes, catsRes, signupsRes, reviewsRes, providersRes] = await Promise.all([
+        bookingsQ,
+        catsQ,
+        signupsQ,
         supabase.from('reviews').select('rating'),
+        supabase.from('providers').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
       ]);
 
       const byStatus: Record<string, number> = {};
@@ -61,22 +82,14 @@ export default function AnalyticsScreen() {
         bookingsByStatus: byStatus,
         topCategories: topCats,
         recentSignups: signupsRes.count ?? 0,
+        totalProviders: providersRes.count ?? 0,
+        totalBookings: (bookingsRes.data ?? []).length,
         avgRating: avg,
       });
       setLoading(false);
-    };
-    load();
-  }, []);
+  }, [period]);
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.center}>
-          <ActivityIndicator color={COLORS.primary} size="large" />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  useEffect(() => { load(); }, [load]);
 
   const STATUS_COLORS: Record<string, string> = {
     pending: COLORS.warning,
@@ -96,12 +109,41 @@ export default function AnalyticsScreen() {
           <Text style={styles.title}>Analytics</Text>
         </View>
 
+        {/* Period Filter */}
+        <View style={styles.periodRow}>
+          {PERIOD_OPTIONS.map((p) => (
+            <TouchableOpacity
+              key={p.value}
+              style={[styles.periodTab, period === p.value && styles.periodTabActive]}
+              onPress={() => setPeriod(p.value)}
+            >
+              <Text style={[styles.periodText, period === p.value && styles.periodTextActive]}>
+                {p.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {loading ? (
+          <View style={styles.center}><ActivityIndicator color={COLORS.primary} size="large" /></View>
+        ) : (
+          <>
         {/* KPI Row */}
         <View style={styles.kpiRow}>
           <View style={styles.kpiCard}>
             <Ionicons name="people-outline" size={22} color={COLORS.primary} />
             <Text style={styles.kpiValue}>{data?.recentSignups}</Text>
-            <Text style={styles.kpiLabel}>New users (7d)</Text>
+            <Text style={styles.kpiLabel}>New Users</Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <Ionicons name="briefcase-outline" size={22} color="#8B5CF6" />
+            <Text style={styles.kpiValue}>{data?.totalProviders}</Text>
+            <Text style={styles.kpiLabel}>Providers</Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <Ionicons name="calendar-outline" size={22} color="#06B6D4" />
+            <Text style={styles.kpiValue}>{data?.totalBookings}</Text>
+            <Text style={styles.kpiLabel}>Bookings</Text>
           </View>
           <View style={styles.kpiCard}>
             <Ionicons name="star" size={22} color="#F59E0B" />
@@ -157,6 +199,8 @@ export default function AnalyticsScreen() {
         </View>
 
         <View style={{ height: SPACING.xl }} />
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -164,10 +208,19 @@ export default function AnalyticsScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  center: { height: 200, justifyContent: 'center', alignItems: 'center' },
   topBar: { paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: SPACING.sm },
   title: { fontSize: FONTS.sizes.xxl, fontFamily: FONTS.bold, color: COLORS.text },
-  kpiRow: { flexDirection: 'row', gap: SPACING.sm, paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
+  periodRow: { flexDirection: 'row', gap: SPACING.xs, paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
+  periodTab: {
+    flex: 1, alignItems: 'center', paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.full, backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  periodTabActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  periodText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.medium, color: COLORS.textSecondary },
+  periodTextActive: { color: COLORS.white, fontFamily: FONTS.bold },
+  kpiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
   kpiCard: {
     flex: 1, backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.xl,
     padding: SPACING.lg, alignItems: 'center', gap: SPACING.xs,

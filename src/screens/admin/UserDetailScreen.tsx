@@ -17,6 +17,8 @@ import { supabase } from '../../lib/supabase';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 
+import { useAuthStore } from '../../stores/authStore';
+
 type Props = NativeStackScreenProps<AdminStackParamList, 'UserDetail'>;
 
 interface UserDetail {
@@ -33,6 +35,7 @@ interface UserDetail {
 
 export default function UserDetailScreen({ route, navigation }: Props) {
   const { userId } = route.params;
+  const { user: adminUser } = useAuthStore();
   const [userData, setUserData] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -54,6 +57,66 @@ export default function UserDetailScreen({ route, navigation }: Props) {
         setLoading(false);
       });
   }, [userId]);
+
+  const logModerationAction = async (action: string, reason?: string) => {
+    if (!adminUser) return;
+    await supabase.from('moderation_log').insert({
+      admin_id: adminUser.id,
+      target_user_id: userId,
+      action,
+      reason: reason ?? null,
+      metadata: { target_name: userData?.full_name, target_email: userData?.email },
+    });
+  };
+
+  const handleSuspend = () => {
+    Alert.prompt(
+      'Suspend User',
+      'Enter reason for suspension (visible in audit log):',
+      async (reason) => {
+        if (!reason?.trim()) return;
+        await supabase.from('users').update({ is_active: false }).eq('id', userId);
+        await logModerationAction('suspend_user', reason);
+        await supabase.from('notifications').insert({
+          user_id: userId,
+          type: 'system',
+          title: 'Account Suspended',
+          body: 'Your account has been temporarily suspended. Contact support for assistance.',
+          data: {},
+        });
+        setUserData((p) => p ? { ...p, is_active: false } : p);
+        Alert.alert('Done', 'User has been suspended.');
+      },
+      'plain-text'
+    );
+  };
+
+  const handleBan = () => {
+    Alert.alert(
+      'Ban User',
+      `This will permanently ban ${userData?.full_name ?? 'this user'}. They will not be able to use the platform. Continue?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Ban',
+          style: 'destructive',
+          onPress: async () => {
+            await supabase.from('users').update({ is_active: false, role: 'banned' as any }).eq('id', userId);
+            await logModerationAction('ban_user', 'Permanent ban issued by admin');
+            await supabase.from('notifications').insert({
+              user_id: userId,
+              type: 'system',
+              title: 'Account Banned',
+              body: 'Your account has been banned for violating our Terms of Service.',
+              data: {},
+            });
+            setUserData((p) => p ? { ...p, is_active: false } : p);
+            Alert.alert('Done', 'User has been banned.');
+          },
+        },
+      ]
+    );
+  };
 
   const handleToggleActive = () => {
     const action = userData?.is_active ? 'deactivate' : 'activate';
@@ -168,20 +231,39 @@ export default function UserDetailScreen({ route, navigation }: Props) {
           </View>
         )}
 
-        {/* Actions */}
-        <TouchableOpacity
-          style={[styles.toggleBtn, { backgroundColor: userData.is_active ? '#FEE2E2' : '#D1FAE5' }]}
-          onPress={handleToggleActive}
-        >
-          <Ionicons
-            name={userData.is_active ? 'ban-outline' : 'checkmark-circle-outline'}
-            size={18}
-            color={userData.is_active ? COLORS.error : COLORS.success}
-          />
-          <Text style={[styles.toggleBtnText, { color: userData.is_active ? COLORS.error : COLORS.success }]}>
-            {userData.is_active ? 'Deactivate Account' : 'Activate Account'}
-          </Text>
-        </TouchableOpacity>
+        {/* Moderation Actions */}
+        <View style={styles.modSection}>
+          <Text style={styles.sectionTitle}>Moderation Actions</Text>
+          <TouchableOpacity
+            style={[styles.toggleBtn, { backgroundColor: userData.is_active ? '#FEF3C7' : '#D1FAE5' }]}
+            onPress={handleToggleActive}
+          >
+            <Ionicons
+              name={userData.is_active ? 'pause-circle-outline' : 'checkmark-circle-outline'}
+              size={18}
+              color={userData.is_active ? COLORS.warning : COLORS.success}
+            />
+            <Text style={[styles.toggleBtnText, { color: userData.is_active ? COLORS.warning : COLORS.success }]}>
+              {userData.is_active ? 'Deactivate Account' : 'Activate Account'}
+            </Text>
+          </TouchableOpacity>
+          {userData.is_active && (
+            <TouchableOpacity
+              style={[styles.toggleBtn, { backgroundColor: '#FEF3C7', marginTop: SPACING.sm }]}
+              onPress={handleSuspend}
+            >
+              <Ionicons name="hourglass-outline" size={18} color={COLORS.warning} />
+              <Text style={[styles.toggleBtnText, { color: COLORS.warning }]}>Suspend (Temporary)</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.toggleBtn, { backgroundColor: '#FEE2E2', marginTop: SPACING.sm }]}
+            onPress={handleBan}
+          >
+            <Ionicons name="ban-outline" size={18} color={COLORS.error} />
+            <Text style={[styles.toggleBtnText, { color: COLORS.error }]}>Ban User (Permanent)</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -236,4 +318,5 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'transparent', marginBottom: SPACING.xl,
   },
   toggleBtnText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold },
+  modSection: { gap: SPACING.sm, marginBottom: SPACING.xl },
 });

@@ -102,6 +102,9 @@ export type AdminStackParamList = {
   DisputeDetail: { disputeId: string };
   AdminReports: undefined;
   AdminReviews: undefined;
+  AdminNotifications: undefined;
+  AdminRevenue: undefined;
+  AdminBroadcast: undefined;
 };
 
 export type AdminTabParamList = {
