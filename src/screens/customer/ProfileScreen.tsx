@@ -93,7 +93,7 @@ export default function ProfileScreen() {
     {
       icon: 'heart-outline',
       label: 'Saved Providers',
-      onPress: () => Alert.alert('Coming Soon', 'Favorites list is coming soon'),
+      onPress: () => navigation.navigate('MyFavorites'),
       badge: stats.favorites,
     },
     {
@@ -225,8 +225,8 @@ const styles = StyleSheet.create({
   userName: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.xl, color: COLORS.text },
   userEmail: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
   userPhone: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
-  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, paddingHorizontal: SPACING.md },
-  userLocation: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, flex: 1 },
+  locationRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 4 },
+  userLocation: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, textAlign: 'center' },
   roleBadge: {
     marginTop: SPACING.sm, backgroundColor: COLORS.primaryLight,
     paddingHorizontal: SPACING.md, paddingVertical: 4, borderRadius: BORDER_RADIUS.full,

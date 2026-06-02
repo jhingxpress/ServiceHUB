@@ -26,6 +26,7 @@ import NotificationCenterScreen from '../screens/customer/NotificationCenterScre
 import MyReviewsScreen from '../screens/customer/MyReviewsScreen';
 import ReviewDetailScreen from '../screens/customer/ReviewDetailScreen';
 import EditProfileScreen from '../screens/customer/EditProfileScreen';
+import MyFavoritesScreen from '../screens/customer/MyFavoritesScreen';
 import ReportScreen from '../screens/shared/ReportScreen';
 
 const Stack = createNativeStackNavigator<CustomerStackParamList>();
@@ -157,6 +158,7 @@ export default function CustomerNavigator() {
       <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} />
       <Stack.Screen name="MyReviews" component={MyReviewsScreen} />
       <Stack.Screen name="ReviewDetail" component={ReviewDetailScreen} />
+      <Stack.Screen name="MyFavorites" component={MyFavoritesScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="ReportScreen" component={ReportScreen} />
     </Stack.Navigator>
