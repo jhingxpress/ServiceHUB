@@ -98,42 +98,38 @@ export default function ManageServicesScreen() {
     setSelectedTemplateIds(new Set());
     setCatalogLoading(true);
 
-    // Get provider's linked category IDs
+    // Get provider's linked leaf category IDs from provider_categories
     const { data: pcData } = await supabase
       .from('provider_categories')
       .select('category_id')
       .eq('provider_id', user.id);
 
-    let categoryIds = (pcData ?? []).map((c: any) => c.category_id);
+    const leafCategoryIds = (pcData ?? []).map((c: any) => c.category_id);
 
-    // service_groups are linked to parent categories, but provider_categories
-    // may store leaf categories. Trace up to parent IDs so groups appear.
-    if (categoryIds.length > 0) {
-      const { data: cats } = await supabase
-        .from('categories')
-        .select('id, parent_id, name')
-        .in('id', categoryIds);
-      const parentIds = (cats ?? [])
-        .map((c: any) => c.parent_id)
-        .filter((id: string | null): id is string => id != null);
-      categoryIds = Array.from(new Set([...categoryIds, ...parentIds]));
+    if (leafCategoryIds.length === 0) {
+      // Fallback: no linked categories — show all active groups so provider can still browse
+      const { data: groups } = await supabase
+        .from('service_groups')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      setServiceGroups((groups ?? []) as ServiceGroup[]);
+      setCatalogLoading(false);
+      return;
     }
 
-    if (categoryIds.length === 0) {
-      // Fallback: if no linked categories, try fetching all parent categories
-      const { data: allCats } = await supabase
-        .from('categories')
-        .select('id')
-        .eq('is_parent', true);
-      categoryIds = (allCats ?? []).map((c: any) => c.id);
-    }
-
+    // Query service_groups owned by the provider's leaf categories only.
+    // leaf_category_id prevents parent-category service leakage.
     const { data: groups, error } = await supabase
       .from('service_groups')
       .select('*')
-      .in('category_id', categoryIds)
+      .in('leaf_category_id', leafCategoryIds)
       .eq('is_active', true)
       .order('name');
+
+    if (error) {
+      console.error('[openCatalog] service_groups query error:', error);
+    }
 
     setServiceGroups((groups ?? []) as ServiceGroup[]);
     setCatalogLoading(false);

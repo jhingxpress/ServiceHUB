@@ -86,6 +86,7 @@ export interface ProviderCategory {
 export interface ServiceGroup {
   id: string;
   category_id: string;
+  leaf_category_id: string | null;
   name: string;
   description: string | null;
   icon: string | null;
