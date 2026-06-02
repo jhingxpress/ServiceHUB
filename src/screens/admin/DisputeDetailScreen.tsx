@@ -78,36 +78,22 @@ export default function DisputeDetailScreen({ route, navigation }: Props) {
   const [viewerVisible, setViewerVisible] = useState(false);
 
   const loadData = useCallback(async () => {
-    const [dispRes, msgsRes] = await Promise.all([
-      supabase
-        .from('disputes')
-        .select(`
-          id, booking_id, raised_by, reason, status, resolution_notes, created_at,
-          booking:bookings(
-            id, status, scheduled_date, scheduled_time, location, notes,
-            customer:users!bookings_customer_id_fkey(full_name, avatar_url, email),
-            provider:providers!bookings_provider_id_fkey(business_name, profile_photo_url),
-            service:services(name, price)
-          )
-        `)
-        .eq('id', disputeId)
-        .single(),
-      supabase
-        .from('messages')
-        .select(`
-          id, sender_id, content, message_type, created_at,
-          sender:users!messages_sender_id_fkey(full_name, avatar_url)
-        `)
-        .order('created_at', { ascending: true }),
-    ]);
+    const { data } = await supabase
+      .from('disputes')
+      .select(`
+        id, booking_id, raised_by, reason, status, resolution_notes, created_at,
+        booking:bookings(
+          id, status, scheduled_date, scheduled_time, location, notes,
+          customer:users!bookings_customer_id_fkey(full_name, avatar_url, email),
+          provider:providers!bookings_provider_id_fkey(business_name, profile_photo_url),
+          service:services(name, price)
+        )
+      `)
+      .eq('id', disputeId)
+      .single();
 
-    if (dispRes.data) {
-      const d = dispRes.data as unknown as DisputeDetail;
-      setDispute(d);
-      if (d.booking_id) {
-        const filtered = (msgsRes.data ?? []) as unknown as ChatMessage[];
-        setMessages(filtered);
-      }
+    if (data) {
+      setDispute(data as unknown as DisputeDetail);
     }
     setLoading(false);
   }, [disputeId]);

@@ -43,7 +43,7 @@ export default function AdminReportsScreen() {
   const loadReports = useCallback(async () => {
     let q = supabase
       .from('reports')
-      .select('*, reporter:reporter_id(id, full_name, email), reported_user:reported_user_id(id, full_name, email, is_active)')
+      .select('*, reporter:reporter_id(id, full_name, email), reported_user:reported_user_id(id, full_name, email, status)')
       .order('created_at', { ascending: false });
 
     if (filter !== 'all') {
@@ -88,7 +88,7 @@ export default function AdminReportsScreen() {
   };
 
   const handleSuspendUser = (report: Report) => {
-    const reportedUser = report.reported_user as { id: string; full_name: string | null; is_active: boolean } | undefined;
+    const reportedUser = report.reported_user as { id: string; full_name: string | null; status: string } | undefined;
     if (!reportedUser?.id) return;
     Alert.alert(
       'Suspend User',
@@ -101,7 +101,7 @@ export default function AdminReportsScreen() {
           onPress: async () => {
             const { error } = await supabase
               .from('users')
-              .update({ is_active: false })
+              .update({ status: 'suspended' })
               .eq('id', reportedUser.id);
             if (error) { Alert.alert('Error', error.message); return; }
             await handleStatusChange(report.id, 'resolved', 'User suspended by admin.');
@@ -112,9 +112,9 @@ export default function AdminReportsScreen() {
   };
 
   const handleToggleUserActive = (report: Report) => {
-    const reportedUser = report.reported_user as { id: string; full_name: string | null; is_active: boolean } | undefined;
+    const reportedUser = report.reported_user as { id: string; full_name: string | null; status: string } | undefined;
     if (!reportedUser?.id) return;
-    const isActive = reportedUser.is_active;
+    const isActive = reportedUser.status === 'active';
     const action = isActive ? 'Deactivate' : 'Reactivate';
     Alert.alert(
       `${action} User`,
@@ -127,7 +127,7 @@ export default function AdminReportsScreen() {
           onPress: async () => {
             const { error } = await supabase
               .from('users')
-              .update({ is_active: !isActive })
+              .update({ status: isActive ? 'suspended' : 'active' })
               .eq('id', reportedUser.id);
             if (error) { Alert.alert('Error', error.message); return; }
             await loadReports();
@@ -145,7 +145,7 @@ export default function AdminReportsScreen() {
   };
 
   const renderItem = ({ item }: { item: Report }) => {
-    const reportedUser = item.reported_user as { id: string; full_name: string | null; email: string | null; is_active?: boolean } | undefined;
+    const reportedUser = item.reported_user as { id: string; full_name: string | null; email: string | null; status?: string } | undefined;
     const reporter = item.reporter as { full_name: string | null; email: string | null } | undefined;
 
     return (
@@ -162,11 +162,11 @@ export default function AdminReportsScreen() {
             <Ionicons name="person-outline" size={12} color={COLORS.textLight} />
             <Text style={styles.peopleText} numberOfLines={1}>By: {reporter?.full_name ?? reporter?.email ?? 'Unknown'}</Text>
           </View>
-          <View style={[styles.personChip, reportedUser?.is_active === false && styles.personChipInactive]}>
+          <View style={[styles.personChip, reportedUser?.status !== 'active' && styles.personChipInactive]}>
             <Ionicons name="flag-outline" size={12} color={COLORS.error} />
             <Text style={styles.peopleText} numberOfLines={1}>
               Against: {reportedUser?.full_name ?? reportedUser?.email ?? 'Unknown'}
-              {reportedUser?.is_active === false ? ' (Inactive)' : ''}
+              {reportedUser?.status !== 'active' ? ` (${reportedUser?.status})` : ''}
             </Text>
           </View>
         </View>
@@ -235,12 +235,12 @@ export default function AdminReportsScreen() {
           </TouchableOpacity>
           <TouchableOpacity style={styles.userActionBtn} onPress={() => handleToggleUserActive(item)}>
             <Ionicons
-              name={reportedUser?.is_active === false ? 'checkmark-circle-outline' : 'person-remove-outline'}
+              name={reportedUser?.status !== 'active' ? 'checkmark-circle-outline' : 'person-remove-outline'}
               size={14}
-              color={reportedUser?.is_active === false ? COLORS.success : COLORS.error}
+              color={reportedUser?.status !== 'active' ? COLORS.success : COLORS.error}
             />
-            <Text style={[styles.userActionText, { color: reportedUser?.is_active === false ? COLORS.success : COLORS.error }]}>
-              {reportedUser?.is_active === false ? 'Reactivate' : 'Deactivate'}
+            <Text style={[styles.userActionText, { color: reportedUser?.status !== 'active' ? COLORS.success : COLORS.error }]}>
+              {reportedUser?.status !== 'active' ? 'Reactivate' : 'Deactivate'}
             </Text>
           </TouchableOpacity>
         </ScrollView>

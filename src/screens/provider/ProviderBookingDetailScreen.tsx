@@ -64,12 +64,25 @@ export default function ProviderBookingDetailScreen() {
         text: 'Confirm',
         onPress: async () => {
           setUpdating(true);
-          const { error } = await supabase.from('bookings').update({ status }).eq('id', bookingId);
-          if (error) {
-            Alert.alert('Error', 'Failed to update status. Please try again.');
+          console.log(`[updateStatus] start — bookingId=${bookingId} status=${status}`);
+          try {
+            const { error } = await supabase.from('bookings').update({ status }).eq('id', bookingId);
+            if (error) {
+              console.error('[ACCEPT FLOW ERROR] Step 1 (booking update) failed:', error);
+              Alert.alert('Error', 'Failed to update status. Please try again.');
+              setUpdating(false);
+              return;
+            }
+            console.log('[STEP 1] booking updated');
+            await fetchBooking();
+            console.log('[STEP 5] booking detail refreshed');
+          } catch (error) {
+            console.error('[ACCEPT FLOW ERROR]', error);
+            Alert.alert('Error', 'An unexpected error occurred during status update.');
+          } finally {
+            setUpdating(false);
+            console.log('[updateStatus] done');
           }
-          fetchBooking();
-          setUpdating(false);
         },
       },
     ]);

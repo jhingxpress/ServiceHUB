@@ -58,8 +58,8 @@ export default function AdminDashboardScreen() {
     const [usersRes, provRes, pendingRes, bookingsRes, completedRes, revenueRes] =
       await Promise.all([
         supabase.from('users').select('id', { count: 'exact', head: true }),
-        supabase.from('providers').select('id', { count: 'exact', head: true }).eq('is_verified', true),
-        supabase.from('providers').select('id', { count: 'exact', head: true }).eq('is_verified', false),
+        supabase.from('providers').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
+        supabase.from('providers').select('id', { count: 'exact', head: true }).eq('status', 'pending_review'),
         supabase.from('bookings').select('id', { count: 'exact', head: true }),
         supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'completed'),
         supabase.from('payments').select('amount').eq('status', 'completed'),
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: SPACING.md, gap: SPACING.sm, marginBottom: SPACING.md,
   },
   statCard: {
-    flex: 1, minWidth: '30%', maxWidth: '32%', minHeight: 110,
+    width: '31%', minHeight: 110,
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md, alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,

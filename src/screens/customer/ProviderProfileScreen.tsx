@@ -69,7 +69,7 @@ export default function ProviderProfileScreen() {
           .order('created_at', { ascending: false }),
         supabase
           .from('reviews')
-          .select('*')
+          .select('id, booking_id, customer_id, provider_id, rating, title, comment, photo_urls, is_visible, created_at, customer_name, customer_avatar_url')
           .eq('provider_id', providerId)
           .eq('is_visible', true)
           .order('created_at', { ascending: false })
@@ -82,7 +82,7 @@ export default function ProviderProfileScreen() {
         service_options: (s.service_options ?? []).filter((o: ServiceOption) => o.is_active),
       }));
       setServices(rawServices);
-      setReviews(revRes.data ?? []);
+      setReviews((revRes.data ?? []) as unknown as ReviewWithMedia[]);
       setLoading(false);
     };
     load();

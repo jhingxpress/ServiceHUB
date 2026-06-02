@@ -140,7 +140,7 @@ export default function ProviderStorefrontScreen() {
 
     const { data: revs, error: revError } = await supabase
       .from('reviews')
-      .select('id, booking_id, customer_id, provider_id, rating, title, comment, photo_urls, customer_name, customer_avatar_url, is_visible, created_at')
+      .select('id, booking_id, customer_id, provider_id, rating, title, comment, photo_urls, is_visible, created_at, customer_name, customer_avatar_url')
       .eq('provider_id', providerId)
       .eq('is_visible', true)
       .order('created_at', { ascending: false })
@@ -151,7 +151,7 @@ export default function ProviderStorefrontScreen() {
 
     setProvider(prov as unknown as Provider);
     setServices(servicesWithRelations);
-    setReviews(revs ?? []);
+    setReviews((revs ?? []) as unknown as Review[]);
     setLoading(false);
   }, [providerId]);
 

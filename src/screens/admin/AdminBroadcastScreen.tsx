@@ -75,7 +75,7 @@ export default function AdminBroadcastScreen() {
             } else if (audience === 'admins_only') {
               query = query.eq('role', 'admin');
             }
-            query = query.eq('is_active', true);
+            query = query.eq('status', 'active');
 
             const { data: recipients, error: recipientsErr } = await query;
             if (recipientsErr || !recipients) {

@@ -189,6 +189,7 @@ export default function BookingManagementScreen() {
         data={STATUS_TABS}
         keyExtractor={(t) => t.key}
         showsHorizontalScrollIndicator={false}
+        style={{ maxHeight: 48 }}
         contentContainerStyle={styles.tabsRow}
         renderItem={({ item: tab }) => (
           <TouchableOpacity

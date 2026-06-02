@@ -60,15 +60,39 @@ export default function BookingRequestsScreen() {
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
   const updateStatus = async (bookingId: string, status: BookingStatus) => {
+    console.log(`[updateStatus] start — bookingId=${bookingId} status=${status}`);
     const { error } = await supabase.from('bookings').update({ status }).eq('id', bookingId);
-    if (error) { showError(error, 'Failed to update booking status.'); return; }
+    if (error) {
+      console.error('[ACCEPT FLOW ERROR] Step 1 (booking update) failed:', error);
+      showError(error, 'Failed to update booking status.');
+      return;
+    }
+    console.log('[STEP 1] booking updated');
     fetchBookings();
+    console.log('[STEP 5] bookings list refreshed');
   };
 
   const handleAccept = (id: string) => {
     Alert.alert('Accept Booking', 'Accept this booking request?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Accept', onPress: () => updateStatus(id, 'accepted') },
+      {
+        text: 'Accept',
+        onPress: async () => {
+          try {
+            console.log('[handleAccept] start — bookingId=', id);
+            setLoading(true);
+            console.log('[handleAccept] calling updateStatus accepted');
+            await updateStatus(id, 'accepted');
+            console.log('[handleAccept] updateStatus returned successfully');
+          } catch (error) {
+            console.error('[ACCEPT FLOW ERROR]', error);
+            showError(error as any, 'Accept booking failed unexpectedly.');
+          } finally {
+            setLoading(false);
+            console.log('[handleAccept] done');
+          }
+        },
+      },
     ]);
   };
 

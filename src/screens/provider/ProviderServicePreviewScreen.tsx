@@ -79,7 +79,7 @@ export default function ProviderServicePreviewScreen() {
         console.log('[Preview] reviews loaded:', revs?.length ?? 0);
         setProviderCategories((cats ?? []) as ProviderCategory[]);
         setPortfolio((port ?? []) as ProviderPortfolio[]);
-        setReviews((revs ?? []) as ProviderReview[]);
+        setReviews((revs ?? []) as unknown as ProviderReview[]);
       }
     } catch (err: any) {
       console.error('[Preview] load error:', err);

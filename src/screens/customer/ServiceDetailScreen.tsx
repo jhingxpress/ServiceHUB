@@ -47,7 +47,7 @@ export default function ServiceDetailScreen() {
         supabase.from('providers').select('*').eq('id', (svc as any)?.provider_id).single(),
         supabase
           .from('reviews')
-          .select('*')
+          .select('id, booking_id, customer_id, provider_id, rating, title, comment, photo_urls, is_visible, created_at, customer_name, customer_avatar_url')
           .eq('provider_id', (svc as any)?.provider_id)
           .eq('is_visible', true)
           .order('created_at', { ascending: false })
@@ -57,7 +57,7 @@ export default function ServiceDetailScreen() {
       setImages((imgs ?? []) as ServiceImage[]);
       setServiceOptions(opts ?? []);
       setProvider(prov as Provider | null);
-      setReviews((revs ?? []) as Review[]);
+      setReviews((revs ?? []) as unknown as Review[]);
     } catch (err: any) {
       console.error('[ServiceDetail] load error:', err);
     } finally {

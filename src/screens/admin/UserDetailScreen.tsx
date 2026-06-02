@@ -28,7 +28,7 @@ interface UserDetail {
   phone: string | null;
   avatar_url: string | null;
   role: string;
-  is_active: boolean;
+  status: string;
   created_at: string;
   bookings?: { id: string; status: string; created_at: string; services: { name: string } | null }[];
 }
@@ -42,7 +42,7 @@ export default function UserDetailScreen({ route, navigation }: Props) {
   useEffect(() => {
     supabase
       .from('users')
-      .select(`id, full_name, email, phone, avatar_url, role, is_active, created_at`)
+      .select(`id, full_name, email, phone, avatar_url, role, status, created_at`)
       .eq('id', userId)
       .single()
       .then(async ({ data }) => {
@@ -75,7 +75,7 @@ export default function UserDetailScreen({ route, navigation }: Props) {
       'Enter reason for suspension (visible in audit log):',
       async (reason) => {
         if (!reason?.trim()) return;
-        await supabase.from('users').update({ is_active: false }).eq('id', userId);
+        await supabase.from('users').update({ status: 'suspended' }).eq('id', userId);
         await logModerationAction('suspend_user', reason);
         await supabase.from('notifications').insert({
           user_id: userId,
@@ -84,7 +84,7 @@ export default function UserDetailScreen({ route, navigation }: Props) {
           body: 'Your account has been temporarily suspended. Contact support for assistance.',
           data: {},
         });
-        setUserData((p) => p ? { ...p, is_active: false } : p);
+        setUserData((p) => p ? { ...p, status: 'suspended' } : p);
         Alert.alert('Done', 'User has been suspended.');
       },
       'plain-text'
@@ -101,7 +101,7 @@ export default function UserDetailScreen({ route, navigation }: Props) {
           text: 'Ban',
           style: 'destructive',
           onPress: async () => {
-            await supabase.from('users').update({ is_active: false, role: 'banned' as any }).eq('id', userId);
+            await supabase.from('users').update({ status: 'banned' }).eq('id', userId);
             await logModerationAction('ban_user', 'Permanent ban issued by admin');
             await supabase.from('notifications').insert({
               user_id: userId,
@@ -110,7 +110,7 @@ export default function UserDetailScreen({ route, navigation }: Props) {
               body: 'Your account has been banned for violating our Terms of Service.',
               data: {},
             });
-            setUserData((p) => p ? { ...p, is_active: false } : p);
+            setUserData((p) => p ? { ...p, status: 'banned' } : p);
             Alert.alert('Done', 'User has been banned.');
           },
         },
@@ -119,16 +119,17 @@ export default function UserDetailScreen({ route, navigation }: Props) {
   };
 
   const handleToggleActive = () => {
-    const action = userData?.is_active ? 'deactivate' : 'activate';
+    const isActive = userData?.status === 'active';
+    const action = isActive ? 'deactivate' : 'activate';
     Alert.alert(`${action.charAt(0).toUpperCase() + action.slice(1)} User`, `Are you sure you want to ${action} this user?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: action.charAt(0).toUpperCase() + action.slice(1),
-        style: userData?.is_active ? 'destructive' : 'default',
+        style: isActive ? 'destructive' : 'default',
         onPress: async () => {
-          const newStatus = !userData?.is_active;
-          await supabase.from('users').update({ is_active: newStatus }).eq('id', userId);
-          setUserData((p) => p ? { ...p, is_active: newStatus } : p);
+          const newStatus = isActive ? 'suspended' : 'active';
+          await supabase.from('users').update({ status: newStatus }).eq('id', userId);
+          setUserData((p) => p ? { ...p, status: newStatus } : p);
         },
       },
     ]);
@@ -175,9 +176,9 @@ export default function UserDetailScreen({ route, navigation }: Props) {
                   {userData.role.charAt(0).toUpperCase() + userData.role.slice(1)}
                 </Text>
               </View>
-              <View style={[styles.roleBadge, { backgroundColor: userData.is_active ? '#D1FAE5' : '#FEE2E2' }]}>
-                <Text style={[styles.roleText, { color: userData.is_active ? COLORS.success : COLORS.error }]}>
-                  {userData.is_active ? 'Active' : 'Inactive'}
+              <View style={[styles.roleBadge, { backgroundColor: userData.status === 'active' ? '#D1FAE5' : '#FEE2E2' }]}>
+                <Text style={[styles.roleText, { color: userData.status === 'active' ? COLORS.success : COLORS.error }]}>
+                  {userData.status === 'active' ? 'Active' : 'Inactive'}
                 </Text>
               </View>
             </View>
@@ -235,19 +236,19 @@ export default function UserDetailScreen({ route, navigation }: Props) {
         <View style={styles.modSection}>
           <Text style={styles.sectionTitle}>Moderation Actions</Text>
           <TouchableOpacity
-            style={[styles.toggleBtn, { backgroundColor: userData.is_active ? '#FEF3C7' : '#D1FAE5' }]}
+            style={[styles.toggleBtn, { backgroundColor: userData.status === 'active' ? '#FEF3C7' : '#D1FAE5' }]}
             onPress={handleToggleActive}
           >
             <Ionicons
-              name={userData.is_active ? 'pause-circle-outline' : 'checkmark-circle-outline'}
+              name={userData.status === 'active' ? 'pause-circle-outline' : 'checkmark-circle-outline'}
               size={18}
-              color={userData.is_active ? COLORS.warning : COLORS.success}
+              color={userData.status === 'active' ? COLORS.warning : COLORS.success}
             />
-            <Text style={[styles.toggleBtnText, { color: userData.is_active ? COLORS.warning : COLORS.success }]}>
-              {userData.is_active ? 'Deactivate Account' : 'Activate Account'}
+            <Text style={[styles.toggleBtnText, { color: userData.status === 'active' ? COLORS.warning : COLORS.success }]}>
+              {userData.status === 'active' ? 'Deactivate Account' : 'Activate Account'}
             </Text>
           </TouchableOpacity>
-          {userData.is_active && (
+          {userData.status === 'active' && (
             <TouchableOpacity
               style={[styles.toggleBtn, { backgroundColor: '#FEF3C7', marginTop: SPACING.sm }]}
               onPress={handleSuspend}

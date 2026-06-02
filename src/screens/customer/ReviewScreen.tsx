@@ -97,10 +97,60 @@ export default function ReviewScreen() {
       showWarning('Please select a star rating before submitting.');
       return;
     }
-    if (!user) return;
+    if (!user) {
+      showError(new Error('User not authenticated'), 'You must be logged in to submit a review.');
+      return;
+    }
     setSubmitting(true);
     try {
-      // 1. Upload photos first and collect URLs
+      // 1. Verify auth session is still valid
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) {
+        console.error('[ReviewScreen] Auth session invalid:', sessionError);
+        showError(sessionError ?? new Error('Session expired'), 'Your session has expired. Please log in again.');
+        setSubmitting(false);
+        return;
+      }
+
+      // 2. Pre-validate: booking must exist, belong to user, and be completed
+      const { data: bookingRow, error: bookingError } = await supabase
+        .from('bookings')
+        .select('id, status, provider_id')
+        .eq('id', bookingId)
+        .eq('customer_id', user.id)
+        .single();
+
+      if (bookingError || !bookingRow) {
+        console.error('[ReviewScreen] Booking validation failed:', bookingError);
+        showError(bookingError ?? new Error('Booking not found'), 'Could not verify this booking. It may not belong to you or does not exist.');
+        setSubmitting(false);
+        return;
+      }
+      if (bookingRow.status !== 'completed') {
+        console.error('[ReviewScreen] Booking not completed:', bookingRow.status);
+        showError(new Error(`Booking status is ${bookingRow.status}`), 'You can only review completed bookings.');
+        setSubmitting(false);
+        return;
+      }
+
+      // 3. Pre-validate: no existing review for this booking
+      const { data: existingReview, error: existingError } = await supabase
+        .from('reviews')
+        .select('id')
+        .eq('booking_id', bookingId)
+        .maybeSingle();
+
+      if (existingError) {
+        console.error('[ReviewScreen] Duplicate check query failed:', existingError);
+      }
+      if (existingReview) {
+        console.error('[ReviewScreen] Duplicate review found for booking:', bookingId);
+        showError(new Error('Review already exists'), 'You have already reviewed this booking.');
+        setSubmitting(false);
+        return;
+      }
+
+      // 4. Upload photos first and collect URLs
       let photoUrls: string[] = [];
       if (photos.length > 0) {
         const uploadResults = await Promise.all(photos.map((uri) => uploadReviewPhoto(uri)));
@@ -108,36 +158,48 @@ export default function ReviewScreen() {
         console.log('[ReviewScreen] Uploaded photo URLs:', photoUrls);
       }
 
-      // 2. Build complete payload
+      // 5. Build complete payload with denormalized customer fields
       const payload = {
         booking_id: bookingId,
         provider_id: providerId,
         customer_id: user.id,
         customer_name: user.full_name ?? 'Customer',
-        customer_avatar_url: user.avatar_url,
+        customer_avatar_url: user.avatar_url ?? null,
         rating,
         title: title.trim() || null,
         comment: comment.trim() || null,
         photo_urls: photoUrls.length > 0 ? photoUrls : [],
       };
-      console.log('[ReviewScreen] Insert payload:', payload);
+      console.log('[ReviewScreen] Insert payload:', JSON.stringify(payload, null, 2));
 
-      const { data, error } = await supabase
+      // 6. Insert review — do NOT use .single() to avoid silent RLS edge cases
+      const { data: insertData, error: insertError } = await supabase
         .from('reviews')
         .insert(payload)
-        .select('id')
-        .single();
+        .select('id');
 
-      if (error) {
-        console.error('[ReviewScreen] Insert error:', error.code, error.message, error.details);
-        throw error;
+      // 7. Explicitly handle every failure mode
+      if (insertError) {
+        console.error('[ReviewScreen] Insert error:', insertError.code, insertError.message, insertError.details, insertError.hint);
+        showError(insertError, `Review submission failed: ${insertError.message}`);
+        setSubmitting(false);
+        return;
       }
 
-      console.log('[ReviewScreen] Insert success:', data);
+      if (!insertData || insertData.length === 0) {
+        // Silent RLS failure or unexpected empty result
+        const silentErr = new Error('Insert returned no data. Possible RLS policy mismatch or trigger rejection.');
+        console.error('[ReviewScreen] Silent insert failure — no rows returned. Payload:', payload);
+        showError(silentErr, 'Review submission blocked. Please contact support.');
+        setSubmitting(false);
+        return;
+      }
+
+      console.log('[ReviewScreen] Insert success:', insertData);
       showSuccess('Review submitted! Thank you for your feedback.');
       navigation.goBack();
     } catch (err) {
-      console.error('[ReviewScreen] Submit catch:', err);
+      console.error('[ReviewScreen] Submit catch (unexpected throw):', err);
       showError(err, 'Failed to submit review. Please try again.');
     } finally {
       setSubmitting(false);
