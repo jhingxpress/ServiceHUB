@@ -3,6 +3,52 @@
 -- Prevents parent-category service leakage
 -- ============================================================
 
+-- ============================================================
+-- 0. CREATE missing leaf categories first (idempotent)
+-- ============================================================
+
+INSERT INTO public.categories (name, description, parent_id, is_parent, icon, color)
+SELECT v.name, v.description, p.id, false, v.icon, v.color
+FROM (
+  VALUES
+    ('Post Construction Cleaning', 'Post-build debris and dust removal cleaning', 'hammer-outline', '#3B82F6'),
+    ('Residential Cleaning', 'Regular home cleaning and maintenance', 'home-outline', '#3B82F6'),
+    ('Office Cleaning', 'Commercial office and workspace cleaning', 'business-outline', '#3B82F6')
+) AS v(name, description, icon, color)
+JOIN public.categories p ON p.name = 'HOME SERVICES' AND p.is_parent = true
+ON CONFLICT (name) DO NOTHING;
+
+-- ============================================================
+-- 1. GUARD CLAUSES (only pre-existing categories)
+-- ============================================================
+
+DO $$
+DECLARE
+  home_services_id UUID;
+BEGIN
+  -- Validate parent category exists
+  SELECT id INTO home_services_id
+  FROM public.categories
+  WHERE name = 'HOME SERVICES' AND is_parent = true;
+
+  IF home_services_id IS NULL THEN
+    RAISE EXCEPTION 'HOME SERVICES parent category not found. Aborting migration.';
+  END IF;
+
+  -- Validate pre-existing leaf categories (seeded by prior migration)
+  IF NOT EXISTS (
+    SELECT 1 FROM public.categories WHERE name = 'Deep Cleaning' AND is_parent = false
+  ) THEN
+    RAISE EXCEPTION 'Deep Cleaning leaf category not found. Aborting migration.';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.categories WHERE name = 'Move-In Cleaning' AND is_parent = false
+  ) THEN
+    RAISE EXCEPTION 'Move-In Cleaning leaf category not found. Aborting migration.';
+  END IF;
+END $$;
+
 ALTER TABLE public.service_groups
   ADD COLUMN IF NOT EXISTS leaf_category_id UUID REFERENCES public.categories(id) ON DELETE SET NULL;
 
@@ -172,7 +218,7 @@ WHERE LOWER(name) = 'delivery services'
 
 WITH inserted_cleaning_groups AS (
   INSERT INTO public.service_groups (category_id, leaf_category_id, name, description, icon, is_active)
-  SELECT 
+  SELECT
     c.parent_id,
     c.id,
     g.name,
@@ -227,8 +273,7 @@ SELECT COUNT(*) FROM inserted_templates;
 DO $$
 DECLARE
   deep_cleaning_id UUID;
-  old_cleaning_id  UUID;
-  r                RECORD;
+  old_ids UUID[];
 BEGIN
   SELECT id INTO deep_cleaning_id
   FROM public.categories
@@ -238,35 +283,28 @@ BEGIN
     RAISE EXCEPTION 'Deep Cleaning leaf category not found';
   END IF;
 
-  -- Find old "Cleaning Services" leaf (mapped to HOME SERVICES in prior migration)
-  SELECT id INTO old_cleaning_id
+  -- Collect all legacy cleaning category IDs
+  SELECT ARRAY_AGG(id) INTO old_ids
   FROM public.categories
-  WHERE LOWER(name) LIKE '%cleaning%'
+  WHERE LOWER(name) = ANY(ARRAY[
+    'cleaning services',
+    'house cleaning',
+    'general cleaning',
+    'cleaning'
+  ])
     AND is_parent = false
-    AND id != deep_cleaning_id
-  LIMIT 1;
+    AND id != deep_cleaning_id;
 
-  IF old_cleaning_id IS NOT NULL THEN
+  IF old_ids IS NOT NULL AND array_length(old_ids, 1) > 0 THEN
     -- Update providers table
     UPDATE public.providers
     SET category_id = deep_cleaning_id
-    WHERE category_id = old_cleaning_id;
+    WHERE category_id = ANY(old_ids);
 
-    -- Update provider_categories junction
-    FOR r IN
-      SELECT provider_id
-      FROM public.provider_categories
-      WHERE category_id = old_cleaning_id
-    LOOP
-      -- Remove old mapping
-      DELETE FROM public.provider_categories
-      WHERE provider_id = r.provider_id AND category_id = old_cleaning_id;
-
-      -- Insert new mapping (ignore conflict if already exists)
-      INSERT INTO public.provider_categories (provider_id, category_id, is_primary)
-      VALUES (r.provider_id, deep_cleaning_id, true)
-      ON CONFLICT (provider_id, category_id) DO NOTHING;
-    END LOOP;
+    -- Update provider_categories junction (safe UPDATE instead of DELETE/INSERT)
+    UPDATE public.provider_categories
+    SET category_id = deep_cleaning_id
+    WHERE category_id = ANY(old_ids);
   END IF;
 END $$;
 
@@ -277,10 +315,76 @@ END $$;
 DO $$
 DECLARE
   null_count INT;
+  cleaning_group_count INT;
+  cleaning_template_count INT;
+  expected_groups INT := 5;
+  expected_templates INT := 17;
 BEGIN
+  -- Verify no service_groups have NULL leaf_category_id
   SELECT COUNT(*) INTO null_count
   FROM public.service_groups
   WHERE leaf_category_id IS NULL;
 
-  RAISE NOTICE 'service_groups leaf_category_id backfill: % groups still NULL', null_count;
+  IF null_count > 0 THEN
+    RAISE WARNING 'service_groups leaf_category_id backfill: % groups still NULL', null_count;
+  ELSE
+    RAISE NOTICE 'service_groups leaf_category_id backfill: COMPLETE (0 NULL)';
+  END IF;
+
+  -- Verify cleaning service groups were created
+  SELECT COUNT(*) INTO cleaning_group_count
+  FROM public.service_groups sg
+  JOIN public.categories c ON c.id = sg.leaf_category_id
+  WHERE c.name IN ('Deep Cleaning','Move-In Cleaning','Post Construction Cleaning','Residential Cleaning','Office Cleaning');
+
+  IF cleaning_group_count < expected_groups THEN
+    RAISE WARNING 'Cleaning service groups: % found, % expected', cleaning_group_count, expected_groups;
+  ELSE
+    RAISE NOTICE 'Cleaning service groups: % found (expected %)', cleaning_group_count, expected_groups;
+  END IF;
+
+  -- Verify cleaning templates were created
+  SELECT COUNT(*) INTO cleaning_template_count
+  FROM public.service_templates st
+  JOIN public.service_groups sg ON sg.id = st.service_group_id
+  JOIN public.categories c ON c.id = sg.leaf_category_id
+  WHERE c.name IN ('Deep Cleaning','Move-In Cleaning','Post Construction Cleaning','Residential Cleaning','Office Cleaning');
+
+  IF cleaning_template_count < expected_templates THEN
+    RAISE WARNING 'Cleaning service templates: % found, % expected', cleaning_template_count, expected_templates;
+  ELSE
+    RAISE NOTICE 'Cleaning service templates: % found (expected %)', cleaning_template_count, expected_templates;
+  END IF;
 END $$;
+
+-- ============================================================
+-- 6. ROLLBACK SECTION
+-- ============================================================
+-- To rollback this migration, run the following in order:
+--
+--   1. Revert provider category mappings (requires manual backup
+--      of providers.category_id and provider_categories from before
+--      this migration, OR restore from database snapshot).
+--
+--   2. Remove new cleaning groups (cascades to templates):
+--      DELETE FROM public.service_groups
+--      WHERE name IN (
+--        'Deep Cleaning','Move-In Cleaning','Post Construction Cleaning',
+--        'Residential Cleaning','Office Cleaning'
+--      );
+--
+--   3. Remove leaf categories added by this migration:
+--      DELETE FROM public.categories
+--      WHERE name IN ('Post Construction Cleaning','Residential Cleaning','Office Cleaning')
+--        AND is_parent = false;
+--
+--   4. Drop the new column:
+--      ALTER TABLE public.service_groups
+--      DROP COLUMN IF EXISTS leaf_category_id;
+--
+--   5. Drop the index:
+--      DROP INDEX IF EXISTS idx_service_groups_leaf_category;
+--
+-- NOTE: Pre-migration backup of providers(category_id) and
+--       provider_categories tables is strongly recommended.
+-- ============================================================
