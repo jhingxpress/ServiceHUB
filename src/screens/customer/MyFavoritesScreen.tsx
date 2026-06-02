@@ -41,13 +41,13 @@ export default function MyFavoritesScreen({ navigation }: Props) {
           <Text style={styles.name}>{provider.business_name ?? 'Provider'}</Text>
           <Text style={styles.category}>{(provider as any).categories?.name ?? ''}</Text>
           <View style={styles.metaRow}>
-            {provider.rating && (
+            {!!provider.rating && (
               <View style={styles.ratingPill}>
                 <Ionicons name="star" size={11} color="#F59E0B" />
                 <Text style={styles.ratingText}>{Number(provider.rating).toFixed(1)}</Text>
               </View>
             )}
-            {provider.location && (
+            {!!provider.location && (
               <View style={styles.locRow}>
                 <Ionicons name="location-outline" size={11} color={COLORS.textLight} />
                 <Text style={styles.locText} numberOfLines={1}>

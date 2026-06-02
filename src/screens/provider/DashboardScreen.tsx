@@ -303,7 +303,6 @@ export default function ProviderDashboard() {
               { label: 'Active Jobs', icon: 'play-circle-outline', action: () => navigation.getParent()?.navigate('ActiveJobs'), badge: stats.active > 0 ? stats.active.toString() : undefined },
               { label: 'Services', icon: 'construct-outline', action: () => navigation.navigate('ManageServices') },
               { label: 'Earnings', icon: 'wallet-outline', action: () => navigation.getParent()?.navigate('Earnings'), badge: stats.earnings > 0 ? `₱${stats.earnings}` : undefined },
-              { label: 'Reviews', icon: 'star-outline', action: () => navigation.navigate('ProviderReviews'), badge: newReviewCount > 0 ? newReviewCount.toString() : undefined },
             ].map((q) => (
               <TouchableOpacity
                 key={q.label}
@@ -318,7 +317,7 @@ export default function ProviderDashboard() {
                     </View>
                   ) : null}
                 </View>
-                <Text style={styles.quickLabel}>{q.label}</Text>
+                <Text style={styles.quickLabel} numberOfLines={1} adjustsFontSizeToFit>{q.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -473,14 +472,14 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
   quickSection: { paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
   sectionTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: SPACING.sm },
-  quickRow: { flexDirection: 'row', gap: SPACING.sm, flexWrap: 'wrap', justifyContent: 'space-between' },
+  quickRow: { flexDirection: 'row', gap: SPACING.sm, flexWrap: 'wrap' },
   quickCard: {
-    width: '18.5%', minWidth: 68, minHeight: 88,
+    width: '23%', minWidth: 72, minHeight: 88,
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.sm, alignItems: 'center', justifyContent: 'center', gap: SPACING.xs,
     borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
   },
-  quickLabel: { fontSize: FONTS.sizes.xs, color: COLORS.text, fontFamily: FONTS.semiBold, textAlign: 'center', minHeight: 28, lineHeight: 14 },
+  quickLabel: { fontSize: FONTS.sizes.xs, color: COLORS.text, fontFamily: FONTS.semiBold, textAlign: 'center', lineHeight: 14 },
   quickIconWrap: { position: 'relative' },
   badgeWrap: {
     position: 'absolute',

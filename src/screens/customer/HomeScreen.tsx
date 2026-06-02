@@ -268,7 +268,7 @@ export default function HomeScreen() {
                 <View style={[styles.categoryIcon, { backgroundColor: (cat.color ?? COLORS.primary) + '18' }]}>
                   <Ionicons name={cat.icon as React.ComponentProps<typeof Ionicons>['name']} size={26} color={cat.color ?? COLORS.primary} />
                 </View>
-                <Text style={styles.categoryName} numberOfLines={2}>{getCategoryDisplayLabel(cat.name)}</Text>
+                <Text style={styles.categoryName} numberOfLines={2} textBreakStrategy="simple">{getCategoryDisplayLabel(cat.name)}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -485,14 +485,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md, gap: SPACING.sm,
   },
   categoryCard: {
-    width: '23%',
+    width: '30%',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
     borderRadius: BORDER_RADIUS.xl,
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.xs,
     borderWidth: 1, borderColor: COLORS.border,
-    minHeight: 100,
+    height: 108,
     ...SHADOWS.small,
   },
   categoryIcon: {

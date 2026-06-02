@@ -91,13 +91,13 @@ export default function ProviderListScreen({ route, navigation }: Props) {
         <Text style={styles.providerName}>{item.business_name ?? 'Provider'}</Text>
         <Text style={styles.categoryText}>{item.category?.name ?? ''}</Text>
         <View style={styles.metaRow}>
-          {item.rating && (
+          {!!item.rating && (
             <View style={styles.ratingPill}>
               <Ionicons name="star" size={11} color="#F59E0B" />
               <Text style={styles.ratingPillText}>{Number(item.rating).toFixed(1)}</Text>
             </View>
           )}
-          {item.location && (
+          {!!item.location && (
             <View style={styles.locRow}>
               <Ionicons name="location-outline" size={11} color={COLORS.textLight} />
               <Text style={styles.locText} numberOfLines={1}>{item.location}</Text>
@@ -106,10 +106,10 @@ export default function ProviderListScreen({ route, navigation }: Props) {
         </View>
       </View>
       <View style={styles.listCardRight}>
-        {item.hourly_rate && (
+        {!!item.hourly_rate && (
           <Text style={styles.rateText}>₱{item.hourly_rate}</Text>
         )}
-        {item.hourly_rate && <Text style={styles.rateUnit}>/hr</Text>}
+        {!!item.hourly_rate && <Text style={styles.rateUnit}>/hr</Text>}
         <Ionicons name="chevron-forward" size={16} color={COLORS.textLight} />
       </View>
     </TouchableOpacity>
@@ -124,13 +124,13 @@ export default function ProviderListScreen({ route, navigation }: Props) {
       <Avatar uri={item.profile_photo_url ?? item.business_logo} name={item.business_name} size={64} />
       <Text style={styles.gridName} numberOfLines={1}>{item.business_name ?? 'Pro'}</Text>
       <Text style={styles.gridCategory} numberOfLines={1}>{item.category?.name ?? ''}</Text>
-      {item.rating && (
+      {!!item.rating && (
         <View style={styles.gridRating}>
           <Ionicons name="star" size={11} color="#F59E0B" />
           <Text style={styles.gridRatingText}>{Number(item.rating).toFixed(1)}</Text>
         </View>
       )}
-      {item.hourly_rate && (
+      {!!item.hourly_rate && (
         <Text style={styles.gridRate}>₱{item.hourly_rate}/hr</Text>
       )}
     </TouchableOpacity>
