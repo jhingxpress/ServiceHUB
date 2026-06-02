@@ -17,7 +17,22 @@ import { useAuthStore } from './src/stores/authStore';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { ToastProvider } from './src/hooks/useToast';
 import Toast from './src/components/ui/Toast';
+import AnnouncementModal from './src/components/modals/AnnouncementModal';
+import { useAnnouncementModal } from './src/hooks/useAnnouncementModal';
 import { COLORS } from './src/constants/theme';
+
+function AnnouncementOverlay() {
+  const { visible, title, message, type, closeModal } = useAnnouncementModal();
+  return (
+    <AnnouncementModal
+      visible={visible}
+      title={title}
+      message={message}
+      type={type}
+      onClose={closeModal}
+    />
+  );
+}
 
 export default function App() {
   const { initialize } = useAuthStore();
@@ -49,6 +64,7 @@ export default function App() {
               <StatusBar style="dark" />
               <RootNavigator />
               <Toast />
+              <AnnouncementOverlay />
             </NavigationContainer>
           </ToastProvider>
         </ErrorBoundary>

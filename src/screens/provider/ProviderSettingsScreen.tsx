@@ -29,12 +29,12 @@ export default function ProviderSettingsScreen() {
     {
       section: 'Profile',
       items: [
-        { label: 'My Reviews', icon: 'star-outline', onPress: () => navigation.navigate('ProviderReviews') },
-        { label: 'Messages', icon: 'chatbubbles-outline', onPress: () => navigation.navigate('ProviderTabs', { screen: 'Messages' }) },
-        { label: 'Edit Provider Profile', icon: 'person-outline', onPress: () => navigation.navigate('ProfileSetup') },
-        { label: 'Manage Services', icon: 'construct-outline', onPress: () => navigation.navigate('ManageServices') },
-        { label: 'Availability Schedule', icon: 'calendar-outline', onPress: () => navigation.navigate('ProviderTabs', { screen: 'Schedule' }) },
-        { label: 'Notifications', icon: 'notifications-outline', onPress: () => navigation.navigate('NotificationCenter') },
+        { label: 'My Reviews', icon: 'star-outline', onPress: () => navigation.getParent()?.navigate('ProviderReviews') },
+        { label: 'Messages', icon: 'chatbubbles-outline', onPress: () => (navigation as any).navigate('Messages') },
+        { label: 'Edit Provider Profile', icon: 'person-outline', onPress: () => navigation.getParent()?.navigate('ProfileSetup') },
+        { label: 'Manage Services', icon: 'construct-outline', onPress: () => navigation.getParent()?.navigate('ManageServices') },
+        { label: 'Availability Schedule', icon: 'calendar-outline', onPress: () => (navigation as any).navigate('Schedule') },
+        { label: 'Notifications', icon: 'notifications-outline', onPress: () => navigation.getParent()?.navigate('NotificationCenter') },
       ],
     },
     {
