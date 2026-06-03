@@ -19,6 +19,8 @@ import { format } from 'date-fns';
 import * as ImagePicker from 'expo-image-picker';
 import ImageView from 'react-native-image-viewing';
 import { supabase } from '../../lib/supabase';
+import { validateImagePickerAsset } from '../../utils/fileValidation';
+import { uploadImageToStorage } from '../../utils/storageUpload';
 import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
@@ -151,6 +153,7 @@ export default function ChatRoomScreen() {
   const handleSend = async () => {
     if (!text.trim() || !user) return;
     const content = text.trim();
+
     setText('');
 
     // Optimistic update — show immediately
@@ -230,18 +233,17 @@ export default function ChatRoomScreen() {
 
     if (!result.canceled && result.assets?.[0]) {
       const asset = result.assets[0];
-      console.log('[ChatRoom] Selected image URI:', asset.uri);
-      console.log('[ChatRoom] Asset:', JSON.stringify(asset, null, 2));
+      const validation = validateImagePickerAsset(asset, 'chat-media');
+      if (!validation.valid) {
+        Alert.alert('Invalid Image', validation.error);
+        return;
+      }
       await uploadAndSendImage(asset.uri);
     }
   };
 
   const uploadAndSendImage = async (uri: string) => {
     if (!user) return;
-
-    // ── CHECKPOINT 1: URI inspection ──────────────────────────────────────
-    console.log('[ChatRoom] Selected image URI:', uri);
-    console.log('[ChatRoom] URI scheme:', uri.split(':')[0]);
 
     setUploadingImage(true);
 
@@ -270,71 +272,13 @@ export default function ChatRoomScreen() {
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `${bookingId}/${fileName}`;
 
-      console.log('[ChatRoom] Upload path:', filePath);
-      console.log('[ChatRoom] MIME type:', mimeType);
-      console.log('[ChatRoom] User ID:', user?.id);
-      console.log('[ChatRoom] Booking ID:', bookingId);
+      const publicUrl = await uploadImageToStorage(
+        'chat-media',
+        filePath,
+        uri,
+        mimeType
+      );
 
-      // ── STEP 1: read auth token ────────────────────────────────────────
-      // FileSystem.uploadAsync requires the bearer token directly.
-      console.log('[ChatRoom] STEP 1: reading auth session...');
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token ?? '';
-      console.log('[ChatRoom] STEP 1 OK — token present:', accessToken.length > 0);
-
-      // ── STEP 2: prepare upload payload ────────────────────────────────
-      // Build the Supabase Storage REST endpoint directly.
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-      const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
-      const endpoint = `${supabaseUrl}/storage/v1/object/chat-media/${filePath}`;
-      console.log('[ChatRoom] STEP 2: prepare upload payload');
-      console.log('[ChatRoom] STEP 2 endpoint:', endpoint);
-
-      // ── STEP 3: upload via FormData + fetch (Hermes-compatible) ──────────
-      // WHY THIS APPROACH:
-      //   new Blob([ArrayBuffer]) and new Blob([ArrayBufferView]) throw
-      //   "Creating blobs from ArrayBuffer and ArrayBufferView are not supported"
-      //   on Hermes (Expo SDK 51 / RN 0.74).
-      //
-      //   React Native FormData accepts { uri, type, name } objects natively.
-      //   The native networking layer reads the file via Android's
-      //   ContentResolver, handling both file:// and content:// URIs without
-      //   any Blob, ArrayBuffer, or atob in JS. fetch() with a FormData body
-      //   sets Content-Type: multipart/form-data automatically with the
-      //   correct boundary — do NOT override it manually.
-      console.log('[ChatRoom] STEP 3: uploading via FormData + fetch...');
-      const formData = new FormData();
-      formData.append('cacheControl', '3600');
-      formData.append('', { uri, type: mimeType, name: fileName } as any);
-
-      const uploadResponse = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          apikey: anonKey,
-        },
-        body: formData,
-      });
-      const uploadBody = await uploadResponse.text();
-      console.log('[ChatRoom] STEP 3 status:', uploadResponse.status);
-      console.log('[ChatRoom] STEP 3 body:', uploadBody);
-
-      if (!uploadResponse.ok) {
-        throw new Error(
-          `Storage upload failed: HTTP ${uploadResponse.status} — ${uploadBody}`
-        );
-      }
-
-      // ── STEP 4: get public URL ─────────────────────────────────────────
-      console.log('[ChatRoom] STEP 4: getting public URL...');
-      const { data: urlData } = supabase.storage
-        .from('chat-media')
-        .getPublicUrl(filePath);
-      const publicUrl = urlData?.publicUrl ?? null;
-      console.log('[ChatRoom] STEP 4 OK — Public URL:', publicUrl);
-
-      // ── STEP 5: insert message row ─────────────────────────────────────
-      console.log('[ChatRoom] STEP 5: inserting message row...');
       const { data: insertData, error: insertError } = await supabase
         .from('messages')
         .insert({
@@ -348,41 +292,14 @@ export default function ChatRoomScreen() {
         .select('id, booking_id, sender_id, receiver_id, content, image_url, message_type, is_read, created_at')
         .single();
 
-      console.log('[ChatRoom] STEP 5 insert data:', JSON.stringify(insertData));
-      console.log('[ChatRoom] STEP 5 insert error:', JSON.stringify(insertError));
+      if (insertError) throw insertError;
 
-      if (insertError) {
-        console.error('[ChatRoom] STEP 5 FAILED — code:', insertError.code,
-          '| message:', insertError.message,
-          '| details:', insertError.details,
-          '| hint:', insertError.hint);
-        throw insertError;
-      }
-
-      console.log('[ChatRoom] STEP 5 OK — image message sent');
       setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? (insertData as Message) : m))
+        prev.map((m) => (m.id === tempId ? { ...insertData, sender: m.sender } : m))
       );
-    } catch (err: any) {
-      // JSON.stringify({}) on Error instances returns {} because message/name/stack
-      // are non-enumerable. Read properties explicitly.
-      console.error('[ChatRoom] ERROR TYPE:', typeof err);
-      console.error('[ChatRoom] ERROR NAME:', err?.name);
-      console.error('[ChatRoom] ERROR MESSAGE:', err?.message);
-      console.error('[ChatRoom] ERROR CODE:', err?.code ?? err?.statusCode);
-      console.error('[ChatRoom] ERROR DETAILS:', err?.details);
-      console.error('[ChatRoom] ERROR STACK:', err?.stack);
-
-      Alert.alert(
-        'Upload Failed',
-        [
-          `Name: ${err?.name ?? 'unknown'}`,
-          `Message: ${err?.message ?? 'unknown'}`,
-          `Code: ${err?.code ?? err?.statusCode ?? 'none'}`,
-          `Details: ${err?.details ?? 'none'}`,
-        ].join('\n')
-      );
-
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Image upload failed';
+      Alert.alert('Upload Failed', message);
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
     } finally {
       setUploadingImage(false);
@@ -404,7 +321,6 @@ export default function ChatRoomScreen() {
   const renderMessage = ({ item }: { item: Message }) => {
     const isOwn = item.sender_id === user?.id;
     const isImage = item.message_type === 'image';
-    if (isImage) console.log('[ChatRoom] Rendering image URL:', item.image_url);
     const allImageUrls = messages
       .filter((m) => m.message_type === 'image' && m.image_url)
       .map((m) => m.image_url!);

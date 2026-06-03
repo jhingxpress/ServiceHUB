@@ -14,6 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
+import { useNotificationStore, formatBadgeCount } from '../../stores/notificationStore';
 import { uploadImageToStorage } from '../../utils/storageUpload';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
@@ -32,6 +33,7 @@ interface MenuItem {
 export default function ProfileScreen() {
   const { user, signOut, updateProfile } = useAuthStore();
   const navigation = useNavigation<NavProp>();
+  const unreadCount = useNotificationStore((s) => s.unreadCount);
   const [stats, setStats] = useState({ bookings: 0, reviews: 0, favorites: 0 });
 
   const fetchStats = useCallback(async () => {
@@ -88,24 +90,22 @@ export default function ProfileScreen() {
       icon: 'calendar-outline',
       label: 'My Bookings',
       onPress: () => navigation.navigate('CustomerTabs', { screen: 'Bookings' }),
-      badge: stats.bookings,
     },
     {
       icon: 'heart-outline',
       label: 'Saved Providers',
       onPress: () => navigation.navigate('MyFavorites'),
-      badge: stats.favorites,
     },
     {
       icon: 'star-outline',
       label: 'My Reviews',
       onPress: () => navigation.navigate('MyReviews'),
-      badge: stats.reviews,
     },
     {
       icon: 'notifications-outline',
       label: 'Notifications',
       onPress: () => navigation.navigate('NotificationCenter'),
+      badge: unreadCount,
     },
     {
       icon: 'help-circle-outline',
@@ -190,8 +190,10 @@ export default function ProfileScreen() {
                 {item.label}
               </Text>
               {item.badge ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{item.badge}</Text>
+                <View style={[styles.badge, item.label === 'Notifications' && styles.notificationBadge]}>
+                  <Text style={[styles.badgeText, item.label === 'Notifications' && styles.notificationBadgeText]}>
+                    {item.label === 'Notifications' ? formatBadgeCount(item.badge) : item.badge}
+                  </Text>
                 </View>
               ) : null}
               <Ionicons name="chevron-forward" size={16} color={COLORS.textLight} />
@@ -261,5 +263,16 @@ const styles = StyleSheet.create({
   menuLabelDanger: { color: COLORS.error },
   badge: { backgroundColor: COLORS.primary, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, marginRight: SPACING.xs },
   badgeText: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.xs, color: COLORS.white },
+  notificationBadge: {
+    backgroundColor: COLORS.error,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    minWidth: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.xs,
+  },
+  notificationBadgeText: { fontFamily: FONTS.bold, fontSize: 10, color: COLORS.white },
   version: { textAlign: 'center', fontSize: FONTS.sizes.xs, color: COLORS.textLight, marginBottom: SPACING.sm },
 });

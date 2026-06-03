@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
+import { useNotificationStore } from '../../stores/notificationStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import EmptyState from '../../components/ui/EmptyState';
 import { Notification } from '../../types';
@@ -63,6 +64,8 @@ const TYPE_EMOJIS: Record<string, string> = {
 export default function NotificationCenterScreen() {
   const navigation = useNavigation();
   const { user } = useAuthStore();
+  const storeMarkAsRead = useNotificationStore((s) => s.markAsRead);
+  const storeMarkAllRead = useNotificationStore((s) => s.markAllRead);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread'>('all');
@@ -79,17 +82,15 @@ export default function NotificationCenterScreen() {
     setLoading(false);
   }, [user]);
 
-  useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
-
   const markAsRead = async (id: string) => {
+    if (!user) return;
     const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-    if (error) {
-      console.error('[NotificationCenter] markAsRead error:', error.code, error.message);
-      return;
-    }
+    if (error) return;
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
     );
+    // Sync shared store
+    await storeMarkAsRead(id, user.id);
   };
 
   const markAllRead = useCallback(async () => {
@@ -99,21 +100,16 @@ export default function NotificationCenterScreen() {
       .update({ is_read: true })
       .eq('user_id', user.id)
       .eq('is_read', false);
-    if (error) {
-      console.error('[NotificationCenter] markAllRead error:', error.code, error.message);
-      return;
-    }
+    if (error) return;
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-  }, [user]);
+    // Sync shared store
+    await storeMarkAllRead(user.id);
+  }, [user, storeMarkAllRead]);
 
   useFocusEffect(
     useCallback(() => {
-      const run = async () => {
-        await fetchNotifications();   // fetch first so user sees their notifications
-        await markAllRead();          // then mark all read — this is the LAST state write
-      };
-      run();
-    }, [fetchNotifications, markAllRead])
+      fetchNotifications();
+    }, [fetchNotifications])
   );
 
   const filtered = activeFilter === 'unread'

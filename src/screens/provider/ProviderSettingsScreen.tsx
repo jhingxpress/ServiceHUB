@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuthStore } from '../../stores/authStore';
+import { useNotificationStore, formatBadgeCount } from '../../stores/notificationStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 import { ProviderStackParamList } from '../../navigation/types';
@@ -14,6 +15,7 @@ type NavProp = NativeStackNavigationProp<ProviderStackParamList>;
 export default function ProviderSettingsScreen() {
   const navigation = useNavigation<NavProp>();
   const { user, providerProfile, signOut } = useAuthStore();
+  const unreadCount = useNotificationStore((s) => s.unreadCount);
 
   // Fallback chain: provider photo → user avatar → initials
   const avatarUri = providerProfile?.profile_photo_url ?? user?.avatar_url ?? null;
@@ -34,7 +36,7 @@ export default function ProviderSettingsScreen() {
         { label: 'Edit Provider Profile', icon: 'person-outline', onPress: () => navigation.getParent()?.navigate('ProfileSetup') },
         { label: 'Manage Services', icon: 'construct-outline', onPress: () => navigation.getParent()?.navigate('ManageServices') },
         { label: 'Availability Schedule', icon: 'calendar-outline', onPress: () => (navigation as any).navigate('Schedule') },
-        { label: 'Notifications', icon: 'notifications-outline', onPress: () => navigation.getParent()?.navigate('NotificationCenter') },
+        { label: 'Notifications', icon: 'notifications-outline', onPress: () => navigation.getParent()?.navigate('NotificationCenter'), badge: unreadCount },
       ],
     },
     {
@@ -80,6 +82,11 @@ export default function ProviderSettingsScreen() {
                       <Ionicons name={item.icon as React.ComponentProps<typeof Ionicons>['name']} size={18} color={COLORS.primary} />
                     </View>
                     <Text style={styles.menuLabel}>{item.label}</Text>
+                    {(item as any).badge ? (
+                      <View style={styles.notificationBadge}>
+                        <Text style={styles.notificationBadgeText}>{formatBadgeCount((item as any).badge)}</Text>
+                      </View>
+                    ) : null}
                     <Ionicons name="chevron-forward" size={16} color={COLORS.textLight} />
                   </TouchableOpacity>
                   {i < section.items.length - 1 && <View style={styles.divider} />}
@@ -131,6 +138,17 @@ const styles = StyleSheet.create({
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: SPACING.md, minHeight: 56 },
   menuIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center' },
   menuLabel: { flex: 1, fontSize: FONTS.sizes.base, color: COLORS.text, fontFamily: FONTS.medium },
+  notificationBadge: {
+    backgroundColor: COLORS.error,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    minWidth: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.sm,
+  },
+  notificationBadgeText: { fontFamily: FONTS.bold, fontSize: 10, color: COLORS.white },
   divider: { height: 1, backgroundColor: COLORS.border, marginLeft: SPACING.md + 36 + SPACING.md },
   signOutBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm,

@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../stores/authStore';
+import { useRecaptcha } from '../../components/recaptcha/RecaptchaV3';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'RoleSelection'>;
@@ -23,6 +24,7 @@ export default function RoleSelectionScreen({ route, navigation }: Props) {
   const [selected, setSelected] = useState<Role | null>(null);
   const [loading, setLoading] = useState(false);
   const { signUp } = useAuthStore();
+  const { execute } = useRecaptcha();
 
   const handleContinue = async () => {
     if (!selected) {
@@ -32,10 +34,15 @@ export default function RoleSelectionScreen({ route, navigation }: Props) {
 
     setLoading(true);
     try {
-      await signUp({ email, password, fullName, role: selected, phone });
+      const captchaToken = await execute('register');
+      await signUp({ email, password, fullName, role: selected, phone }, captchaToken);
       navigation.navigate('EmailVerification');
     } catch (err: any) {
-      Alert.alert('Sign Up Failed', err?.message ?? 'Unknown error');
+      if (err?.message?.includes('reCAPTCHA')) {
+        Alert.alert('Security Check Failed', err?.message ?? 'Please try again.');
+      } else {
+        Alert.alert('Sign Up Failed', err?.message ?? 'Unknown error');
+      }
     } finally {
       setLoading(false);
     }

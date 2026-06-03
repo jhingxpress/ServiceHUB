@@ -4,6 +4,8 @@ import { makeRedirectUri } from 'expo-auth-session';
 import { supabase } from '../lib/supabase';
 import { User, Provider } from '../types';
 import { registerPushToken, removePushToken } from '../services/notificationService';
+import { checkLoginAllowed, logLoginAttempt, checkUserStatus } from '../services/securityService';
+import { useNotificationStore } from './notificationStore';
 
 interface SignUpData {
   email: string;
@@ -18,10 +20,12 @@ interface AuthState {
   providerProfile: Provider | null;
   isLoading: boolean;
   isInitialized: boolean;
+  sessionExpiresAt: number | null;
   initialize: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  validateSession: () => Promise<void>;
+  signIn: (email: string, password: string, captchaToken?: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
-  signUp: (data: SignUpData) => Promise<void>;
+  signUp: (data: SignUpData, captchaToken?: string) => Promise<void>;
   resendVerificationEmail: (email: string) => Promise<void>;
   checkEmailVerified: () => Promise<boolean>;
   signOut: () => Promise<void>;
@@ -75,19 +79,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   providerProfile: null,
   isLoading: false,
   isInitialized: false,
+  sessionExpiresAt: null,
 
   initialize: async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error } = await supabase.auth.getSession();
 
-      if (session?.user) {
-        const { profile, providerProfile } = await syncUserProfile(session.user);
-        set({ user: profile, providerProfile, isInitialized: true });
-        if (profile) {
-          registerPushToken(profile.id).catch(() => {});
-        }
-      } else {
+      if (error || !session?.user) {
         set({ isInitialized: true });
+        return;
+      }
+
+      const statusCheck = await checkUserStatus(session.user.id);
+      if (!statusCheck.allowed) {
+        await supabase.auth.signOut();
+        set({ isInitialized: true });
+        return;
+      }
+
+      const { profile, providerProfile } = await syncUserProfile(session.user);
+      const expiresAt = session.expires_at ? session.expires_at * 1000 : null;
+      set({
+        user: profile,
+        providerProfile,
+        isInitialized: true,
+        sessionExpiresAt: expiresAt,
+      });
+      if (profile) {
+        registerPushToken(profile.id).catch(() => {});
+        useNotificationStore.getState().subscribeToNotifications(profile.id);
       }
     } catch {
       set({ isInitialized: true });
@@ -95,32 +115,99 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
+        const statusCheck = await checkUserStatus(session.user.id);
+        if (!statusCheck.allowed) {
+          await supabase.auth.signOut();
+          set({ user: null, providerProfile: null, sessionExpiresAt: null });
+          useNotificationStore.getState().unsubscribeFromNotifications();
+          return;
+        }
         const { profile, providerProfile } = await syncUserProfile(session.user);
-        set({ user: profile, providerProfile });
+        const expiresAt = session.expires_at ? session.expires_at * 1000 : null;
+        set({ user: profile, providerProfile, sessionExpiresAt: expiresAt });
         if (profile) {
           registerPushToken(profile.id).catch(() => {});
+          useNotificationStore.getState().subscribeToNotifications(profile.id);
         }
       } else if (event === 'USER_UPDATED' && session?.user) {
+        const statusCheck = await checkUserStatus(session.user.id);
+        if (!statusCheck.allowed) {
+          await supabase.auth.signOut();
+          set({ user: null, providerProfile: null, sessionExpiresAt: null });
+          useNotificationStore.getState().unsubscribeFromNotifications();
+          return;
+        }
         const { profile, providerProfile } = await syncUserProfile(session.user);
-        set({ user: profile, providerProfile });
+        const expiresAt = session.expires_at ? session.expires_at * 1000 : null;
+        set({ user: profile, providerProfile, sessionExpiresAt: expiresAt });
+      } else if (event === 'TOKEN_REFRESHED' && session) {
+        const expiresAt = session.expires_at ? session.expires_at * 1000 : null;
+        set({ sessionExpiresAt: expiresAt });
       } else if (event === 'SIGNED_OUT') {
-        set({ user: null, providerProfile: null });
+        set({ user: null, providerProfile: null, sessionExpiresAt: null });
+        useNotificationStore.getState().unsubscribeFromNotifications();
       }
     });
   },
 
-  signIn: async (email, password) => {
+  validateSession: async () => {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+
+      if (error || !session?.user) {
+        await get().signOut();
+        return;
+      }
+
+      const expiresAt = session.expires_at ? session.expires_at * 1000 : null;
+      set({ sessionExpiresAt: expiresAt });
+
+      if (!get().user) {
+        const statusCheck = await checkUserStatus(session.user.id);
+        if (!statusCheck.allowed) {
+          await get().signOut();
+          return;
+        }
+        const { profile, providerProfile } = await syncUserProfile(session.user);
+        set({ user: profile, providerProfile });
+        if (profile) {
+          registerPushToken(profile.id).catch(() => {});
+          useNotificationStore.getState().subscribeToNotifications(profile.id);
+        }
+      }
+    } catch {
+      await get().signOut();
+    }
+  },
+
+  signIn: async (email, password, captchaToken) => {
     set({ isLoading: true });
     try {
+      const lockout = await checkLoginAllowed(email);
+      if (!lockout.allowed) {
+        throw new Error(lockout.error || 'Account temporarily locked. Please try again later.');
+      }
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
+        options: captchaToken ? { captchaToken } : undefined,
       });
-      if (error) throw error;
+      if (error) {
+        await logLoginAttempt(email, false);
+        throw error;
+      }
+      await logLoginAttempt(email, true);
       if (data.user) {
+        const statusCheck = await checkUserStatus(data.user.id);
+        if (!statusCheck.allowed) {
+          await supabase.auth.signOut();
+          throw new Error(statusCheck.error || 'Account access denied.');
+        }
         await supabase.auth.refreshSession();
+        const { data: { session } } = await supabase.auth.getSession();
+        const expiresAt = session?.expires_at ? session.expires_at * 1000 : null;
         const { profile, providerProfile } = await syncUserProfile(data.user);
-        set({ user: profile, providerProfile });
+        set({ user: profile, providerProfile, sessionExpiresAt: expiresAt });
       }
     } finally {
       set({ isLoading: false });
@@ -151,8 +238,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           await supabase.auth.refreshSession();
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
+            const statusCheck = await checkUserStatus(session.user.id);
+            if (!statusCheck.allowed) {
+              await supabase.auth.signOut();
+              throw new Error(statusCheck.error || 'Account access denied.');
+            }
+            const expiresAt = session.expires_at ? session.expires_at * 1000 : null;
             const { profile, providerProfile } = await syncUserProfile(session.user);
-            set({ user: profile, providerProfile });
+            set({ user: profile, providerProfile, sessionExpiresAt: expiresAt });
           }
         }
       }
@@ -161,7 +254,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  signUp: async ({ email, password, fullName, role, phone }) => {
+  signUp: async ({ email, password, fullName, role, phone }, captchaToken) => {
     set({ isLoading: true });
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -169,6 +262,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         password,
         options: {
           data: { full_name: fullName, role, phone: phone ?? null },
+          captchaToken,
         },
       });
       if (error) throw error;
@@ -208,13 +302,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return false;
     const isVerified = session.user.email_confirmed_at != null;
-    if (isVerified && get().user && !get().user!.email_verified) {
+    const currentUser = get().user;
+    if (isVerified && currentUser && !currentUser.email_verified) {
       await supabase
         .from('users')
         .update({ email_verified: true })
         .eq('id', session.user.id);
       const { profile, providerProfile } = await syncUserProfile(session.user);
-      set({ user: profile, providerProfile });
+      const expiresAt = session.expires_at ? session.expires_at * 1000 : null;
+      set({ user: profile, providerProfile, sessionExpiresAt: expiresAt });
     }
     return isVerified;
   },
@@ -224,8 +320,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (user) {
       removePushToken(user.id).catch(() => {});
     }
+    useNotificationStore.getState().unsubscribeFromNotifications();
     await supabase.auth.signOut();
-    set({ user: null, providerProfile: null });
+    set({ user: null, providerProfile: null, sessionExpiresAt: null });
   },
 
   updateProfile: async (updates) => {

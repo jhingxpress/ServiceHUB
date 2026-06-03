@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
+import { validateImagePickerAsset } from '../../utils/fileValidation';
 import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Button from '../../components/ui/Button';
@@ -108,6 +109,11 @@ export default function ProviderApplicationScreen() {
   const pickImage = async (field: keyof ProviderDocs) => {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.8 });
     if (result.canceled || !result.assets[0]) return;
+    const validation = validateImagePickerAsset(result.assets[0], 'kyc-documents');
+    if (!validation.valid) {
+      Alert.alert('Invalid Document', validation.error);
+      return;
+    }
 
     setUploading(field);
     const uri = result.assets[0].uri;

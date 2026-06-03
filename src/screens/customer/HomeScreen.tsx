@@ -210,8 +210,8 @@ export default function HomeScreen() {
           <Text style={styles.searchText}>Search services or providers...</Text>
         </TouchableOpacity>
 
-        {/* Nearby Map CTA */}
-        <TouchableOpacity
+        {/* Nearby Map CTA — hidden pending improvements */}
+        {/* <TouchableOpacity
           style={styles.mapCta}
           onPress={() => navigation.navigate('MapDiscovery')}
           activeOpacity={0.85}
@@ -224,7 +224,7 @@ export default function HomeScreen() {
             <Text style={styles.mapCtaSubtitle}>Discover professionals on the map</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
 
         {/* Banner */}
         <View style={styles.banner}>

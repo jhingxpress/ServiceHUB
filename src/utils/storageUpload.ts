@@ -41,7 +41,8 @@ export async function uploadImageToStorage(
   // Upload via FormData + fetch (Hermes-compatible)
   const formData = new FormData();
   formData.append('cacheControl', '3600');
-  formData.append('', { uri, type: contentType, name: fileName } as any);
+  // @ts-expect-error React Native FormData accepts { uri, type, name } for file uploads; TS typedefs don't model this
+  formData.append('', { uri, type: contentType, name: fileName });
 
   const uploadResponse = await fetch(endpoint, {
     method: 'POST',

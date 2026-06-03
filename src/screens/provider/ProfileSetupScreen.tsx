@@ -17,6 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { supabase } from '../../lib/supabase';
+import { validateImagePickerAsset } from '../../utils/fileValidation';
 import { useAuthStore } from '../../stores/authStore';
 import { Provider } from '../../types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
@@ -92,6 +93,12 @@ export default function ProfileSetupScreen() {
 
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
+    const bucket = type === 'profile' ? 'provider-profile-images' : 'provider-cover-images';
+    const validation = validateImagePickerAsset(asset, bucket);
+    if (!validation.valid) {
+      Alert.alert('Invalid Image', validation.error);
+      return;
+    }
     if (!asset.base64) {
       Alert.alert('Upload failed', 'Could not read image data.');
       return;
@@ -110,7 +117,6 @@ export default function ProfileSetupScreen() {
 
       const ext = (asset.fileName || asset.uri).split('.').pop()?.toLowerCase() || 'jpg';
       const mimeType = `image/${ext}`;
-      const bucket = type === 'profile' ? 'provider-profile-images' : 'provider-cover-images';
       const path = `${user.id}/${Date.now()}.${ext}`;
       const arrayBuffer = base64ToArrayBuffer(asset.base64);
 

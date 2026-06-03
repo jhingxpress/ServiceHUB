@@ -237,17 +237,18 @@ export default function ProviderStorefrontScreen() {
           <Text style={styles.providerName}>{providerName}</Text>
           <Text style={styles.categoryName}>{cat?.name ?? 'Service Provider'}</Text>
 
-          {/* Online Status + Response Time */}
+          {/* Availability + Response Time */}
           <View style={styles.statusRow}>
-            <View style={styles.statusDotWrap}>
+            <View style={styles.availabilityRow}>
               <View style={[
-                styles.statusDot,
-                provider.current_status === 'online' && styles.statusDotOnline,
-                provider.current_status === 'busy' && styles.statusDotBusy,
+                styles.availabilityDot,
+                provider.is_available ? styles.availableDot : styles.unavailableDot,
               ]} />
-              <Text style={styles.statusText}>
-                {provider.current_status === 'online' ? 'Online' :
-                 provider.current_status === 'busy' ? 'Busy' : 'Offline'}
+              <Text style={[
+                styles.availabilityText,
+                provider.is_available ? styles.availableText : styles.unavailableText,
+              ]}>
+                {provider.is_available ? 'Available' : 'Unavailable'}
               </Text>
             </View>
             {(provider as any).provider_stats?.average_response_minutes > 0 && (
@@ -482,11 +483,13 @@ const styles = StyleSheet.create({
   providerName: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.xl, color: COLORS.text, marginTop: SPACING.sm },
   categoryName: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginTop: SPACING.sm },
-  statusDotWrap: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
-  statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.textMuted },
-  statusDotOnline: { backgroundColor: COLORS.success },
-  statusDotBusy: { backgroundColor: COLORS.warning },
-  statusText: { fontFamily: FONTS.medium, fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
+  availabilityRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  availabilityDot: { width: 8, height: 8, borderRadius: 4 },
+  availableDot: { backgroundColor: '#22C55E' },
+  unavailableDot: { backgroundColor: '#EF4444' },
+  availabilityText: { fontFamily: FONTS.medium, fontSize: FONTS.sizes.xs },
+  availableText: { color: '#22C55E' },
+  unavailableText: { color: '#EF4444' },
   responseTimeWrap: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
   responseTimeText: { fontFamily: FONTS.regular, fontSize: FONTS.sizes.xs, color: COLORS.textLight },
   metricsRow: {

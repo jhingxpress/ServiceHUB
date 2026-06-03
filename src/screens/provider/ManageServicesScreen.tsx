@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
+import { validateImagePickerAsset } from '../../utils/fileValidation';
 import { useAuthStore } from '../../stores/authStore';
 import { Service, ProviderCategory, ServiceGroup, ServiceTemplate } from '../../types';
 import * as ImagePicker from 'expo-image-picker';
@@ -296,6 +297,12 @@ export default function ManageServicesScreen() {
     if (result.canceled || !result.assets?.[0]) return;
 
     const asset = result.assets[0];
+    const validation = validateImagePickerAsset(asset, 'service-images');
+    if (!validation.valid) {
+      Alert.alert('Invalid Image', validation.error);
+      return;
+    }
+
     const uri = asset.uri;
     const ext = (asset.fileName || uri).split('.').pop()?.toLowerCase() || 'jpg';
     const mimeType = `image/${ext}`;

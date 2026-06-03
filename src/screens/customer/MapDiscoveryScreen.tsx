@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import MapView, { Marker, Callout, Region } from 'react-native-maps';
+import MapView, { Marker, Callout, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { supabase } from '../../lib/supabase';
 import { Category } from '../../types';
@@ -113,6 +113,10 @@ export default function MapDiscoveryScreen() {
       }
 
       const raw = (data ?? []) as unknown as MapProvider[];
+      console.log('[MapDiscovery] Raw providers from DB:', raw.length);
+      raw.forEach((p) => {
+        console.log('[MapDiscovery] Provider:', p.business_name, 'lat:', p.latitude, 'lng:', p.longitude, 'status:', (p as any).status, 'available:', (p as any).is_available, 'marketplace:', (p as any).marketplace_status);
+      });
       const withDistance = raw
         .map((p) => ({
           ...p,
@@ -125,6 +129,7 @@ export default function MapDiscoveryScreen() {
         }))
         .filter((p) => p.distanceKm <= SEARCH_RADIUS_KM)
         .sort((a, b) => a.distanceKm - b.distanceKm);
+      console.log('[MapDiscovery] After 50km filter:', withDistance.length);
 
       setProviders((prev) => (reset ? withDistance : [...prev, ...withDistance]));
       setHasMore(withDistance.length === PAGE_SIZE);
@@ -256,10 +261,15 @@ export default function MapDiscoveryScreen() {
     const isActive = selectedCategory === item.id;
     return (
       <TouchableOpacity
-        style={[styles.chip, isActive && styles.chipActive]}
+        style={[styles.chip, isActive && styles.chipActive, { borderColor: isActive ? COLORS.primary : item.color ?? COLORS.border }]}
         onPress={() => setSelectedCategory(isActive ? null : item.id)}
         activeOpacity={0.8}
       >
+        <Ionicons
+          name={item.icon as React.ComponentProps<typeof Ionicons>['name']}
+          size={14}
+          color={isActive ? COLORS.white : item.color ?? COLORS.textSecondary}
+        />
         <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{item.name}</Text>
       </TouchableOpacity>
     );
@@ -342,6 +352,7 @@ export default function MapDiscoveryScreen() {
                 coordinate={{ latitude: p.latitude!, longitude: p.longitude! }}
                 pinColor={COLORS.primary}
                 onPress={() => onMarkerPress(p)}
+                tracksViewChanges={false}
               >
                 <Callout tooltip>
                   <View style={styles.callout}>
@@ -378,14 +389,32 @@ export default function MapDiscoveryScreen() {
 
       {/* Bottom Provider Cards */}
       <View style={styles.bottomSheet}>
+        {/* Count header */}
+        <View style={styles.bottomSheetHeader}>
+          {loading && providers.length === 0 ? (
+            <Text style={styles.countText}>Finding providers...</Text>
+          ) : (
+            <Text style={styles.countText}>
+              {filteredProviders.length > 0
+                ? `${filteredProviders.length} provider${filteredProviders.length !== 1 ? 's' : ''} nearby`
+                : 'No providers found'}
+            </Text>
+          )}
+        </View>
         {loading && providers.length === 0 ? (
           <View style={styles.center}>
             <ActivityIndicator color={COLORS.primary} />
           </View>
         ) : filteredProviders.length === 0 ? (
           <View style={styles.center}>
-            <Ionicons name="map-outline" size={40} color={COLORS.textLight} />
-            <Text style={styles.emptyText}>No providers found nearby</Text>
+            <Ionicons name="map-outline" size={36} color={COLORS.textLight} />
+            <Text style={styles.emptyText}>
+              {selectedCategory
+                ? 'No providers in this category within 50 km'
+                : searchQuery
+                ? `No providers matching "${searchQuery}"`
+                : 'No providers found within 50 km'}
+            </Text>
           </View>
         ) : (
           <FlatList
@@ -459,8 +488,11 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xs + 4,
     borderRadius: BORDER_RADIUS.full,
     backgroundColor: COLORS.surface,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: COLORS.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   chipActive: {
     backgroundColor: COLORS.primary,
@@ -476,6 +508,7 @@ const styles = StyleSheet.create({
   },
   mapWrap: {
     flex: 1,
+    minHeight: 300,
     position: 'relative',
   },
   map: {
@@ -522,12 +555,22 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   bottomSheet: {
-    height: 200,
+    height: 220,
     backgroundColor: COLORS.background,
     borderTopLeftRadius: BORDER_RADIUS.xl,
     borderTopRightRadius: BORDER_RADIUS.xl,
-    paddingTop: SPACING.md,
+    paddingTop: 0,
     ...SHADOWS.large,
+  },
+  bottomSheetHeader: {
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.sm,
+    paddingBottom: 4,
+  },
+  countText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.textSecondary,
   },
   cardList: {
     paddingHorizontal: SPACING.md,

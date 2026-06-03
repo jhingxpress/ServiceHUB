@@ -14,7 +14,6 @@ export type DocumentType =
   | 'professional_cert'
   | 'other_supporting';
 export type ProviderType = 'individual' | 'business';
-export type ProviderCurrentStatus = 'online' | 'busy' | 'offline';
 export type MarketplaceStatus = 'live' | 'hidden';
 export type BusinessStatus = 'available' | 'busy' | 'vacation_mode' | 'closed';
 
@@ -147,8 +146,6 @@ export interface Provider {
   rejected_at: string | null;
   rejected_by: string | null;
   rejection_reason: string | null;
-  // Availability
-  current_status: ProviderCurrentStatus;
   // Marketplace
   marketplace_status: MarketplaceStatus;
   business_status: BusinessStatus;

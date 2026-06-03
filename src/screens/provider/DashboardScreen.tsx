@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { REVIEWS_LAST_SEEN_KEY } from './ProviderReviewsScreen';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
+import { useNotificationStore, formatBadgeCount } from '../../stores/notificationStore';
 import { Booking, Provider, ProviderChecklist, ProviderPerformance, ProviderScore, BusinessStatus } from '../../types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
@@ -42,6 +43,7 @@ interface Stats {
 export default function ProviderDashboard() {
   const navigation = useNavigation<NavProp>();
   const { user, providerProfile } = useAuthStore();
+  const unreadCount = useNotificationStore((s) => s.unreadCount);
 
   // Fallback chain: provider photo → user avatar → initials
   const avatarUri = providerProfile?.profile_photo_url ?? user?.avatar_url ?? null;
@@ -299,7 +301,8 @@ export default function ProviderDashboard() {
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickRow}>
             {[
-              { label: 'Requests', icon: 'notifications-outline', action: () => navigation.getParent()?.navigate('Requests'), badge: stats.pending > 0 ? stats.pending.toString() : undefined },
+              { label: 'Notifications', icon: 'notifications-outline', action: () => navigation.getParent()?.navigate('NotificationCenter'), badge: unreadCount > 0 ? formatBadgeCount(unreadCount) ?? undefined : undefined },
+              { label: 'Requests', icon: 'clipboard-outline', action: () => navigation.getParent()?.navigate('Requests'), badge: stats.pending > 0 ? stats.pending.toString() : undefined },
               { label: 'Active Jobs', icon: 'play-circle-outline', action: () => navigation.getParent()?.navigate('ActiveJobs'), badge: stats.active > 0 ? stats.active.toString() : undefined },
               { label: 'Services', icon: 'construct-outline', action: () => navigation.navigate('ManageServices') },
               { label: 'Earnings', icon: 'wallet-outline', action: () => navigation.getParent()?.navigate('Earnings'), badge: stats.earnings > 0 ? `₱${stats.earnings}` : undefined },

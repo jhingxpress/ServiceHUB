@@ -21,6 +21,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
+import { validateImagePickerAsset } from '../../utils/fileValidation';
 import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Button from '../../components/ui/Button';
@@ -113,7 +114,16 @@ export default function BookingScreen() {
       allowsMultipleSelection: true,
     });
     if (!result.canceled) {
-      setPhotos((prev) => [...prev, ...result.assets.map((a) => a.uri)].slice(0, 4));
+      const validUris: string[] = [];
+      for (const asset of result.assets) {
+        const validation = validateImagePickerAsset(asset, 'booking-photos');
+        if (!validation.valid) {
+          Alert.alert('Invalid Image', validation.error);
+          continue;
+        }
+        validUris.push(asset.uri);
+      }
+      setPhotos((prev) => [...prev, ...validUris].slice(0, 4));
     }
   };
 

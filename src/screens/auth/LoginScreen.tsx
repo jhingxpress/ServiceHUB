@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
@@ -13,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../stores/authStore';
+import { useRecaptcha } from '../../components/recaptcha/RecaptchaV3';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -28,9 +30,12 @@ export default function LoginScreen({ navigation }: Props) {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const { signIn, signInWithGoogle, isLoading } = useAuthStore();
+  const { execute } = useRecaptcha();
   const { showError } = useErrorHandler();
 
   const handleLogin = async () => {
+    console.log('LOGIN CLICKED');
+
     const validation = validateForm(
       { email, password },
       {
@@ -40,14 +45,27 @@ export default function LoginScreen({ navigation }: Props) {
     );
 
     if (!validation.isValid) {
+      console.log('LOGIN VALIDATION FAILED:', validation.errors);
       setErrors(validation.errors);
       return;
     }
 
+    console.log('LOGIN VALIDATION PASSED');
+
     try {
-      await signIn(email.trim().toLowerCase(), password);
-    } catch (err) {
-      showError(err, 'Login failed. Please check your credentials and try again.');
+      console.log('BEFORE RECAPTCHA');
+      const captchaToken = await execute('login');
+      console.log('RECAPTCHA TOKEN:', captchaToken);
+
+      await signIn(email.trim().toLowerCase(), password, captchaToken);
+      console.log('SIGNIN CALLED');
+    } catch (err: any) {
+      console.error('LOGIN ERROR:', err);
+      if (err?.message?.includes('reCAPTCHA')) {
+        showError(err, 'Security check failed. Please try again.');
+      } else {
+        showError(err, 'Login failed. Please check your credentials and try again.');
+      }
     }
   };
 
@@ -80,7 +98,7 @@ export default function LoginScreen({ navigation }: Props) {
               activeOpacity={0.85}
               disabled={isLoading}
             >
-              <Ionicons name="logo-google" size={20} color={COLORS.primary} />
+              <Image source={require('../../../assets/google-icon.png')} style={{ width: 20, height: 20 }} />
               <Text style={styles.googleBtnText}>Continue with Google</Text>
             </TouchableOpacity>
 
@@ -215,13 +233,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACING.sm,
-    backgroundColor: 'yellow',
+    backgroundColor: '#FFFFFF',
     borderRadius: BORDER_RADIUS.lg,
     paddingVertical: SPACING.md,
-    borderWidth: 3,
+    borderWidth: 1.5,
     borderColor: 'red',
     marginBottom: SPACING.lg,
-    ...SHADOWS.small,
   },
   googleBtnText: {
     fontSize: FONTS.sizes.base,

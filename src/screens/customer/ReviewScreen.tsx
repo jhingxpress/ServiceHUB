@@ -19,6 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { uploadImageToStorage } from '../../utils/storageUpload';
+import { validateImagePickerAsset } from '../../utils/fileValidation';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import StarRating from '../../components/ui/StarRating';
 import Button from '../../components/ui/Button';
@@ -69,7 +70,13 @@ export default function ReviewScreen() {
       quality: 0.7,
     });
     if (!result.canceled && result.assets[0]?.uri) {
-      setPhotos((prev) => [...prev, result.assets[0].uri]);
+      const asset = result.assets[0];
+      const validation = validateImagePickerAsset(asset, 'review-media');
+      if (!validation.valid) {
+        Alert.alert('Invalid Image', validation.error);
+        return;
+      }
+      setPhotos((prev) => [...prev, asset.uri]);
     }
   };
 

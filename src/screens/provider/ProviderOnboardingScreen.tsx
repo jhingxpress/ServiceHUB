@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { supabase } from '../../lib/supabase';
+import { validateImagePickerAsset } from '../../utils/fileValidation';
 import { useAuthStore } from '../../stores/authStore';
 import { Category } from '../../types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
@@ -280,8 +281,9 @@ export default function ProviderOnboardingScreen() {
     });
     if (result.canceled || !result.assets?.[0]) return null;
     const asset = result.assets[0];
-    if (asset.fileSize && asset.fileSize > MAX_FILE_SIZE) {
-      Alert.alert('File Too Large', 'Maximum file size is 10MB. Please choose a smaller file.');
+    const validation = validateImagePickerAsset(asset, 'provider-documents');
+    if (!validation.valid) {
+      Alert.alert('Invalid Document', validation.error);
       return null;
     }
     return { uri: asset.uri, mimeType: getMimeType(asset.uri, asset.mimeType) };
