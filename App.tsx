@@ -19,6 +19,7 @@ import { ToastProvider } from './src/hooks/useToast';
 import Toast from './src/components/ui/Toast';
 import AnnouncementModal from './src/components/modals/AnnouncementModal';
 import { useAnnouncementModal } from './src/hooks/useAnnouncementModal';
+import EmailVerificationBanner from './src/components/auth/EmailVerificationBanner';
 import { COLORS } from './src/constants/theme';
 
 function AnnouncementOverlay() {
@@ -62,6 +63,7 @@ export default function App() {
           <ToastProvider>
             <NavigationContainer>
               <StatusBar style="dark" />
+              <EmailVerificationBanner />
               <RootNavigator />
               <Toast />
               <AnnouncementOverlay />

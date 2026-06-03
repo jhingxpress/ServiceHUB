@@ -12,6 +12,7 @@ export type AuthStackParamList = {
   Login: undefined;
   Register: undefined;
   RoleSelection: { email: string; password: string; fullName: string; phone?: string };
+  EmailVerification: undefined;
 };
 
 export type CustomerStackParamList = {

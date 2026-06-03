@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/types';
-import { supabase } from '../../lib/supabase';
+import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'RoleSelection'>;
@@ -22,6 +22,7 @@ export default function RoleSelectionScreen({ route, navigation }: Props) {
   const { email, password, fullName, phone } = route.params;
   const [selected, setSelected] = useState<Role | null>(null);
   const [loading, setLoading] = useState(false);
+  const { signUp } = useAuthStore();
 
   const handleContinue = async () => {
     if (!selected) {
@@ -30,35 +31,14 @@ export default function RoleSelectionScreen({ route, navigation }: Props) {
     }
 
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName, role: selected } },
-    });
-
-    if (error || !data.user) {
-      Alert.alert('Sign Up Failed', error?.message ?? 'Unknown error');
+    try {
+      await signUp({ email, password, fullName, role: selected, phone });
+      navigation.navigate('EmailVerification');
+    } catch (err: any) {
+      Alert.alert('Sign Up Failed', err?.message ?? 'Unknown error');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    await supabase.from('users').upsert({
-      id: data.user.id,
-      email,
-      full_name: fullName,
-      phone: phone ?? null,
-      role: selected,
-    });
-
-    if (selected === 'provider') {
-      await supabase.from('providers').upsert({
-        id: data.user.id,
-        is_available: false,
-        is_verified: false,
-      });
-    }
-
-    setLoading(false);
   };
 
   const ROLES: { id: Role; title: string; subtitle: string; icon: React.ComponentProps<typeof Ionicons>['name']; features: string[] }[] = [

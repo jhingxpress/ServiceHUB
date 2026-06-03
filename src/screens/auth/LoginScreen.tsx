@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../stores/authStore';
-import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../../constants/theme';
+import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { validators, validateForm } from '../../utils/validation';
@@ -27,7 +27,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-  const { signIn, isLoading } = useAuthStore();
+  const { signIn, signInWithGoogle, isLoading } = useAuthStore();
   const { showError } = useErrorHandler();
 
   const handleLogin = async () => {
@@ -71,6 +71,24 @@ export default function LoginScreen({ navigation }: Props) {
             <Text style={styles.subtitle}>Sign in to your ServiceHub account</Text>
           </View>
 
+          {/* Google Sign In */}
+          <TouchableOpacity
+            style={styles.googleBtn}
+            onPress={signInWithGoogle}
+            activeOpacity={0.85}
+            disabled={isLoading}
+          >
+            <Ionicons name="logo-google" size={20} color={COLORS.primary} />
+            <Text style={styles.googleBtnText}>Continue with Google</Text>
+          </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
           {/* Form */}
           <View style={styles.form}>
             <Input
@@ -100,20 +118,13 @@ export default function LoginScreen({ navigation }: Props) {
             </TouchableOpacity>
 
             <Button
-              title="Sign In"
+              title="Login"
               onPress={handleLogin}
               loading={isLoading}
               fullWidth
               size="lg"
               style={styles.loginBtn}
             />
-          </View>
-
-          {/* Divider */}
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
           </View>
 
           {/* Register prompt */}
@@ -199,6 +210,24 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.sm,
     color: COLORS.textLight,
     fontSize: FONTS.sizes.sm,
+  },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: SPACING.lg,
+    ...SHADOWS.small,
+  },
+  googleBtnText: {
+    fontSize: FONTS.sizes.base,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.text,
   },
   registerRow: {
     flexDirection: 'row',

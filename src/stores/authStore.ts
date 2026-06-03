@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri } from 'expo-auth-session';
 import { supabase } from '../lib/supabase';
 import { User, Provider } from '../types';
 import { registerPushToken, removePushToken } from '../services/notificationService';
@@ -18,7 +20,10 @@ interface AuthState {
   isInitialized: boolean;
   initialize: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signUp: (data: SignUpData) => Promise<void>;
+  resendVerificationEmail: (email: string) => Promise<void>;
+  checkEmailVerified: () => Promise<boolean>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<Omit<User, 'id' | 'created_at'>>) => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -34,6 +39,37 @@ async function fetchProviderProfile(userId: string): Promise<Provider | null> {
   return data as Provider | null;
 }
 
+async function syncUserProfile(sessionUser: { id: string; email?: string; user_metadata?: Record<string, any>; email_confirmed_at?: string | null }): Promise<{ profile: User | null; providerProfile: Provider | null }> {
+  let { data: profile } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', sessionUser.id)
+    .single();
+
+  if (!profile) {
+    // Trigger may not have fired; create profile manually
+    const { data: newProfile } = await supabase
+      .from('users')
+      .upsert({
+        id: sessionUser.id,
+        email: sessionUser.email ?? '',
+        full_name: sessionUser.user_metadata?.full_name ?? sessionUser.user_metadata?.name ?? '',
+        avatar_url: sessionUser.user_metadata?.avatar_url ?? sessionUser.user_metadata?.picture ?? null,
+        role: (sessionUser.user_metadata?.role as any) ?? 'customer',
+        email_verified: sessionUser.email_confirmed_at ? true : false,
+      })
+      .select()
+      .single();
+    profile = newProfile as User | null;
+  }
+
+  const providerProfile =
+    profile?.role === 'provider'
+      ? await fetchProviderProfile(sessionUser.id)
+      : null;
+  return { profile: profile as User | null, providerProfile };
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   providerProfile: null,
@@ -42,21 +78,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: async () => {
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
 
       if (session?.user) {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        const providerProfile =
-          profile?.role === 'provider'
-            ? await fetchProviderProfile(session.user.id)
-            : null;
-        set({ user: profile ?? null, providerProfile, isInitialized: true });
+        const { profile, providerProfile } = await syncUserProfile(session.user);
+        set({ user: profile, providerProfile, isInitialized: true });
         if (profile) {
           registerPushToken(profile.id).catch(() => {});
         }
@@ -69,19 +95,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        const providerProfile =
-          profile?.role === 'provider'
-            ? await fetchProviderProfile(session.user.id)
-            : null;
-        set({ user: profile ?? null, providerProfile });
+        const { profile, providerProfile } = await syncUserProfile(session.user);
+        set({ user: profile, providerProfile });
         if (profile) {
           registerPushToken(profile.id).catch(() => {});
         }
+      } else if (event === 'USER_UPDATED' && session?.user) {
+        const { profile, providerProfile } = await syncUserProfile(session.user);
+        set({ user: profile, providerProfile });
       } else if (event === 'SIGNED_OUT') {
         set({ user: null, providerProfile: null });
       }
@@ -97,20 +118,42 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
       if (error) throw error;
       if (data.user) {
-        // Refresh session to ensure JWT includes latest role from database
         await supabase.auth.refreshSession();
-        
-        const { data: profile, error: profileError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
-        if (profileError) throw profileError;
-        const providerProfile =
-          profile?.role === 'provider'
-            ? await fetchProviderProfile(data.user.id)
-            : null;
+        const { profile, providerProfile } = await syncUserProfile(data.user);
         set({ user: profile, providerProfile });
+      }
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  signInWithGoogle: async () => {
+    set({ isLoading: true });
+    try {
+      const redirectTo = makeRedirectUri({ scheme: 'com.servicehub.app' });
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+        },
+      });
+      if (error) throw error;
+      if (data?.url) {
+        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        if (result.type === 'success' && result.url) {
+          const url = new URL(result.url);
+          const code = url.searchParams.get('code');
+          if (code) {
+            await supabase.auth.exchangeCodeForSession(code);
+          }
+          await supabase.auth.refreshSession();
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            const { profile, providerProfile } = await syncUserProfile(session.user);
+            set({ user: profile, providerProfile });
+          }
+        }
       }
     } finally {
       set({ isLoading: false });
@@ -124,18 +167,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         email,
         password,
         options: {
-          data: { full_name: fullName, role },
+          data: { full_name: fullName, role, phone: phone ?? null },
         },
       });
       if (error) throw error;
       if (data.user) {
-        // The trigger handles users insert; manually insert if trigger not active
+        // Upsert ensures profile exists even if trigger missed it
         const { error: upsertError } = await supabase.from('users').upsert({
           id: data.user.id,
           email,
           full_name: fullName,
           phone: phone ?? null,
           role,
+          email_verified: false,
         });
         if (upsertError && upsertError.code !== '23505') throw upsertError;
 
@@ -143,18 +187,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           await supabase.from('providers').upsert({ id: data.user.id });
         }
 
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
-        const providerProfile =
-          role === 'provider' ? await fetchProviderProfile(data.user.id) : null;
-        set({ user: profile ?? null, providerProfile });
+        // Do NOT auto-set user state here; email verification is required first
+        set({ user: null, providerProfile: null });
       }
     } finally {
       set({ isLoading: false });
     }
+  },
+
+  resendVerificationEmail: async (email) => {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+    });
+    if (error) throw error;
+  },
+
+  checkEmailVerified: async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return false;
+    const isVerified = session.user.email_confirmed_at != null;
+    if (isVerified && get().user && !get().user!.email_verified) {
+      await supabase
+        .from('users')
+        .update({ email_verified: true })
+        .eq('id', session.user.id);
+      const { profile, providerProfile } = await syncUserProfile(session.user);
+      set({ user: profile, providerProfile });
+    }
+    return isVerified;
   },
 
   signOut: async () => {

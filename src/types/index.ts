@@ -50,6 +50,7 @@ export interface User {
   avatar_url: string | null;
   role: UserRole;
   status: 'active' | 'suspended' | 'banned';
+  email_verified: boolean;
   city: string | null;
   province: string | null;
   address: string | null;
