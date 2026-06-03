@@ -50,6 +50,7 @@ export type CustomerStackParamList = {
     bookingDate?: string;
   };
   MyFavorites: undefined;
+  MapDiscovery: undefined;
   ReportScreen: { reportedUserId: string; bookingId?: string; reportedUserName?: string };
 };
 

@@ -210,6 +210,22 @@ export default function HomeScreen() {
           <Text style={styles.searchText}>Search services or providers...</Text>
         </TouchableOpacity>
 
+        {/* Nearby Map CTA */}
+        <TouchableOpacity
+          style={styles.mapCta}
+          onPress={() => navigation.navigate('MapDiscovery')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.mapCtaIcon}>
+            <Ionicons name="map-outline" size={24} color={COLORS.primary} />
+          </View>
+          <View style={styles.mapCtaText}>
+            <Text style={styles.mapCtaTitle}>View Nearby Providers</Text>
+            <Text style={styles.mapCtaSubtitle}>Discover professionals on the map</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
+        </TouchableOpacity>
+
         {/* Banner */}
         <View style={styles.banner}>
           <View>
@@ -550,4 +566,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.sm, paddingVertical: 3,
   },
   recentProvBtnText: { fontFamily: FONTS.semiBold, fontSize: 10, color: COLORS.primary },
+  mapCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    marginHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: SPACING.md,
+    ...SHADOWS.small,
+  },
+  mapCtaIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.primaryLight + '40',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapCtaText: { flex: 1 },
+  mapCtaTitle: { fontFamily: FONTS.semiBold, fontSize: FONTS.sizes.base, color: COLORS.text },
+  mapCtaSubtitle: { fontFamily: FONTS.regular, fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
 });
