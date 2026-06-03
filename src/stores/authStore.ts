@@ -131,6 +131,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true });
     try {
       const redirectTo = makeRedirectUri({ scheme: 'com.servicehub.app' });
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {

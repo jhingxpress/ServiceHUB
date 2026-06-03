@@ -71,26 +71,25 @@ export default function LoginScreen({ navigation }: Props) {
             <Text style={styles.subtitle}>Sign in to your ServiceHub account</Text>
           </View>
 
-          {/* Google Sign In */}
-          <TouchableOpacity
-            style={styles.googleBtn}
-            onPress={signInWithGoogle}
-            activeOpacity={0.85}
-            disabled={isLoading}
-          >
-            <Ionicons name="logo-google" size={20} color={COLORS.primary} />
-            <Text style={styles.googleBtnText}>Continue with Google</Text>
-          </TouchableOpacity>
-
-          {/* Divider */}
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
           {/* Form */}
           <View style={styles.form}>
+            {/* Google Sign In */}
+            <TouchableOpacity
+              style={styles.googleBtn}
+              onPress={signInWithGoogle}
+              activeOpacity={0.85}
+              disabled={isLoading}
+            >
+              <Ionicons name="logo-google" size={20} color={COLORS.primary} />
+              <Text style={styles.googleBtnText}>Continue with Google</Text>
+            </TouchableOpacity>
+
+            {/* Divider */}
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
             <Input
               label="Email address"
               value={email}
@@ -216,11 +215,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACING.sm,
-    backgroundColor: COLORS.surface,
+    backgroundColor: 'yellow',
     borderRadius: BORDER_RADIUS.lg,
     paddingVertical: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderWidth: 3,
+    borderColor: 'red',
     marginBottom: SPACING.lg,
     ...SHADOWS.small,
   },
