@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,10 @@ export default function RoleSelectionScreen({ route, navigation }: Props) {
   const { signUp } = useAuthStore();
   const { execute } = useRecaptcha();
 
+  useEffect(() => {
+    // Registration flow mounted
+  }, []);
+
   const handleContinue = async () => {
     if (!selected) {
       Alert.alert('Select a role', 'Please choose how you want to use ServiceHub.');
@@ -37,11 +41,12 @@ export default function RoleSelectionScreen({ route, navigation }: Props) {
       const captchaToken = await execute('register');
       await signUp({ email, password, fullName, role: selected, phone }, captchaToken);
       navigation.navigate('EmailVerification');
-    } catch (err: any) {
-      if (err?.message?.includes('reCAPTCHA')) {
-        Alert.alert('Security Check Failed', err?.message ?? 'Please try again.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('reCAPTCHA')) {
+        Alert.alert('Security Check Failed', message || 'Please try again.');
       } else {
-        Alert.alert('Sign Up Failed', err?.message ?? 'Unknown error');
+        Alert.alert('Sign Up Failed', message || 'Unknown error');
       }
     } finally {
       setLoading(false);

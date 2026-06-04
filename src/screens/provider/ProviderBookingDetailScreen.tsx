@@ -64,24 +64,19 @@ export default function ProviderBookingDetailScreen() {
         text: 'Confirm',
         onPress: async () => {
           setUpdating(true);
-          console.log(`[updateStatus] start — bookingId=${bookingId} status=${status}`);
           try {
-            const { error } = await supabase.from('bookings').update({ status }).eq('id', bookingId);
+            if (!user) return;
+            const { error } = await supabase.from('bookings').update({ status }).eq('id', bookingId).eq('provider_id', user.id);
             if (error) {
-              console.error('[ACCEPT FLOW ERROR] Step 1 (booking update) failed:', error);
               Alert.alert('Error', 'Failed to update status. Please try again.');
               setUpdating(false);
               return;
             }
-            console.log('[STEP 1] booking updated');
             await fetchBooking();
-            console.log('[STEP 5] booking detail refreshed');
-          } catch (error) {
-            console.error('[ACCEPT FLOW ERROR]', error);
+          } catch {
             Alert.alert('Error', 'An unexpected error occurred during status update.');
           } finally {
             setUpdating(false);
-            console.log('[updateStatus] done');
           }
         },
       },
@@ -109,7 +104,7 @@ export default function ProviderBookingDetailScreen() {
   }
 
   const currentStep = STEPS.indexOf(booking.status);
-  const photos: string[] = (booking.photo_urls as any) ?? [];
+  const photos: string[] = Array.isArray(booking.photo_urls) ? (booking.photo_urls as string[]) : [];
   const customerName = booking.customer_name;
   const customerPhone = booking.customer_phone;
   const customerAvatar = booking.customer_avatar_url;

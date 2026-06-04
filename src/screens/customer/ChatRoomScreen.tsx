@@ -63,17 +63,11 @@ export default function ChatRoomScreen() {
 
   const markAsRead = useCallback(async () => {
     if (!user) return;
-    console.log('[ChatRoom] markAsRead START bookingId=', bookingId, 'userId=', user.id);
     const { error } = await supabase
       .rpc('mark_messages_read', {
         p_booking_id: bookingId,
         p_user_id: user.id,
       });
-    if (error) {
-      console.error('[ChatRoom] markAsRead error:', error.code, error.message);
-    } else {
-      console.log('[ChatRoom] markAsRead SUCCESS bookingId=', bookingId);
-    }
   }, [bookingId, user]);
 
   const markChatNotificationsRead = useCallback(async () => {
@@ -85,7 +79,9 @@ export default function ChatRoomScreen() {
       .eq('type', 'chat_message')
       .eq('is_read', false)
       .filter('data->>booking_id', 'eq', bookingId);
-    if (error) console.error('[ChatRoom] markChatNotificationsRead error:', error.message);
+    if (error) {
+      // Notification read marker failed silently
+    }
   }, [bookingId, user]);
 
   const fetchMessages = useCallback(async () => {
@@ -96,7 +92,7 @@ export default function ChatRoomScreen() {
       .order('created_at', { ascending: true });
 
     if (error) {
-      console.error('Chat fetch error:', error);
+      // Failed to fetch messages
     }
     setMessages((data ?? []) as Message[]);
     setLoading(false);
@@ -127,11 +123,7 @@ export default function ChatRoomScreen() {
           );
         }
       )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Chat realtime connected');
-        }
-      });
+      .subscribe();
 
     channelRef.current = channel;
 
@@ -144,7 +136,6 @@ export default function ChatRoomScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      console.log('[ChatRoom] focus → re-marking as read');
       markAsRead();
       markChatNotificationsRead();
     }, [markAsRead, markChatNotificationsRead])
@@ -179,7 +170,6 @@ export default function ChatRoomScreen() {
       content,
       message_type: 'text',
     };
-    console.log('[ChatRoom] Sending payload:', payload);
     const { data, error } = await supabase
       .from('messages')
       .insert(payload)
@@ -190,11 +180,9 @@ export default function ChatRoomScreen() {
       setText(content);
       // Revert optimistic message
       setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
-      console.error('[ChatRoom] Send error', { code: error.code, message: error.message, details: error.details, hint: error.hint });
     } else if (data) {
       // Replace optimistic with real message
       setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? (data as Message) : m)));
-      console.log('[ChatRoom] Send success', { id: data.id, booking_id: data.booking_id, created_at: data.created_at });
     }
     setSending(false);
   };
@@ -344,12 +332,8 @@ export default function ChatRoomScreen() {
                 source={{ uri: item.image_url }}
                 style={styles.chatImage}
                 resizeMode="cover"
-                onLoad={() =>
-                  console.log('[ChatRoom] Image loaded:', item.image_url)
-                }
-                onError={(e) =>
-                  console.log('[ChatRoom] Image failed:', item.image_url, e.nativeEvent)
-                }
+                onLoad={() => {}}
+                onError={() => {}}
               />
             </TouchableOpacity>
           ) : (

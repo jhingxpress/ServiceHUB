@@ -48,23 +48,22 @@ export default function ProviderMessagesScreen() {
       .rpc('get_provider_conversations', { p_provider_id: user.id });
 
     if (error) {
-      console.error('[ProviderMessages] RPC error:', error.code, error.message);
       setThreads([]);
     } else {
       setThreads(
-        (data ?? []).map((row: any) => ({
-          booking_id: row.booking_id,
-          customer_id: row.customer_id,
-          customer_name: row.customer_name ?? null,
-          customer_avatar: row.customer_avatar ?? null,
+        (data ?? []).map((row: Record<string, unknown>) => ({
+          booking_id: String(row.booking_id ?? ''),
+          customer_id: String(row.customer_id ?? ''),
+          customer_name: (row.customer_name as string | null) ?? null,
+          customer_avatar: (row.customer_avatar as string | null) ?? null,
           last_message:
             row.last_message_type === 'image'
               ? '📷 Photo'
-              : (row.last_message ?? null),
-          last_message_type: row.last_message_type ?? 'text',
-          last_message_at: row.last_message_at ?? null,
+              : ((row.last_message as string | null) ?? null),
+          last_message_type: (row.last_message_type as string | null) ?? 'text',
+          last_message_at: (row.last_message_at as string | null) ?? null,
           unread_count: Number(row.unread_count ?? 0),
-          service_name: row.service_name ?? null,
+          service_name: (row.service_name as string | null) ?? null,
         }))
       );
     }
@@ -78,7 +77,6 @@ export default function ProviderMessagesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      console.log('[ProviderMessages] focus → re-fetching threads');
       loadThreads();
     }, [loadThreads])
   );
@@ -86,39 +84,24 @@ export default function ProviderMessagesScreen() {
   useEffect(() => {
     if (!user) return;
 
-    // Explicit UPDATE listener: catches mark_messages_read() bulk updates
-    // Explicit INSERT listener: catches new messages sent TO provider
     const channel = supabase
       .channel(`provider-inbox-${user.id}`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
-        (payload) => {
-          console.log('[ProviderMessages] realtime UPDATE', payload.new.id, 'is_read=', (payload.new as any).is_read);
-          loadThreads();
-        }
+        () => { loadThreads(); }
       )
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
-        (payload) => {
-          console.log('[ProviderMessages] realtime INSERT', payload.new.id);
-          loadThreads();
-        }
+        () => { loadThreads(); }
       )
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=eq.${user.id}` },
-        (payload) => {
-          console.log('[ProviderMessages] realtime INSERT (own send)', payload.new.id);
-          loadThreads();
-        }
+        () => { loadThreads(); }
       )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[ProviderMessages] realtime connected');
-        }
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);

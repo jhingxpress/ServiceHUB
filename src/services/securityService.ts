@@ -100,18 +100,15 @@ export async function verifyRecaptchaToken(
     const { data, error } = await supabase.functions.invoke('verify-recaptcha', {
       body: { token, action },
     });
-    console.log('[verifyRecaptchaToken] data:', JSON.stringify(data));
-    console.log('[verifyRecaptchaToken] error:', JSON.stringify(error));
     if (error) {
-      console.error('verifyRecaptchaToken error:', error);
       let errorBody = null;
       try {
-        if ((error as any).context && !(error as any).context.bodyUsed) {
-          errorBody = await (error as any).context.text();
-          console.error('[verifyRecaptchaToken] error body:', errorBody);
+        const ctx = (error as unknown as { context?: { bodyUsed?: boolean; text?: () => Promise<string> } }).context;
+        if (ctx && !ctx.bodyUsed) {
+          errorBody = await ctx.text?.();
         }
-      } catch (e) {
-        console.error('[verifyRecaptchaToken] could not read error body:', e);
+      } catch {
+        // Unable to read error body
       }
       const parsed = errorBody ? JSON.parse(errorBody) : null;
       return { allowed: false, error: parsed?.error || 'Verification service unavailable.' };
@@ -124,7 +121,7 @@ export async function verifyRecaptchaToken(
     }
     return { allowed: true };
   } catch (e) {
-    console.error('verifyRecaptchaToken exception:', e);
+    console.error('[verifyRecaptchaToken] Network error during verification');
     return { allowed: false, error: 'Network error during verification.' };
   }
 }

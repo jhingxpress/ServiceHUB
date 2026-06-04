@@ -21,6 +21,7 @@ interface AuthState {
   isLoading: boolean;
   isInitialized: boolean;
   sessionExpiresAt: number | null;
+  authListenerUnsubscribe: (() => void) | null;
   initialize: () => Promise<void>;
   validateSession: () => Promise<void>;
   signIn: (email: string, password: string, captchaToken?: string) => Promise<void>;
@@ -43,7 +44,7 @@ async function fetchProviderProfile(userId: string): Promise<Provider | null> {
   return data as Provider | null;
 }
 
-async function syncUserProfile(sessionUser: { id: string; email?: string; user_metadata?: Record<string, any>; email_confirmed_at?: string | null }): Promise<{ profile: User | null; providerProfile: Provider | null }> {
+async function syncUserProfile(sessionUser: { id: string; email?: string; user_metadata?: Record<string, unknown>; email_confirmed_at?: string | null }): Promise<{ profile: User | null; providerProfile: Provider | null }> {
   let { data: profile } = await supabase
     .from('users')
     .select('*')
@@ -57,9 +58,9 @@ async function syncUserProfile(sessionUser: { id: string; email?: string; user_m
       .upsert({
         id: sessionUser.id,
         email: sessionUser.email ?? '',
-        full_name: sessionUser.user_metadata?.full_name ?? sessionUser.user_metadata?.name ?? '',
-        avatar_url: sessionUser.user_metadata?.avatar_url ?? sessionUser.user_metadata?.picture ?? null,
-        role: (sessionUser.user_metadata?.role as any) ?? 'customer',
+        full_name: (sessionUser.user_metadata?.full_name as string | undefined) ?? (sessionUser.user_metadata?.name as string | undefined) ?? '',
+        avatar_url: (sessionUser.user_metadata?.avatar_url as string | undefined) ?? (sessionUser.user_metadata?.picture as string | undefined) ?? null,
+        role: (sessionUser.user_metadata?.role as string | undefined) ?? 'customer',
         email_verified: sessionUser.email_confirmed_at ? true : false,
       })
       .select()
@@ -80,12 +81,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   isInitialized: false,
   sessionExpiresAt: null,
+  authListenerUnsubscribe: null,
 
   initialize: async () => {
+    // Prevent duplicate auth listeners
+    const existingUnsubscribe = get().authListenerUnsubscribe;
+    if (existingUnsubscribe) {
+      existingUnsubscribe();
+    }
+
     try {
       const { data: { session }, error } = await supabase.auth.getSession();
 
       if (error || !session?.user) {
+        set({ isInitialized: true });
+        return;
+      }
+
+      // Enforce email verification on cold boot
+      if (!session.user.email_confirmed_at) {
+        await supabase.auth.signOut();
         set({ isInitialized: true });
         return;
       }
@@ -113,7 +128,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isInitialized: true });
     }
 
-    supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         const statusCheck = await checkUserStatus(session.user.id);
         if (!statusCheck.allowed) {
@@ -148,6 +163,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         useNotificationStore.getState().unsubscribeFromNotifications();
       }
     });
+
+    set({ authListenerUnsubscribe: subscription.unsubscribe });
   },
 
   validateSession: async () => {
@@ -198,6 +215,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       await logLoginAttempt(email, true);
       if (data.user) {
+        // Enforce email verification before allowing login
+        if (!data.user.email_confirmed_at) {
+          await supabase.auth.signOut();
+          throw new Error('Please verify your email before signing in.');
+        }
         const statusCheck = await checkUserStatus(data.user.id);
         if (!statusCheck.allowed) {
           await supabase.auth.signOut();
@@ -238,6 +260,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           await supabase.auth.refreshSession();
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
+            // Enforce email verification for Google sign-in
+            if (!session.user.email_confirmed_at) {
+              await supabase.auth.signOut();
+              throw new Error('Please verify your email before signing in.');
+            }
             const statusCheck = await checkUserStatus(session.user.id);
             if (!statusCheck.allowed) {
               await supabase.auth.signOut();
@@ -255,6 +282,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signUp: async ({ email, password, fullName, role, phone }, captchaToken) => {
+    console.log('[AUTHSTORE] signUp called');
     set({ isLoading: true });
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -265,8 +293,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           captchaToken,
         },
       });
-      if (error) throw error;
+      if (error) {
+        console.log('[AUTHSTORE] signUp failed:', error.message);
+        throw error;
+      }
       if (data.user) {
+        console.log('[AUTHSTORE] signUp success for user:', data.user.id);
         // Upsert ensures profile exists even if trigger missed it
         const { error: upsertError } = await supabase.from('users').upsert({
           id: data.user.id,
@@ -276,15 +308,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           role,
           email_verified: false,
         });
-        if (upsertError && upsertError.code !== '23505') throw upsertError;
+        if (upsertError && upsertError.code !== '23505') {
+          console.log('[AUTHSTORE] signUp users upsert failed:', upsertError.message);
+          throw upsertError;
+        }
 
         if (role === 'provider') {
-          await supabase.from('providers').upsert({ id: data.user.id });
+          const { error: providerError } = await supabase.from('providers').upsert({ id: data.user.id });
+          if (providerError) {
+            console.log('[AUTHSTORE] signUp providers upsert failed:', providerError.message);
+          }
         }
 
         // Do NOT auto-set user state here; email verification is required first
         set({ user: null, providerProfile: null });
       }
+    } catch (err) {
+      console.log('[AUTHSTORE] signUp failed:', err instanceof Error ? err.message : String(err));
+      throw err;
     } finally {
       set({ isLoading: false });
     }

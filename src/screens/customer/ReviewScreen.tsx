@@ -93,8 +93,7 @@ export default function ReviewScreen() {
     try {
       const publicUrl = await uploadImageToStorage('review-media', path, uri, mime);
       return publicUrl;
-    } catch (err: any) {
-      console.error('[ReviewScreen] Photo upload failed:', err.message);
+    } catch {
       return null;
     }
   };
@@ -113,7 +112,6 @@ export default function ReviewScreen() {
       // 1. Verify auth session is still valid
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !sessionData.session) {
-        console.error('[ReviewScreen] Auth session invalid:', sessionError);
         showError(sessionError ?? new Error('Session expired'), 'Your session has expired. Please log in again.');
         setSubmitting(false);
         return;
@@ -128,13 +126,11 @@ export default function ReviewScreen() {
         .single();
 
       if (bookingError || !bookingRow) {
-        console.error('[ReviewScreen] Booking validation failed:', bookingError);
         showError(bookingError ?? new Error('Booking not found'), 'Could not verify this booking. It may not belong to you or does not exist.');
         setSubmitting(false);
         return;
       }
       if (bookingRow.status !== 'completed') {
-        console.error('[ReviewScreen] Booking not completed:', bookingRow.status);
         showError(new Error(`Booking status is ${bookingRow.status}`), 'You can only review completed bookings.');
         setSubmitting(false);
         return;
@@ -147,11 +143,7 @@ export default function ReviewScreen() {
         .eq('booking_id', bookingId)
         .maybeSingle();
 
-      if (existingError) {
-        console.error('[ReviewScreen] Duplicate check query failed:', existingError);
-      }
       if (existingReview) {
-        console.error('[ReviewScreen] Duplicate review found for booking:', bookingId);
         showError(new Error('Review already exists'), 'You have already reviewed this booking.');
         setSubmitting(false);
         return;
@@ -162,7 +154,6 @@ export default function ReviewScreen() {
       if (photos.length > 0) {
         const uploadResults = await Promise.all(photos.map((uri) => uploadReviewPhoto(uri)));
         photoUrls = uploadResults.filter((url): url is string => url !== null);
-        console.log('[ReviewScreen] Uploaded photo URLs:', photoUrls);
       }
 
       // 5. Build complete payload with denormalized customer fields
@@ -177,8 +168,6 @@ export default function ReviewScreen() {
         comment: comment.trim() || null,
         photo_urls: photoUrls.length > 0 ? photoUrls : [],
       };
-      console.log('[ReviewScreen] Insert payload:', JSON.stringify(payload, null, 2));
-
       // 6. Insert review — do NOT use .single() to avoid silent RLS edge cases
       const { data: insertData, error: insertError } = await supabase
         .from('reviews')
@@ -187,7 +176,6 @@ export default function ReviewScreen() {
 
       // 7. Explicitly handle every failure mode
       if (insertError) {
-        console.error('[ReviewScreen] Insert error:', insertError.code, insertError.message, insertError.details, insertError.hint);
         showError(insertError, `Review submission failed: ${insertError.message}`);
         setSubmitting(false);
         return;
@@ -196,17 +184,13 @@ export default function ReviewScreen() {
       if (!insertData || insertData.length === 0) {
         // Silent RLS failure or unexpected empty result
         const silentErr = new Error('Insert returned no data. Possible RLS policy mismatch or trigger rejection.');
-        console.error('[ReviewScreen] Silent insert failure — no rows returned. Payload:', payload);
         showError(silentErr, 'Review submission blocked. Please contact support.');
         setSubmitting(false);
         return;
       }
-
-      console.log('[ReviewScreen] Insert success:', insertData);
       showSuccess('Review submitted! Thank you for your feedback.');
       navigation.goBack();
     } catch (err) {
-      console.error('[ReviewScreen] Submit catch (unexpected throw):', err);
       showError(err, 'Failed to submit review. Please try again.');
     } finally {
       setSubmitting(false);

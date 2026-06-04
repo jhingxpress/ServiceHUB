@@ -52,7 +52,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/icon.png",
+          "icon": "./assets/notification-icon.png",
           "color": "#B91C1C",
           "iosDisplayInForeground": true,
           "androidMode": "default"

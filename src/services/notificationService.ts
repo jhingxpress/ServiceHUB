@@ -99,8 +99,8 @@ export async function registerPushToken(userId: string): Promise<string | null> 
       projectId: EAS_PROJECT_ID,
     });
     token = tokenData.data;
-  } catch (err) {
-    console.error('[Notifications] Failed to get push token:', err);
+  } catch {
+    console.error('[Notifications] Failed to get push token');
     return null;
   }
 
@@ -123,10 +123,9 @@ export async function registerPushToken(userId: string): Promise<string | null> 
       );
 
     if (error) {
-      console.error('[Notifications] Failed to save push token:', error.message);
+      console.error('[Notifications] Failed to save push token');
     } else {
       await AsyncStorage.setItem(PUSH_TOKEN_KEY, token);
-      console.log('[Notifications] Push token registered:', token.slice(0, 30) + '...');
     }
   }
 
@@ -147,10 +146,9 @@ export async function removePushToken(userId: string): Promise<void> {
     .eq('device_id', deviceId);
 
   if (error) {
-    console.error('[Notifications] Failed to remove push token:', error.message);
+    console.error('[Notifications] Failed to remove push token');
   } else {
     await AsyncStorage.removeItem(PUSH_TOKEN_KEY);
-    console.log('[Notifications] Push token removed for device:', deviceId);
   }
 }
 

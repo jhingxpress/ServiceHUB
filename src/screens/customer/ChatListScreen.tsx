@@ -107,7 +107,6 @@ export default function ChatListScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      console.log('[ChatList] focus → re-fetching threads');
       load();
     }, [load])
   );
@@ -119,24 +118,14 @@ export default function ChatListScreen() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
-        (payload) => {
-          console.log('[ChatList] realtime INSERT', payload.new.id);
-          load();
-        }
+        () => { load(); }
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
-        (payload) => {
-          console.log('[ChatList] realtime UPDATE', payload.new.id, 'is_read=', (payload.new as any).is_read);
-          load();
-        }
+        () => { load(); }
       )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[ChatList] realtime connected');
-        }
-      });
+      .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user, load]);
 

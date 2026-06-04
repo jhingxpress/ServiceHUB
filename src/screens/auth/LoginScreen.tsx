@@ -34,8 +34,6 @@ export default function LoginScreen({ navigation }: Props) {
   const { showError } = useErrorHandler();
 
   const handleLogin = async () => {
-    console.log('LOGIN CLICKED');
-
     const validation = validateForm(
       { email, password },
       {
@@ -45,23 +43,16 @@ export default function LoginScreen({ navigation }: Props) {
     );
 
     if (!validation.isValid) {
-      console.log('LOGIN VALIDATION FAILED:', validation.errors);
       setErrors(validation.errors);
       return;
     }
 
-    console.log('LOGIN VALIDATION PASSED');
-
     try {
-      console.log('BEFORE RECAPTCHA');
       const captchaToken = await execute('login');
-      console.log('RECAPTCHA TOKEN:', captchaToken);
-
       await signIn(email.trim().toLowerCase(), password, captchaToken);
-      console.log('SIGNIN CALLED');
-    } catch (err: any) {
-      console.error('LOGIN ERROR:', err);
-      if (err?.message?.includes('reCAPTCHA')) {
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      if (errorMessage.includes('reCAPTCHA')) {
         showError(err, 'Security check failed. Please try again.');
       } else {
         showError(err, 'Login failed. Please check your credentials and try again.');
@@ -130,7 +121,10 @@ export default function LoginScreen({ navigation }: Props) {
               error={errors.password}
             />
 
-            <TouchableOpacity style={styles.forgotLink}>
+            <TouchableOpacity
+              style={styles.forgotLink}
+              onPress={() => navigation.navigate('ForgotPassword')}
+            >
               <Text style={styles.forgotText}>Forgot password?</Text>
             </TouchableOpacity>
 
@@ -237,7 +231,7 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.lg,
     paddingVertical: SPACING.md,
     borderWidth: 1.5,
-    borderColor: 'red',
+    borderColor: COLORS.border,
     marginBottom: SPACING.lg,
   },
   googleBtnText: {

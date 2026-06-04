@@ -53,7 +53,8 @@ export default function ActiveJobsScreen() {
   useEffect(() => { fetchJobs(); }, [fetchJobs]);
 
   const handleStart = async (bookingId: string) => {
-    const { error } = await supabase.from('bookings').update({ status: 'in_progress' }).eq('id', bookingId);
+    if (!user) return;
+    const { error } = await supabase.from('bookings').update({ status: 'in_progress' }).eq('id', bookingId).eq('provider_id', user.id);
     if (error) { showError(error, 'Failed to start job.'); return; }
     fetchJobs();
   };
@@ -64,7 +65,8 @@ export default function ActiveJobsScreen() {
       {
         text: 'Complete',
         onPress: async () => {
-          const { error } = await supabase.from('bookings').update({ status: 'completed' }).eq('id', bookingId);
+          if (!user) return;
+          const { error } = await supabase.from('bookings').update({ status: 'completed' }).eq('id', bookingId).eq('provider_id', user.id);
           if (error) { showError(error, 'Failed to complete job.'); return; }
           fetchJobs();
         },

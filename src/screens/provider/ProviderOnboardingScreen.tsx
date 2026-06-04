@@ -179,14 +179,22 @@ export default function ProviderOnboardingScreen() {
     }
     const { data: existingDocs } = await supabase
       .from('provider_documents').select('*').eq('provider_id', user.id);
+    interface ProviderDoc {
+      category_type?: string;
+      document_type?: string;
+      id_type?: string | null;
+      side?: string;
+      file_url?: string;
+    }
     if (existingDocs?.length) {
-      const vidDocs = existingDocs.filter((d: any) =>
+      const docs = existingDocs as ProviderDoc[];
+      const vidDocs = docs.filter((d) =>
         d.category_type === 'valid_id' || d.document_type === 'valid_id' || d.document_type === 'government_id'
       );
       if (vidDocs.length) {
         const idType = vidDocs[0].id_type ?? null;
-        const front = vidDocs.find((d: any) => d.side === 'front');
-        const back = vidDocs.find((d: any) => d.side === 'back');
+        const front = vidDocs.find((d) => d.side === 'front');
+        const back = vidDocs.find((d) => d.side === 'back');
         setValidId(prev => ({
           ...prev,
           idType,
@@ -195,8 +203,8 @@ export default function ProviderOnboardingScreen() {
         }));
       }
       setPermits(prev => prev.map(p => {
-        const ex = existingDocs.find((d: any) => d.document_type === p.key);
-        if (ex) return { ...p, checked: true, uploadedUrl: ex.file_url, state: 'success' as UploadState };
+        const ex = docs.find((d) => d.document_type === p.key);
+        if (ex) return { ...p, checked: true, uploadedUrl: ex.file_url ?? null, state: 'success' as UploadState };
         return p;
       }));
     }
@@ -213,8 +221,9 @@ export default function ProviderOnboardingScreen() {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       setProviderLat(loc.coords.latitude);
       setProviderLng(loc.coords.longitude);
-    } catch (err: any) {
-      Alert.alert('Location Error', err.message || 'Unable to detect location.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to detect location.';
+      Alert.alert('Location Error', message);
     } finally {
       setDetectingLoc(false);
     }
@@ -390,10 +399,6 @@ export default function ProviderOnboardingScreen() {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      console.log('[handleSubmit] Starting submission...');
-      console.log('[handleSubmit] User ID:', user?.id);
-      console.log('[handleSubmit] Category ID:', selectedCategoryId);
-      
       const payload = {
         id: user!.id,
         business_name: businessName.trim(),
@@ -411,13 +416,10 @@ export default function ProviderOnboardingScreen() {
         longitude: providerLng,
         status: 'pending_review',
       };
-      console.log('[handleSubmit] Payload:', payload);
 
-      const { error, data } = await supabase.from('providers').upsert(payload);
-      console.log('[handleSubmit] Upsert result:', { error, data });
+      const { error } = await supabase.from('providers').upsert(payload);
 
       if (error) {
-        console.error('[handleSubmit] Upsert error:', error);
         throw error;
       }
 
@@ -430,22 +432,18 @@ export default function ProviderOnboardingScreen() {
           category_id: selectedCategoryId,
           is_primary: true,
         });
-        if (pcErr) console.error('[handleSubmit] provider_categories insert error:', pcErr);
+        if (pcErr) {
+          console.error('[handleSubmit] provider_categories insert error:', pcErr.message);
+        }
       }
-      
-      console.log('[handleSubmit] Refreshing provider profile...');
+
       try {
         await refreshProviderProfile();
-        console.log('[handleSubmit] Provider profile refreshed');
-      } catch (refreshErr) {
-        console.error('[handleSubmit] Refresh profile error:', refreshErr);
+      } catch {
         // Don't throw on refresh error - submission succeeded
       }
-      
-      console.log('[handleSubmit] Submission successful');
     } catch (err) {
-      console.error('[handleSubmit] Submission error:', err);
-      const msg = err instanceof Error ? err.message : JSON.stringify(err);
+      const msg = err instanceof Error ? err.message : 'Unknown error. Please check your connection and try again.';
       Alert.alert('Submission Failed', msg + '\n\nPlease check your connection and try again.');
       setSubmitting(false);
     }
