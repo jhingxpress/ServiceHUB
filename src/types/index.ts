@@ -58,6 +58,10 @@ export interface User {
   gender: 'male' | 'female' | 'other' | 'prefer_not_to_say' | null;
   date_of_birth: string | null;
   deleted_at: string | null;
+  // Consent
+  accepted_terms_at: string | null;
+  accepted_privacy_at: string | null;
+  accepted_terms_version: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -146,6 +150,10 @@ export interface Provider {
   rejected_at: string | null;
   rejected_by: string | null;
   rejection_reason: string | null;
+  // Consent
+  accepted_verification_policy_at: string | null;
+  accepted_terms_at: string | null;
+  accepted_privacy_at: string | null;
   // Marketplace
   marketplace_status: MarketplaceStatus;
   business_status: BusinessStatus;

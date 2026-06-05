@@ -30,7 +30,7 @@ const PERIODS: { label: string; value: PeriodFilter }[] = [
 ];
 
 const PAYMENT_STATUS_CFG: Record<string, { bg: string; color: string }> = {
-  paid:      { bg: COLORS.successLight, color: '#065F46' },
+  completed: { bg: COLORS.successLight, color: '#065F46' },
   pending:   { bg: '#FEF3C7',           color: '#92400E' },
   failed:    { bg: COLORS.errorLight,   color: '#991B1B' },
   refunded:  { bg: '#EDE9FE',           color: '#5B21B6' },
@@ -102,7 +102,7 @@ export default function AdminRevenueScreen() {
     const s: Summary = { totalRevenue: 0, paidCount: 0, pendingAmount: 0, refundedAmount: 0, failedCount: 0 };
     rows.forEach((p) => {
       const amt = Number(p.amount) || 0;
-      if (p.status === 'paid')     { s.totalRevenue += amt; s.paidCount++; }
+      if (p.status === 'completed') { s.totalRevenue += amt; s.paidCount++; }
       if (p.status === 'pending')  { s.pendingAmount += amt; }
       if (p.status === 'refunded') { s.refundedAmount += amt; }
       if (p.status === 'failed')   { s.failedCount++; }

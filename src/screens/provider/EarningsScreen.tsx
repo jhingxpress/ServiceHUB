@@ -34,7 +34,7 @@ export default function EarningsScreen() {
       if (!user) return;
 
       const [provRes, paymentsRes] = await Promise.all([
-        supabase.from('providers').select('earnings_total').eq('id', user.id).single(),
+        supabase.from('providers').select('total_earnings').eq('id', user.id).single(),
         supabase
           .from('payments')
           .select('id, amount, created_at, booking:bookings(scheduled_date, customer_name)')
@@ -43,7 +43,7 @@ export default function EarningsScreen() {
           .order('created_at', { ascending: false }),
       ]);
 
-      setTotal(provRes.data?.earnings_total ?? 0);
+      setTotal(provRes.data?.total_earnings ?? 0);
 
       const payments = paymentsRes.data ?? [];
       const now = new Date();
@@ -94,15 +94,6 @@ export default function EarningsScreen() {
             <Text style={[styles.summaryValue, { color: COLORS.white }]}>₱{Number(thisMonth).toFixed(2)}</Text>
             <Text style={[styles.summaryLabel, { color: 'rgba(255,255,255,0.8)' }]}>This Month</Text>
           </View>
-        </View>
-
-        {/* Pending payout */}
-        <View style={styles.payoutCard}>
-          <View style={styles.payoutInfo}>
-            <Text style={styles.payoutTitle}>Pending Payout</Text>
-            <Text style={styles.payoutSub}>Next payment in 3 days</Text>
-          </View>
-          <Text style={styles.payoutAmount}>₱{(total * 0.1).toFixed(2)}</Text>
         </View>
 
         {/* Transaction history */}
@@ -157,16 +148,6 @@ const styles = StyleSheet.create({
   },
   summaryValue: { fontSize: FONTS.sizes.xxl, fontFamily: FONTS.bold, color: COLORS.text },
   summaryLabel: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
-  payoutCard: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginHorizontal: SPACING.md, marginBottom: SPACING.md,
-    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
-  },
-  payoutInfo: {},
-  payoutTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
-  payoutSub: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
-  payoutAmount: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.bold, color: COLORS.success },
   section: { paddingHorizontal: SPACING.md },
   sectionTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: SPACING.md },
   txRow: {

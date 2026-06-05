@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   Animated,
   Dimensions,
@@ -9,7 +10,7 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthStackParamList } from '../../navigation/types';
-import { COLORS, FONTS, SPACING } from '../../constants/theme';
+import { COLORS, FONTS, SPACING, SHADOWS } from '../../constants/theme';
 
 const { width } = Dimensions.get('window');
 
@@ -69,8 +70,12 @@ export default function SplashScreen({ navigation }: Props) {
             { transform: [{ scale: logoScale }], opacity: logoOpacity },
           ]}
         >
-          <View style={styles.logoCircle}>
-            <Ionicons name="construct" size={48} color={COLORS.white} />
+          <View style={styles.logoBg}>
+            <Image
+              source={require('../../../assets/icon.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
         </Animated.View>
 
@@ -119,17 +124,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoWrapper: {
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.xl,
   },
-  logoCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+  logoBg: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.95)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.4)',
+    ...SHADOWS.large,
+  },
+  logoImage: {
+    width: 160,
+    height: 160,
+    resizeMode: 'contain',
   },
   appName: {
     fontSize: FONTS.sizes.display,

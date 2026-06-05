@@ -93,7 +93,10 @@ export default function BookingScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Location permission is required to set your service location.');
+        Alert.alert(
+          'Permission Denied',
+          'Location permission is required to set your service location.\n\nLocation information may be used for bookings, navigation, fraud prevention, and platform security.'
+        );
         return;
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });

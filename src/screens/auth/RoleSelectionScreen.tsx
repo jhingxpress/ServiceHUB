@@ -13,6 +13,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../stores/authStore';
 import { useRecaptcha } from '../../components/recaptcha/RecaptchaV3';
+import { BETA_MODE } from '../../config/featureFlags';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'RoleSelection'>;
@@ -39,10 +40,19 @@ export default function RoleSelectionScreen({ route, navigation }: Props) {
     setLoading(true);
     try {
       const captchaToken = await execute('register');
-      await signUp({ email, password, fullName, role: selected, phone }, captchaToken);
-      navigation.navigate('EmailVerification');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      await signUp({ email, password, fullName, role: selected, phone, acceptedTerms: route.params.acceptedTerms ?? false }, captchaToken);
+      if (!BETA_MODE) {
+        navigation.navigate('EmailVerification', { email: email.trim().toLowerCase() });
+      }
+      // In BETA_MODE, signUp sets user state directly; RootNavigator auto-routes into the app.
+    } catch (err: any) {
+      const message =
+        err?.message ??
+        err?.error_description ??
+        err?.msg ??
+        (typeof err === 'string' ? err : null) ??
+        JSON.stringify(err);
+      console.log('[ROLESELECT] Sign up error:', message, 'raw:', err);
       if (message.includes('reCAPTCHA')) {
         Alert.alert('Security Check Failed', message || 'Please try again.');
       } else {
@@ -156,7 +166,7 @@ const styles = StyleSheet.create({
   },
   content: { flex: 1, paddingHorizontal: SPACING.md, paddingTop: SPACING.md },
   title: {
-    fontSize: FONTS.sizes.xxxl, fontFamily: FONTS.bold, color: COLORS.text,
+    fontSize: FONTS.sizes.xxxl, fontFamily: FONTS.bold, color: COLORS.primary,
     lineHeight: 40, marginBottom: SPACING.sm,
   },
   subtitle: { fontSize: FONTS.sizes.base, color: COLORS.textSecondary, marginBottom: SPACING.xl },

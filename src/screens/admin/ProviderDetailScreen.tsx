@@ -14,15 +14,16 @@ import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 
-// Helper function to get proper storage URL
-const getStorageUrl = (filePath: string): string => {
-  if (!filePath) return '';
-  // Already a full URL — don't double-wrap
-  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-    return filePath;
-  }
-  const { data } = supabase.storage.from('provider-documents').getPublicUrl(filePath);
-  return data.publicUrl;
+// Extract the object path from a full Supabase storage public URL
+const extractStoragePath = (fullUrl: string): string | null => {
+  if (!fullUrl) return null;
+  // URL format: https://<project>.supabase.co/storage/v1/object/public/provider-documents/<path>
+  const marker = '/provider-documents/';
+  const idx = fullUrl.indexOf(marker);
+  if (idx !== -1) return fullUrl.slice(idx + marker.length);
+  // If already a relative path, return as-is
+  if (!fullUrl.startsWith('http')) return fullUrl;
+  return null;
 };
 
 type Props = NativeStackScreenProps<AdminStackParamList, 'ProviderDetail'>;
@@ -108,12 +109,11 @@ const STATUS_CFG: Record<string, { label: string; bg: string; color: string }> =
 };
 
 export default function ProviderDetailScreen({ route, navigation }: Props) {
-  console.log('[ProviderDetailScreen] Route params:', route.params);
   const { providerId } = route.params;
-  console.log('[ProviderDetailScreen] Provider ID:', providerId);
   const { user } = useAuthStore();
   const [provider, setProvider] = useState<ProviderDetailData | null>(null);
   const [documents, setDocuments] = useState<DocRecord[]>([]);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -143,16 +143,25 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           performer:users!provider_verification_logs_performed_by_fkey(full_name)
         `).eq('provider_id', providerId).order('created_at', { ascending: false }),
       ]);
-      console.log('[ProviderDetailScreen] Query result (provider):', provRes.data);
-      console.log('[ProviderDetailScreen] Query error (provider):', provRes.error);
-      console.log('[ProviderDetailScreen] Query error (documents):', docsRes.error);
-      console.log('[ProviderDetailScreen] Query error (logs):', logsRes.error);
       if (provRes.error) throw provRes.error;
+      const docs = (docsRes.data ?? []) as DocRecord[];
       setProvider(provRes.data as unknown as ProviderDetailData);
-      setDocuments((docsRes.data ?? []) as DocRecord[]);
+      setDocuments(docs);
       setLogs((logsRes.data ?? []) as unknown as LogEntry[]);
+
+      // Generate signed URLs for private bucket images
+      const urlMap: Record<string, string> = {};
+      await Promise.all(
+        docs.map(async (doc) => {
+          const path = extractStoragePath(doc.file_url);
+          if (path) {
+            const { data } = await supabase.storage.from('provider-documents').createSignedUrl(path, 3600);
+            if (data?.signedUrl) urlMap[doc.id] = data.signedUrl;
+          }
+        })
+      );
+      setSignedUrls(urlMap);
     } catch (err: any) {
-      console.error('[ProviderDetailScreen] loadData error:', err);
       setError(err?.message ?? 'Failed to load provider details');
     } finally {
       setLoading(false);
@@ -188,13 +197,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
     if ((actionMode === 'reject' || actionMode === 'suspend') && !actionNotes.trim()) {
       Alert.alert('Required', 'Please enter a reason.'); return;
     }
-    
-    console.log('[ProviderDetail] === STARTING ACTION ===');
-    console.log('[ProviderDetail] Action mode:', actionMode);
-    console.log('[ProviderDetail] Provider ID:', providerId);
-    console.log('[ProviderDetail] Admin User ID:', user?.id);
-    console.log('[ProviderDetail] Action notes:', actionNotes.trim() || '(none)');
-    
+
     setSaving(true);
     try {
       const updates: Record<string, unknown> = {};
@@ -211,51 +214,26 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
         updates.rejected_by = user?.id;
         updates.rejection_reason = actionNotes.trim();
       }
-      console.log('[ProviderDetail] Update payload:', updates);
-      
-      const { data: updateDataResponse, error: updateError } = await supabase
+
+      const { error: updateError } = await supabase
         .from('providers')
         .update(updates)
-        .eq('id', providerId)
-        .select();
-      
-      console.log('[ProviderDetail] Update response data:', updateDataResponse);
-      
-      if (updateError) {
-        console.error('[ProviderDetail] === UPDATE FAILED ===');
-        console.error('[ProviderDetail] Error details:', JSON.stringify(updateError, null, 2));
-        console.error('[ProviderDetail] Error code:', updateError.code);
-        console.error('[ProviderDetail] Error message:', updateError.message);
-        console.error('[ProviderDetail] Error hint:', updateError.hint);
-        console.error('[ProviderDetail] Error details:', updateError.details);
-        throw updateError;
-      }
-      
-      console.log('[ProviderDetail] === UPDATE SUCCESS ===');
-      console.log('[ProviderDetail] Rows affected:', updateDataResponse?.length ?? 0);
-      
-      const { error: logError } = await supabase.from('provider_verification_logs').insert({
+        .eq('id', providerId);
+
+      if (updateError) throw updateError;
+
+      await supabase.from('provider_verification_logs').insert({
         provider_id: providerId, action: actionMode,
         performed_by: user?.id ?? null, notes: actionNotes.trim() || null,
       });
-      
-      if (logError) {
-        console.error('[ProviderDetail] Log error:', logError);
-      } else {
-        console.log('[ProviderDetail] Verification log inserted successfully');
-      }
-      
-      console.log('[ProviderDetail] === REFRESHING DATA ===');
+
       const completedAction = actionMode;
       setActionMode(null); setActionNotes('');
       await loadData();
       if (completedAction === 'approve') {
         setShowSuccessModal(true);
       }
-      console.log('[ProviderDetail] === ACTION COMPLETE ===');
     } catch (err) {
-      console.error('[ProviderDetail] === ACTION EXCEPTION ===');
-      console.error('[ProviderDetail] Exception:', err);
       Alert.alert('Error', 'Action failed. Please try again.');
     }
     finally { setSaving(false); }
@@ -373,13 +351,10 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
             : documents.map(doc => (
               <View key={doc.id} style={styles.docCard}>
                 <TouchableOpacity style={styles.docRow} onPress={() => {
-                  const url = getStorageUrl(doc.file_url);
-                  console.log('[ProviderDetailScreen] Opening preview for document:', doc.id);
-                  console.log('[ProviderDetailScreen] Image URL:', url);
-                  setPreviewImage(url);
+                  setPreviewImage(signedUrls[doc.id] ?? doc.file_url);
                 }}>
                   <Image
-                    source={{ uri: getStorageUrl(doc.file_url) }}
+                    source={{ uri: signedUrls[doc.id] ?? doc.file_url }}
                     style={styles.docThumbnail}
                     resizeMode="cover"
                   />
@@ -517,36 +492,20 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
       </ScrollView>
 
       {/* Image Preview Modal */}
-      {(() => { console.log('[ProviderDetailScreen] Modal render - previewImage:', previewImage); return null; })()}
       <Modal
         visible={!!previewImage}
         transparent
         animationType="fade"
-        onRequestClose={() => {
-          console.log('[ProviderDetailScreen] Modal onRequestClose');
-          setPreviewImage(null);
-        }}
+        onRequestClose={() => setPreviewImage(null)}
         statusBarTranslucent
       >
         <View style={styles.previewOverlay}>
           {previewImage ? (
-            <>
-              {(() => { console.log('[ProviderDetailScreen] Image source uri:', previewImage); return null; })()}
-              <Image
-                source={{ uri: previewImage }}
-                style={styles.previewImage}
-                resizeMode="contain"
-                onLoadStart={() => {
-                  console.log('[ProviderDetailScreen] Image load started, uri:', previewImage);
-                }}
-                onLoad={() => {
-                  console.log('[ProviderDetailScreen] Image loaded successfully');
-                }}
-                onError={(e) => {
-                  console.log('[ProviderDetailScreen] Image load error:', e.nativeEvent.error);
-                }}
-              />
-            </>
+            <Image
+              source={{ uri: previewImage }}
+              style={styles.previewImage}
+              resizeMode="contain"
+            />
           ) : (
             <View style={styles.previewPlaceholder}>
               <Ionicons name="image-outline" size={48} color={COLORS.textLight} />
@@ -555,10 +514,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           )}
           <TouchableOpacity
             style={styles.previewClose}
-            onPress={() => {
-              console.log('[ProviderDetailScreen] Close button pressed');
-              setPreviewImage(null);
-            }}
+            onPress={() => setPreviewImage(null)}
           >
             <Ionicons name="close" size={28} color={COLORS.white} />
           </TouchableOpacity>

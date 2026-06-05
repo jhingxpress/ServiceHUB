@@ -105,7 +105,7 @@ export default function HomeScreen() {
         user
           ? supabase
               .from('bookings')
-              .select('*, providers!bookings_provider_id_fkey(business_name, profile_photo_url, business_logo), services(name)')
+              .select('*, provider:providers!bookings_provider_id_fkey(id, business_name, profile_photo_url, business_logo), service:services(name)')
               .eq('customer_id', user.id)
               .order('created_at', { ascending: false })
               .limit(3)
@@ -272,9 +272,14 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Browse by Category</Text>
+            {categories.length > 9 && (
+              <TouchableOpacity onPress={() => navigation.navigate('AllCategories')}>
+                <Text style={styles.sectionLink}>See all</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <View style={styles.categoryGrid}>
-            {categories.slice(0, 8).map((cat) => (
+            {categories.slice(0, 9).map((cat) => (
               <TouchableOpacity
                 key={cat.id}
                 style={styles.categoryCard}

@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../stores/authStore';
 import { useRecaptcha } from '../../components/recaptcha/RecaptchaV3';
+import { ENABLE_GOOGLE_SIGNIN } from '../../config/featureFlags';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -73,32 +74,38 @@ export default function LoginScreen({ navigation }: Props) {
         >
           {/* Header */}
           <View style={styles.header}>
-            <View style={styles.logoMini}>
-              <Ionicons name="construct" size={28} color={COLORS.white} />
-            </View>
+            <Image
+              source={require('../../../assets/icon.png')}
+              style={styles.logoMiniImage}
+              resizeMode="contain"
+            />
             <Text style={styles.title}>Welcome back</Text>
             <Text style={styles.subtitle}>Sign in to your ServiceHub account</Text>
           </View>
 
           {/* Form */}
           <View style={styles.form}>
-            {/* Google Sign In */}
-            <TouchableOpacity
-              style={styles.googleBtn}
-              onPress={signInWithGoogle}
-              activeOpacity={0.85}
-              disabled={isLoading}
-            >
-              <Image source={require('../../../assets/google-icon.png')} style={{ width: 20, height: 20 }} />
-              <Text style={styles.googleBtnText}>Continue with Google</Text>
-            </TouchableOpacity>
+            {ENABLE_GOOGLE_SIGNIN && (
+              <>
+                {/* Google Sign In */}
+                <TouchableOpacity
+                  style={styles.googleBtn}
+                  onPress={signInWithGoogle}
+                  activeOpacity={0.85}
+                  disabled={isLoading}
+                >
+                  <Image source={require('../../../assets/google-icon.png')} style={{ width: 20, height: 20 }} />
+                  <Text style={styles.googleBtnText}>Continue with Google</Text>
+                </TouchableOpacity>
 
-            {/* Divider */}
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR</Text>
-              <View style={styles.dividerLine} />
-            </View>
+                {/* Divider */}
+                <View style={styles.divider}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>OR</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+              </>
+            )}
             <Input
               label="Email address"
               value={email}
@@ -166,19 +173,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: SPACING.xl,
   },
-  logoMini: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+  logoMiniImage: {
+    width: 80,
+    height: 80,
+    resizeMode: 'contain',
     marginBottom: SPACING.md,
   },
   title: {
     fontSize: FONTS.sizes.xxl,
     fontFamily: FONTS.bold,
-    color: COLORS.text,
+    color: COLORS.primary,
     marginBottom: SPACING.xs,
   },
   subtitle: {

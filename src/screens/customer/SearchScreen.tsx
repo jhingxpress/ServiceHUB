@@ -196,7 +196,10 @@ export default function SearchScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Location permission is required for Nearby Search.');
+        Alert.alert(
+          'Permission Denied',
+          'Location permission is required for Nearby Search.\n\nLocation information may be used for bookings, navigation, fraud prevention, and platform security.'
+        );
         return;
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });

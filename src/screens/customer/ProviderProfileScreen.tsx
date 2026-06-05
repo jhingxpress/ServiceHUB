@@ -26,7 +26,7 @@ type RouteType = RouteProp<CustomerStackParamList, 'ProviderProfile'>;
 
 interface ServiceOption { id: string; name: string; description: string | null; price: number; is_active: boolean; }
 interface SubService { id: string; name: string; description: string | null; is_active: boolean; service_options: ServiceOption[]; }
-interface ReviewWithMedia extends Omit<Review, 'review_media'> { review_media?: { id: string; file_url: string; media_type: string }[]; }
+interface ReviewWithMedia extends Review { }
 
 const formatPrice = (amount: number) =>
   `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -321,10 +321,10 @@ export default function ProviderProfileScreen() {
                 {review.comment ? (
                   <Text style={styles.reviewComment}>{review.comment}</Text>
                 ) : null}
-                {review.review_media && review.review_media.length > 0 && (
+                {review.photo_urls && review.photo_urls.length > 0 && (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mediaRow}>
-                    {review.review_media.filter((m) => m.media_type === 'photo').map((m) => (
-                      <Image key={m.id} source={{ uri: m.file_url }} style={styles.reviewImage} />
+                    {review.photo_urls.map((url, i) => (
+                      <Image key={i} source={{ uri: url }} style={styles.reviewImage} />
                     ))}
                   </ScrollView>
                 )}

@@ -152,16 +152,15 @@ export default function BookingRequestsScreen() {
         )}
 
         {item.status === 'pending' && (
-          <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.rejectBtn} onPress={() => handleReject(item.id)}>
-              <Ionicons name="close" size={16} color={COLORS.error} />
-              <Text style={styles.rejectText}>Reject</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.acceptBtn} onPress={() => handleAccept(item.id)}>
-              <Ionicons name="checkmark" size={16} color={COLORS.white} />
-              <Text style={styles.acceptText}>Accept</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={styles.viewRequestBtn}
+            onPress={() => navigation.navigate('BookingDetail', { bookingId: item.id })}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="eye-outline" size={16} color={COLORS.primary} />
+            <Text style={styles.viewRequestText}>Review Request</Text>
+            <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+          </TouchableOpacity>
         )}
 
         {item.status === 'accepted' && (
@@ -275,19 +274,12 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' },
   metaText: { fontSize: FONTS.sizes.xs, color: COLORS.textLight },
   notes: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, fontStyle: 'italic', marginBottom: SPACING.sm },
-  actionRow: { flexDirection: 'row', gap: SPACING.sm },
-  rejectBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 4, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md,
-    borderWidth: 1.5, borderColor: COLORS.error,
+  viewRequestBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: SPACING.sm, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.primaryLight, borderWidth: 1.5, borderColor: COLORS.primary,
   },
-  rejectText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.error },
-  acceptBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 4, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.success,
-  },
-  acceptText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.white },
+  viewRequestText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.primary },
   onTheWayBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 4, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md,

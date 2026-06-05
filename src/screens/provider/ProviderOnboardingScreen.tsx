@@ -12,10 +12,13 @@ import { validateImagePickerAsset } from '../../utils/fileValidation';
 import { useAuthStore } from '../../stores/authStore';
 import { Category } from '../../types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
+import ProviderVerificationPolicyModal from '../../components/modals/ProviderVerificationPolicyModal';
+import TermsOfServiceModal from '../../components/modals/TermsOfServiceModal';
+import PrivacyPolicyModal from '../../components/modals/PrivacyPolicyModal';
 
 const MAX_FILE_SIZE = 1024 * 1024 * 1024;
 const TOTAL_STEPS = 4;
-const STEP_TITLES = ['Business Info', 'Category', 'Documents', 'Review & Submit'];
+const STEP_TITLES = ['Business', 'Category', 'Documents', 'Review'];
 
 const PH_ID_TYPES = [
   { value: 'philippine_national_id', label: 'Philippine National ID (PhilSys)' },
@@ -38,6 +41,55 @@ const PERMIT_TYPES = [
   { key: 'professional_cert', label: 'Professional License / Certificate' },
   { key: 'other_supporting', label: 'Other Supporting Documents' },
 ];
+
+const CITY_SUGGESTIONS = [
+  'Digos City','Mati City','Tagum City','Panabo City','Sta. Cruz','Bansalan','Hagonoy',
+  'Davao City','General Santos City','Koronadal City','Kidapawan City','Malaybalay City',
+  'Valencia City','Cagayan de Oro','Butuan City','Surigao City','Cebu City','Mandaue City',
+  'Lapu-Lapu City','Tacloban City','Iloilo City','Bacolod City','Dumaguete City',
+  'Manila','Quezon City','Caloocan','Pasig','Makati','Mandaluyong','San Juan',
+  'Marikina','Pasay','Taguig','Parañaque','Las Piñas','Muntinlupa','Valenzuela',
+  'Malabon','Navotas','San Jose del Monte','Meycauayan','Malolos','Angeles City',
+  'Olongapo','Batangas City','Lipa City','Calamba','Santa Rosa','Biñan','Cabuyao',
+  'San Pedro','Antipolo','Rodriguez','Cainta','Taytay','Binangonan','Angono',
+  'Tagaytay','Dasmariñas','Imus','Bacoor','Kawit','Noveleta','General Trias',
+  'Trece Martires','Naic','Tanza','Silang','Amadeo','Indang','Alfonso','Maragondon',
+  'Magallanes','Ternate','Carmona','Gen. Mariano Alvarez','San Jose','Mabalacat',
+  'Porac','Floridablanca','Guagua','Lubao','Sasmuan','Macabebe','Masantol','Apalit',
+  'Calumpit','Hagonoy','Paombong','Baliuag','Pulilan','Plaridel','Bustos','San Miguel',
+  'San Ildefonso','San Rafael','Angat','Norzagaray','Doña Remedios Trinidad','Bocaue',
+  'Marilao','Obando','Santa Maria','Balagtas','Pandi','Bulakan','Meycauayan','Malolos',
+];
+
+const PROVINCE_SUGGESTIONS = [
+  'Davao del Sur','Davao del Norte','Davao Oriental','Davao de Oro','Davao Occidental',
+  'Bukidnon','Cotabato','South Cotabato','Sarangani','Maguindanao','Lanao del Norte',
+  'Lanao del Sur','Misamis Oriental','Misamis Occidental','Camiguin','Surigao del Norte',
+  'Surigao del Sur','Agusan del Norte','Agusan del Sur','Bukidnon','Basilan',
+  'Cebu','Bohol','Negros Oriental','Siquijor','Iloilo','Guimaras','Aklan','Antique',
+  'Capiz','Negros Occidental','Leyte','Southern Leyte','Biliran','Samar','Eastern Samar',
+  'Northern Samar','Palawan','Romblon','Oriental Mindoro','Occidental Mindoro','Marinduque',
+  'Quezon','Batangas','Cavite','Laguna','Rizal','Bulacan','Pampanga','Bataan','Zambales',
+  'Tarlac','Nueva Ecija','Pangasinan','La Union','Benguet','Ifugao','Mountain Province',
+  'Kalinga','Abra','Apayao','Ilocos Norte','Ilocos Sur','Isabela','Cagayan','Nueva Vizcaya',
+  'Quirino','Batanes','Albay','Camarines Norte','Camarines Sur','Catanduanes','Masbate',
+  'Sorsogon','Metro Manila',
+];
+
+const CATEGORY_EXAMPLES: Record<string, string[]> = {
+  'education & training': ['Subject Tutor','Music Lessons','Language Teacher','Driving Lessons','Skills Development','Review Center'],
+  'home services': ['Electrical Repair','Wiring Installation','Plumbing','Carpentry','Appliance Repair','Aircon Technician'],
+  'beauty & wellness': ['Hair Stylist','Makeup Artist','Massage Therapist','Nail Technician'],
+  'events & entertainment': ['Wedding Photography','Event Photography','Portrait Photography','Videography','Event Planning'],
+  'automotive': ['Car Repair','Oil Change','Tire Services','Car Detailing','Battery Replacement'],
+  'health & home care': ['Home Nursing','Physical Therapy','Senior Care','Home Cleaning','Disinfection Services'],
+  'technology & security': ['CCTV Installation','Computer Repair','Network Setup','Smart Home Setup','IT Support'],
+  'construction & renovation': ['House Renovation','Roofing','Tile Setting','Painting','Masonry'],
+  'hvac & appliances': ['Aircon Repair','Refrigerator Repair','Washing Machine Repair','Water Heater Repair'],
+  'logistics & transportation': ['Moving Services','Delivery','Truck Rental','Courier Services'],
+  'business services': ['Accounting','Tax Filing','Business Registration','Virtual Assistant'],
+  'pet services': ['Pet Grooming','Veterinary House Call','Pet Walking','Pet Boarding'],
+};
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'failed';
 
@@ -129,16 +181,42 @@ export default function ProviderOnboardingScreen() {
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [catLoading, setCatLoading] = useState(true);
 
+  // Searchable suggestion dropdowns
+  const [showCityDropdown, setShowCityDropdown] = useState(false);
+  const [showProvinceDropdown, setShowProvinceDropdown] = useState(false);
+
   // Step 3 — documents
   const [validId, setValidId] = useState<ValidIdDoc>(INITIAL_VALID_ID);
   const [permits, setPermits] = useState<PermitDoc[]>(
     PERMIT_TYPES.map(p => ({ ...p, checked: false, uri: null, uploadedUrl: null, state: 'idle' as UploadState, error: null }))
   );
 
+  // Step 4 — consent
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [verificationAccepted, setVerificationAccepted] = useState(false);
+  const [showVerificationPolicy, setShowVerificationPolicy] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+
   useEffect(() => {
     loadCategories();
     loadExistingData();
   }, []);
+
+  // Auto-scroll to reveal examples when a category is selected on Step 2
+  useEffect(() => {
+    if (step === 2 && selectedCategoryId) {
+      const timer = setTimeout(() => {
+        scrollRef.current?.scrollToEnd({ animated: true });
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedCategoryId, step]);
+
+  // Debug log for Provider Verification Policy modal visibility
+  useEffect(() => {
+    console.log('[POLICY] Modal visible:', showVerificationPolicy);
+  }, [showVerificationPolicy]);
 
   const loadCategories = async () => {
     const { data } = await supabase.from('categories').select('*').order('name');
@@ -160,11 +238,21 @@ export default function ProviderOnboardingScreen() {
       setDescription(data.service_description ?? '');
       setYearsExp(data.years_of_experience ? String(data.years_of_experience) : '');
       setServiceArea(data.service_area ?? '');
-      setSelectedCategoryId(data.category_id ?? null);
+      // Convert leaf category_id to parent for new onboarding UX
+      const provCat = categories.find(c => c.id === data.category_id);
+      if (provCat?.is_parent) {
+        setSelectedCategoryId(provCat.id);
+        setSelectedParentId(provCat.id);
+      } else if (provCat?.parent_id) {
+        setSelectedCategoryId(provCat.parent_id);
+        setSelectedParentId(provCat.parent_id);
+      } else {
+        setSelectedCategoryId(data.category_id ?? null);
+      }
       setProviderLat(data.latitude ?? null);
       setProviderLng(data.longitude ?? null);
     }
-    // Load existing provider category
+    // Load existing provider category — convert leaf to parent for new onboarding UX
     const { data: pcData } = await supabase
       .from('provider_categories')
       .select('category_id')
@@ -172,10 +260,16 @@ export default function ProviderOnboardingScreen() {
       .eq('is_primary', true)
       .single();
     if (pcData?.category_id) {
-      setSelectedCategoryId(pcData.category_id);
-      // Pre-select parent if we can infer it
-      const leafCat = categories.find(c => c.id === pcData.category_id);
-      if (leafCat?.parent_id) setSelectedParentId(leafCat.parent_id);
+      const cat = categories.find(c => c.id === pcData.category_id);
+      if (cat?.is_parent) {
+        setSelectedCategoryId(cat.id);
+        setSelectedParentId(cat.id);
+      } else if (cat?.parent_id) {
+        setSelectedCategoryId(cat.parent_id);
+        setSelectedParentId(cat.parent_id);
+      } else {
+        setSelectedCategoryId(pcData.category_id);
+      }
     }
     const { data: existingDocs } = await supabase
       .from('provider_documents').select('*').eq('provider_id', user.id);
@@ -215,7 +309,10 @@ export default function ProviderOnboardingScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Location permission is required to capture your business coordinates.');
+        Alert.alert(
+          'Permission Denied',
+          'Location permission is required to capture your business coordinates.\n\nLocation information may be used for bookings, navigation, fraud prevention, and platform security.'
+        );
         return;
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -397,6 +494,10 @@ export default function ProviderOnboardingScreen() {
   };
 
   const handleSubmit = async () => {
+    if (!termsAccepted || !verificationAccepted) {
+      Alert.alert('Consent Required', 'Please read and agree to all required policies before submitting your application.');
+      return;
+    }
     setSubmitting(true);
     try {
       const payload = {
@@ -415,6 +516,9 @@ export default function ProviderOnboardingScreen() {
         latitude: providerLat,
         longitude: providerLng,
         status: 'pending_review',
+        accepted_verification_policy_at: new Date().toISOString(),
+        accepted_terms_at: termsAccepted ? new Date().toISOString() : null,
+        accepted_privacy_at: termsAccepted ? new Date().toISOString() : null,
       };
 
       const { error } = await supabase.from('providers').upsert(payload);
@@ -442,6 +546,13 @@ export default function ProviderOnboardingScreen() {
       } catch {
         // Don't throw on refresh error - submission succeeded
       }
+
+      setSubmitting(false);
+      Alert.alert(
+        'Application Submitted',
+        'Your provider application has been submitted for review. You will be notified once it is approved.',
+        [{ text: 'OK' }]
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error. Please check your connection and try again.';
       Alert.alert('Submission Failed', msg + '\n\nPlease check your connection and try again.');
@@ -466,7 +577,7 @@ export default function ProviderOnboardingScreen() {
                   : <Text style={[styles.stepNum, active && styles.stepNumActive]}>{num}</Text>
                 }
               </View>
-              <Text style={[styles.stepLabel, active && styles.stepLabelActive]} numberOfLines={1}>{title}</Text>
+              <Text style={[styles.stepLabel, active && styles.stepLabelActive]}>{title}</Text>
             </View>
             {i < TOTAL_STEPS - 1 && (
               <View style={[styles.stepLine, done && styles.stepLineDone]} />
@@ -498,6 +609,48 @@ export default function ProviderOnboardingScreen() {
     </View>
   );
 
+  const renderSearchableField = (
+    label: string,
+    value: string,
+    onChange: (v: string) => void,
+    suggestions: string[],
+    show: boolean,
+    setShow: (v: boolean) => void,
+    opts?: { placeholder?: string; keyboardType?: 'default' | 'email-address' | 'phone-pad' | 'numeric' }
+  ) => {
+    const filtered = value.trim()
+      ? suggestions.filter(s => s.toLowerCase().includes(value.toLowerCase())).slice(0, 6)
+      : suggestions.slice(0, 6);
+    return (
+      <View style={styles.fieldWrap}>
+        <Text style={styles.label}>{label} *</Text>
+        <TextInput
+          style={styles.input}
+          value={value}
+          onChangeText={(t) => { onChange(t); setShow(true); }}
+          onFocus={() => setShow(true)}
+          placeholder={opts?.placeholder ?? label}
+          placeholderTextColor={COLORS.textLight}
+          keyboardType={opts?.keyboardType ?? 'default'}
+          autoCapitalize="sentences"
+        />
+        {show && filtered.length > 0 && (
+          <View style={styles.suggestionList}>
+            {filtered.map(s => (
+              <TouchableOpacity
+                key={s}
+                style={styles.suggestionItem}
+                onPress={() => { onChange(s); setShow(false); }}
+              >
+                <Text style={styles.suggestionText}>{s}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   const renderStep1 = () => (
     <View>
       {providerProfile?.rejection_reason ? (
@@ -510,17 +663,17 @@ export default function ProviderOnboardingScreen() {
       ) : null}
       <Text style={styles.stepHeading}>Business Information</Text>
       <Text style={styles.stepSubheading}>Tell customers about your business.</Text>
-      {renderField('Business Name', businessName, setBusinessName, { placeholder: 'e.g. Juan dela Cruz Services' })}
+      {renderField('Business Name', businessName, setBusinessName, { placeholder: 'e.g. ABC Electrical Services, Juan\'s Repair Shop' })}
       {renderField('Business Address', businessAddress, setBusinessAddress, { placeholder: 'Street, Barangay' })}
       <View style={styles.row}>
         <View style={{ flex: 1 }}>
-          {renderField('City/Municipality', city, setCity, { placeholder: 'e.g. Cebu City' })}
+          {renderSearchableField('City/Municipality', city, setCity, CITY_SUGGESTIONS, showCityDropdown, setShowCityDropdown, { placeholder: 'e.g. Digos City' })}
         </View>
         <View style={{ flex: 1 }}>
-          {renderField('Province', province, setProvince, { placeholder: 'e.g. Cebu' })}
+          {renderSearchableField('Province', province, setProvince, PROVINCE_SUGGESTIONS, showProvinceDropdown, setShowProvinceDropdown, { placeholder: 'e.g. Davao del Sur' })}
         </View>
       </View>
-      {renderField('Mobile Number', mobileNumber, setMobileNumber, { placeholder: '09XXXXXXXXX', keyboardType: 'phone-pad' })}
+      {renderField('Mobile Number', mobileNumber, setMobileNumber, { placeholder: '0917 123 4567', keyboardType: 'phone-pad' })}
       {renderField('Email Address', businessEmail, setBusinessEmail, { placeholder: 'business@email.com', keyboardType: 'email-address' })}
       {renderField('Business Description', description, setDescription, {
         placeholder: 'Describe your services, experience, and what makes you stand out...',
@@ -531,7 +684,7 @@ export default function ProviderOnboardingScreen() {
           {renderField('Years of Experience', yearsExp, setYearsExp, { placeholder: 'e.g. 5', keyboardType: 'numeric', required: false })}
         </View>
         <View style={{ flex: 1 }}>
-          {renderField('Service Area', serviceArea, setServiceArea, { placeholder: 'e.g. Metro Cebu', required: false })}
+          {renderField('Service Area', serviceArea, setServiceArea, { placeholder: 'e.g. Metro Davao', required: false })}
         </View>
       </View>
 
@@ -564,82 +717,69 @@ export default function ProviderOnboardingScreen() {
   );
 
   const parentCategories = categories.filter(c => c.is_parent);
-  const leafCategories = categories.filter(c => c.parent_id === selectedParentId && !c.is_parent);
 
-  const renderStep2 = () => (
-    <View>
-      <Text style={styles.stepHeading}>Select Service Category</Text>
-      <Text style={styles.stepSubheading}>Choose your primary service category.</Text>
-      {catLoading
-        ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.xl }} />
-        : (
-          <View>
-            {/* Parent groups */}
-            {!selectedParentId && (
+  const getCategoryExamples = (catName: string): string[] => {
+    const key = catName.toLowerCase().trim();
+    return CATEGORY_EXAMPLES[key] ?? ['Various professional services'];
+  };
+
+  const renderStep2 = () => {
+    const selectedParent = parentCategories.find(p => p.id === selectedCategoryId);
+    const examples = selectedParent ? getCategoryExamples(selectedParent.name) : [];
+    return (
+      <View>
+        <Text style={styles.stepHeading}>Select Primary Category</Text>
+        <Text style={styles.stepSubheading}>Choose the category that best describes your business. You will create specific services later.</Text>
+        {catLoading
+          ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.xl }} />
+          : (
+            <View>
               <View style={styles.catGrid}>
                 {parentCategories.map(parent => {
-                  const active = parent.id === selectedParentId;
+                  const selected = parent.id === selectedCategoryId;
                   return (
                     <TouchableOpacity
                       key={parent.id}
-                      style={[styles.catCard, active && styles.catCardSelected, { borderColor: active ? parent.color : COLORS.border }]}
-                      onPress={() => { setSelectedParentId(parent.id); setSelectedCategoryId(null); }}
+                      style={[styles.catCard, selected && styles.catCardSelected, { borderColor: selected ? parent.color : COLORS.border }]}
+                      onPress={() => { setSelectedCategoryId(parent.id); setSelectedParentId(parent.id); }}
                       activeOpacity={0.8}
                     >
-                      <View style={[styles.catIcon, { backgroundColor: active ? parent.color : `${parent.color}20` }]}>
-                        <Ionicons name={parent.icon as React.ComponentProps<typeof Ionicons>['name']} size={22} color={active ? COLORS.white : parent.color} />
+                      <View style={[styles.catIcon, { backgroundColor: selected ? parent.color : `${parent.color}20` }]}>
+                        <Ionicons name={parent.icon as React.ComponentProps<typeof Ionicons>['name']} size={22} color={selected ? COLORS.white : parent.color} />
                       </View>
-                      <Text style={[styles.catName, active && styles.catNameSelected]} numberOfLines={2}>{parent.name}</Text>
-                      <Ionicons name="chevron-forward" size={14} color={COLORS.textLight} />
+                      <Text style={[styles.catName, selected && styles.catNameSelected]} numberOfLines={2}>{parent.name}</Text>
+                      {selected && (
+                        <View style={[styles.catCheck, { backgroundColor: parent.color }]}>
+                          <Ionicons name="checkmark" size={10} color={COLORS.white} />
+                        </View>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
               </View>
-            )}
 
-            {/* Leaf services under selected parent */}
-            {selectedParentId && (
-              <View>
-                <TouchableOpacity
-                  style={styles.backToParents}
-                  onPress={() => { setSelectedParentId(null); setSelectedCategoryId(null); }}
-                >
-                  <Ionicons name="arrow-back" size={16} color={COLORS.primary} />
-                  <Text style={styles.backToParentsText}>Back to categories</Text>
-                </TouchableOpacity>
-                <Text style={styles.stepSubheading}>
-                  {parentCategories.find(p => p.id === selectedParentId)?.name}
-                </Text>
-                <View style={styles.catGrid}>
-                  {leafCategories.map(cat => {
-                    const selected = cat.id === selectedCategoryId;
-                    return (
-                      <TouchableOpacity
-                        key={cat.id}
-                        style={[styles.catCard, selected && styles.catCardSelected, { borderColor: selected ? cat.color : COLORS.border }]}
-                        onPress={() => setSelectedCategoryId(cat.id)}
-                        activeOpacity={0.8}
-                      >
-                        <View style={[styles.catIcon, { backgroundColor: selected ? cat.color : `${cat.color}20` }]}>
-                          <Ionicons name={cat.icon as React.ComponentProps<typeof Ionicons>['name']} size={22} color={selected ? COLORS.white : cat.color} />
-                        </View>
-                        <Text style={[styles.catName, selected && styles.catNameSelected]} numberOfLines={2}>{cat.name}</Text>
-                        {selected && (
-                          <View style={[styles.catCheck, { backgroundColor: cat.color }]}>
-                            <Ionicons name="checkmark" size={10} color={COLORS.white} />
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
+              {selectedParent && (
+                <View style={[styles.examplesBox, { borderLeftColor: selectedParent.color, borderLeftWidth: 4 }]}>
+                  <View style={styles.examplesHeader}>
+                    <Ionicons name="information-circle-outline" size={16} color={selectedParent.color} />
+                    <Text style={styles.examplesTitle}>{selectedParent.name}</Text>
+                  </View>
+                  <View style={styles.examplesRow}>
+                    {examples.map(ex => (
+                      <View key={ex} style={[styles.exampleChip, { backgroundColor: `${selectedParent.color}18` }]}>
+                        <Text style={[styles.exampleChipText, { color: selectedParent.color }]}>{ex}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <Text style={styles.examplesNote}>You will create your actual services later in Manage Services.</Text>
                 </View>
-              </View>
-            )}
-          </View>
-        )
-      }
-    </View>
-  );
+              )}
+            </View>
+          )
+        }
+      </View>
+    );
+  };
 
   const renderUploadWidget = (
     state: UploadState,
@@ -891,6 +1031,54 @@ export default function ProviderOnboardingScreen() {
             Your application will be reviewed by our team within 1–3 business days. You'll be notified once approved.
           </Text>
         </View>
+
+        {/* Consent Section */}
+        <View style={styles.consentCard}>
+          <Text style={styles.consentTitle}>Legal Consent</Text>
+
+          <View style={styles.consentRow}>
+            <TouchableOpacity
+              onPress={() => setTermsAccepted(prev => !prev)}
+              activeOpacity={0.8}
+              style={styles.consentCheckboxTouch}
+            >
+              <View style={[styles.consentCheckbox, termsAccepted && styles.consentCheckboxChecked]}>
+                {termsAccepted && <Ionicons name="checkmark" size={14} color={COLORS.white} />}
+              </View>
+            </TouchableOpacity>
+            <Text style={styles.consentText}>
+              I have read and agree to the{' '}
+              <Text style={styles.consentLink} onPress={() => setShowTerms(true)}>Terms of Service</Text>
+              {' '}and{' '}
+              <Text style={styles.consentLink} onPress={() => setShowPrivacy(true)}>Privacy Policy</Text>.
+            </Text>
+          </View>
+
+          <View style={styles.consentRow}>
+            <TouchableOpacity
+              onPress={() => setVerificationAccepted(prev => !prev)}
+              activeOpacity={0.8}
+              style={styles.consentCheckboxTouch}
+            >
+              <View style={[styles.consentCheckbox, verificationAccepted && styles.consentCheckboxChecked]}>
+                {verificationAccepted && <Ionicons name="checkmark" size={14} color={COLORS.white} />}
+              </View>
+            </TouchableOpacity>
+            <Text style={styles.consentText}>
+              I agree to the{' '}
+              <Text
+                style={styles.consentLink}
+                onPress={() => {
+                  console.log('[POLICY] Provider Verification Policy pressed');
+                  setShowVerificationPolicy(true);
+                }}
+              >
+                Provider Verification Policy
+              </Text>
+              {' '}and certify that all submitted information and documents are accurate and belong to me or my business.
+            </Text>
+          </View>
+        </View>
       </View>
     );
   };
@@ -928,9 +1116,13 @@ export default function ProviderOnboardingScreen() {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={[styles.nextBtn, { backgroundColor: COLORS.success }, submitting && styles.nextBtnDisabled]}
+            style={[
+              styles.nextBtn,
+              { backgroundColor: COLORS.success },
+              (submitting || !termsAccepted || !verificationAccepted) && styles.nextBtnDisabled,
+            ]}
             onPress={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || !termsAccepted || !verificationAccepted}
           >
             {submitting
               ? <ActivityIndicator color={COLORS.white} />
@@ -942,6 +1134,9 @@ export default function ProviderOnboardingScreen() {
           </TouchableOpacity>
         )}
       </View>
+      <ProviderVerificationPolicyModal visible={showVerificationPolicy} onClose={() => setShowVerificationPolicy(false)} />
+      <TermsOfServiceModal visible={showTerms} onClose={() => setShowTerms(false)} />
+      <PrivacyPolicyModal visible={showPrivacy} onClose={() => setShowPrivacy(false)} />
     </SafeAreaView>
   );
 }
@@ -975,7 +1170,7 @@ const styles = StyleSheet.create({
   stepCircleDone: { backgroundColor: COLORS.success },
   stepNum: { fontSize: 12, fontFamily: FONTS.semiBold, color: COLORS.textLight },
   stepNumActive: { color: COLORS.white },
-  stepLabel: { fontSize: 9, fontFamily: FONTS.medium, color: COLORS.textLight, textAlign: 'center', maxWidth: 55 },
+  stepLabel: { fontSize: 10, fontFamily: FONTS.medium, color: COLORS.textLight, textAlign: 'center', maxWidth: 72 },
   stepLabelActive: { color: COLORS.primary, fontFamily: FONTS.semiBold },
   stepLine: { flex: 1, height: 2, backgroundColor: COLORS.border, marginBottom: 14 },
   stepLineDone: { backgroundColor: COLORS.success },
@@ -1001,11 +1196,11 @@ const styles = StyleSheet.create({
   catGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   catCard: {
     width: '47%', backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md, borderWidth: 2, borderColor: COLORS.border,
-    alignItems: 'center', gap: SPACING.sm, ...SHADOWS.small, position: 'relative',
+    padding: SPACING.sm, borderWidth: 2, borderColor: COLORS.border,
+    alignItems: 'center', gap: SPACING.xs, ...SHADOWS.small, position: 'relative',
   },
   catCardSelected: { backgroundColor: '#F5F3FF' },
-  catIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  catIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   catName: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text, textAlign: 'center' },
   catNameSelected: { color: COLORS.primary },
   catCheck: { position: 'absolute', top: 8, right: 8, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
@@ -1094,6 +1289,24 @@ const styles = StyleSheet.create({
   docCheckText: { fontSize: FONTS.sizes.sm, color: COLORS.text },
   submitNote: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm, backgroundColor: COLORS.primaryLight, borderRadius: BORDER_RADIUS.md, padding: SPACING.md, borderWidth: 1, borderColor: '#C7D2FE' },
   submitNoteText: { flex: 1, fontSize: FONTS.sizes.sm, color: COLORS.primary, lineHeight: 20 },
+  consentCard: { backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, padding: SPACING.md, marginBottom: SPACING.md, ...SHADOWS.small },
+  consentTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: SPACING.sm },
+  consentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm, marginBottom: SPACING.sm },
+  consentCheckboxTouch: { padding: 2, margin: -2 },
+  consentCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
+    marginTop: 2,
+  },
+  consentCheckboxChecked: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  consentText: { flex: 1, fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, lineHeight: 20 },
+  consentLink: { color: COLORS.primary, fontFamily: FONTS.semiBold },
   footer: { flexDirection: 'row', gap: SPACING.sm, padding: SPACING.md, backgroundColor: COLORS.surface, borderTopWidth: 1, borderTopColor: COLORS.border },
   backBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, paddingVertical: SPACING.sm + 2, paddingHorizontal: SPACING.md, borderRadius: BORDER_RADIUS.xl, borderWidth: 1.5, borderColor: COLORS.border },
   backBtnText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
@@ -1114,4 +1327,64 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.successLight, borderRadius: BORDER_RADIUS.md,
   },
   locCapturedText: { fontSize: FONTS.sizes.xs, color: COLORS.success, fontFamily: FONTS.medium },
+  suggestionList: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginTop: 4,
+    ...SHADOWS.medium,
+    zIndex: 100,
+    maxHeight: 200,
+  },
+  suggestionItem: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
+  },
+  suggestionText: {
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.text,
+  },
+  examplesBox: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+    marginTop: SPACING.sm,
+    ...SHADOWS.small,
+  },
+  examplesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginBottom: SPACING.sm,
+  },
+  examplesTitle: {
+    fontSize: FONTS.sizes.base,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.text,
+  },
+  examplesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+  },
+  exampleChip: {
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+  },
+  exampleChipText: {
+    fontSize: FONTS.sizes.xs,
+    fontFamily: FONTS.medium,
+  },
+  examplesNote: {
+    fontSize: FONTS.sizes.xs,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.sm,
+    fontStyle: 'italic',
+  },
 });

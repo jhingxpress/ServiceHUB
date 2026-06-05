@@ -2,6 +2,7 @@ import { NavigatorScreenParams } from '@react-navigation/native';
 
 export type RootStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
+  ProfileCompletion: undefined;
   Customer: NavigatorScreenParams<CustomerStackParamList>;
   Provider: NavigatorScreenParams<ProviderStackParamList>;
   Admin: NavigatorScreenParams<AdminStackParamList>;
@@ -11,8 +12,8 @@ export type AuthStackParamList = {
   Splash: undefined;
   Login: undefined;
   Register: undefined;
-  RoleSelection: { email: string; password: string; fullName: string; phone?: string };
-  EmailVerification: undefined;
+  RoleSelection: { email: string; password: string; fullName: string; phone?: string; acceptedTerms?: boolean };
+  EmailVerification: { email?: string };
   ForgotPassword: undefined;
 };
 
@@ -54,6 +55,7 @@ export type CustomerStackParamList = {
   MyFavorites: undefined;
   MapDiscovery: undefined;
   ReportScreen: { reportedUserId: string; bookingId?: string; reportedUserName?: string };
+  AllCategories: undefined;
 };
 
 export type CustomerTabParamList = {

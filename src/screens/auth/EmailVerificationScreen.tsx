@@ -1,50 +1,94 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
+  AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { AuthStackParamList } from '../../navigation/types';
-import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../../constants/theme';
 
-type Props = {
-  navigation: NativeStackNavigationProp<AuthStackParamList, 'EmailVerification'>;
-};
+type Props = NativeStackScreenProps<AuthStackParamList, 'EmailVerification'>;
 
-export default function EmailVerificationScreen({ navigation }: Props) {
+export default function EmailVerificationScreen({ route, navigation }: Props) {
+  const { email } = route.params ?? {};
   const { checkEmailVerified, resendVerificationEmail } = useAuthStore();
   const [checking, setChecking] = useState(false);
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
+
+  const runVerificationCheck = useCallback(async (source: string) => {
+    console.log('[VERIFY] EmailVerificationScreen: running check from', source);
+    setChecking(true);
+    setStatusMsg('Checking verification status...');
+    try {
+      const result = await checkEmailVerified();
+      console.log('[VERIFY] checkEmailVerified result', result);
+      console.log('[VERIFY] EmailVerificationScreen: check result', {
+        source,
+        verified: result.verified,
+        role: result.role,
+        providerStatus: result.providerStatus,
+      });
+      if (result.verified) {
+        setStatusMsg(
+          result.role === 'provider'
+            ? result.providerStatus === 'approved'
+              ? 'Email verified! Redirecting to provider dashboard...'
+              : 'Email verified! Redirecting to provider onboarding...'
+            : 'Email verified! Redirecting to home...'
+        );
+        // RootNavigator will auto-switch stacks when user state is set.
+        // No manual navigation needed — the reactive state change handles it.
+      } else {
+        setStatusMsg('Email not yet verified. Please check your inbox and tap the link.');
+      }
+    } catch (err) {
+      console.error('[VERIFY] EmailVerificationScreen: check error', err);
+      setStatusMsg('Unable to check status. Please try again.');
+    } finally {
+      setChecking(false);
+    }
+  }, [checkEmailVerified]);
+
+  // Auto-check when screen comes into focus (user returns from email app)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[VERIFY] EmailVerificationScreen: screen focused');
+      runVerificationCheck('focus');
+    }, [runVerificationCheck])
+  );
+
+  // Also check when app returns from background (user tapped email link in email app)
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        console.log('[VERIFY] EmailVerificationScreen: app became active');
+        runVerificationCheck('app-active');
+      }
+    });
+    return () => sub.remove();
+  }, [runVerificationCheck]);
 
   const handleCheck = async () => {
-    setChecking(true);
-    const verified = await checkEmailVerified();
-    setChecking(false);
-    if (verified) {
-      // Auth state listener + RootNavigator will auto-route to app
-    }
+    console.log('[VERIFY] Button pressed — I have verified my email');
+    runVerificationCheck('manual-tap');
   };
 
   const handleResend = async () => {
+    if (!email) return;
     setResending(true);
     try {
-      // We need the email; get it from the current pending session or store
-      // For simplicity, resend uses the stored email from the last signUp attempt
-      // The auth store's resendVerificationEmail requires an email param
-      // Since we don't have it here, we'll get it from Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.email) {
-        await resendVerificationEmail(session.user.email);
-        setResent(true);
-        setTimeout(() => setResent(false), 3000);
-      }
+      await resendVerificationEmail(email);
+      setResent(true);
+      setTimeout(() => setResent(false), 3000);
     } catch {
       // ignore
     } finally {
@@ -61,7 +105,7 @@ export default function EmailVerificationScreen({ navigation }: Props) {
 
         <Text style={styles.title}>Verify your email</Text>
         <Text style={styles.subtitle}>
-          We sent a verification link to your email address. Please check your inbox and tap the link to activate your account.
+          We sent a verification link to {email ? email : 'your email address'}. Please check your inbox and tap the link to activate your account.
         </Text>
 
         <View style={styles.restrictions}>
@@ -83,6 +127,19 @@ export default function EmailVerificationScreen({ navigation }: Props) {
             <Text style={styles.restrictText}>Apply as a provider</Text>
           </View>
         </View>
+
+        {statusMsg ? (
+          <View style={styles.statusBox}>
+            <Ionicons
+              name={statusMsg.includes('verified') ? 'checkmark-circle' : 'information-circle'}
+              size={18}
+              color={statusMsg.includes('verified') ? COLORS.success : COLORS.textLight}
+            />
+            <Text style={[styles.statusText, statusMsg.includes('verified') && styles.statusTextSuccess]}>
+              {statusMsg}
+            </Text>
+          </View>
+        ) : null}
 
         <TouchableOpacity
           style={[styles.btn, checking && styles.btnDisabled]}
@@ -137,7 +194,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: FONTS.sizes.xxl,
     fontFamily: FONTS.bold,
-    color: COLORS.text,
+    color: COLORS.primary,
     marginBottom: SPACING.sm,
     textAlign: 'center',
   },
@@ -213,5 +270,27 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.base,
     fontFamily: FONTS.medium,
     color: COLORS.primary,
+  },
+  statusBox: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  statusText: {
+    flex: 1,
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.regular,
+    color: COLORS.textSecondary,
+  },
+  statusTextSuccess: {
+    color: COLORS.success,
+    fontFamily: FONTS.semiBold,
   },
 });

@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS public.users (
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'banned')),
   city TEXT,
   province TEXT,
+  -- Consent tracking
+  accepted_terms_at TIMESTAMPTZ,
+  accepted_privacy_at TIMESTAMPTZ,
+  accepted_terms_version TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -74,6 +78,10 @@ CREATE TABLE IF NOT EXISTS public.providers (
   kyc_status TEXT DEFAULT 'not_submitted' CHECK (kyc_status IN ('not_submitted', 'pending', 'approved', 'rejected')),
   kyc_documents JSONB DEFAULT '{}'::JSONB,
   kyc_rejection_reason TEXT,
+  -- Consent tracking
+  accepted_verification_policy_at TIMESTAMPTZ,
+  accepted_terms_at TIMESTAMPTZ,
+  accepted_privacy_at TIMESTAMPTZ,
   -- Storefront
   provider_type TEXT NOT NULL DEFAULT 'individual' CHECK (provider_type IN ('individual', 'business')),
   cover_photo TEXT,
@@ -245,6 +253,7 @@ CREATE TABLE IF NOT EXISTS public.provider_stats (
   response_rate INTEGER DEFAULT 0 CHECK (response_rate >= 0 AND response_rate <= 100),
   favorite_count INTEGER DEFAULT 0,
   average_response_minutes INTEGER DEFAULT 0,
+  total_earnings DECIMAL(10,2) DEFAULT 0.00,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -332,6 +341,8 @@ CREATE TABLE IF NOT EXISTS public.payments (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_booking_unique ON public.payments(booking_id);
 
 -- ============================================================
 -- MESSAGES (Chat)
@@ -726,23 +737,39 @@ CREATE TRIGGER providers_updated_at BEFORE UPDATE ON public.providers FOR EACH R
 DROP TRIGGER IF EXISTS bookings_updated_at ON public.bookings;
 CREATE TRIGGER bookings_updated_at BEFORE UPDATE ON public.bookings FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
--- Auto-create user profile on signup
+-- Auto-create user profile on signup (reads consent fields from raw_user_meta_data)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO public.users (
-    id, email, full_name, phone, role, status, city, province
+    id, email, full_name, phone, role, status, city, province,
+    avatar_url, email_verified,
+    accepted_terms_at, accepted_privacy_at, accepted_terms_version
   )
   VALUES (
     NEW.id,
     NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', ''),
     COALESCE(NEW.raw_user_meta_data->>'phone', NULL),
     COALESCE(NEW.raw_user_meta_data->>'role', 'customer'),
     'active',
     COALESCE(NEW.raw_user_meta_data->>'city', NULL),
-    COALESCE(NEW.raw_user_meta_data->>'province', NULL)
-  );
+    COALESCE(NEW.raw_user_meta_data->>'province', NULL),
+    COALESCE(NEW.raw_user_meta_data->>'avatar_url', NEW.raw_user_meta_data->>'picture', NULL),
+    (NEW.email_confirmed_at IS NOT NULL),
+    (NEW.raw_user_meta_data->>'accepted_terms_at')::timestamptz,
+    (NEW.raw_user_meta_data->>'accepted_privacy_at')::timestamptz,
+    COALESCE(NEW.raw_user_meta_data->>'accepted_terms_version', NULL)
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    full_name = EXCLUDED.full_name,
+    avatar_url = COALESCE(EXCLUDED.avatar_url, public.users.avatar_url),
+    email_verified = EXCLUDED.email_verified,
+    accepted_terms_at = COALESCE(EXCLUDED.accepted_terms_at, public.users.accepted_terms_at),
+    accepted_privacy_at = COALESCE(EXCLUDED.accepted_privacy_at, public.users.accepted_privacy_at),
+    accepted_terms_version = COALESCE(EXCLUDED.accepted_terms_version, public.users.accepted_terms_version),
+    updated_at = NOW();
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -751,6 +778,26 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Sync email_verified when auth.users.email_confirmed_at changes
+CREATE OR REPLACE FUNCTION public.handle_user_updated()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.email_confirmed_at IS DISTINCT FROM OLD.email_confirmed_at THEN
+    UPDATE public.users
+    SET email_verified = (NEW.email_confirmed_at IS NOT NULL),
+        updated_at = NOW()
+    WHERE id = NEW.id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_updated ON auth.users;
+CREATE TRIGGER on_auth_user_updated
+  AFTER UPDATE ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_user_updated();
 
 -- Update provider rating after review changes (INSERT, UPDATE, DELETE)
 CREATE OR REPLACE FUNCTION public.update_provider_rating()
@@ -885,9 +932,10 @@ BEGIN
       NEW.customer_id,
       NEW.provider_id,
       COALESCE(NEW.total_amount, 0),
-      'pending',
+      'completed',
       'cash_on_service'
-    );
+    )
+    ON CONFLICT (booking_id) DO NOTHING;
   END IF;
   RETURN NEW;
 END;
@@ -897,6 +945,47 @@ DROP TRIGGER IF EXISTS booking_completed_payment ON public.bookings;
 CREATE TRIGGER booking_completed_payment
   AFTER UPDATE ON public.bookings
   FOR EACH ROW EXECUTE FUNCTION public.create_payment_on_completion();
+
+-- Unified booking completion handler: payment + earnings (guarantees atomicity)
+CREATE OR REPLACE FUNCTION public.handle_booking_completion()
+RETURNS TRIGGER SECURITY DEFINER AS $$
+DECLARE
+  did_insert BOOLEAN := FALSE;
+BEGIN
+  IF NEW.status = 'completed' AND OLD.status != 'completed' THEN
+    -- 1. Insert payment (idempotent via unique booking_id)
+    INSERT INTO public.payments (booking_id, customer_id, provider_id, amount, status, payment_method)
+    VALUES (
+      NEW.id,
+      NEW.customer_id,
+      NEW.provider_id,
+      COALESCE(NEW.total_amount, 0),
+      'completed',
+      'cash_on_service'
+    )
+    ON CONFLICT (booking_id) DO NOTHING;
+
+    GET DIAGNOSTICS did_insert = ROW_COUNT;
+
+    -- 2. Only increment earnings if payment was newly inserted.
+    --    If conflict occurred (booking already processed), skip to prevent double-count.
+    IF did_insert THEN
+      UPDATE public.providers
+      SET
+        completed_jobs = COALESCE(completed_jobs, 0) + 1,
+        total_earnings = COALESCE(total_earnings, 0) + COALESCE(NEW.total_amount, 0)
+      WHERE id = NEW.provider_id;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS bookings_update_earnings ON public.bookings;
+DROP TRIGGER IF EXISTS booking_completed_payment ON public.bookings;
+CREATE TRIGGER bookings_handle_completion
+  AFTER UPDATE ON public.bookings
+  FOR EACH ROW EXECUTE FUNCTION public.handle_booking_completion();
 
 -- Enforce: only completed bookings can be reviewed
 CREATE OR REPLACE FUNCTION public.validate_review_booking_status()
@@ -1003,20 +1092,22 @@ CREATE OR REPLACE FUNCTION public.sync_provider_stats()
 RETURNS TRIGGER SECURITY DEFINER AS $$
 BEGIN
   INSERT INTO public.provider_stats (
-    provider_id, completed_jobs, total_reviews, average_rating, response_rate
+    provider_id, completed_jobs, total_reviews, average_rating, response_rate, total_earnings
   )
   VALUES (
     NEW.id,
     COALESCE(NEW.completed_jobs, 0),
     COALESCE(NEW.total_reviews, 0),
     COALESCE(NEW.rating, 0.00),
-    COALESCE(NEW.response_rate, 0)
+    COALESCE(NEW.response_rate, 0),
+    COALESCE(NEW.total_earnings, 0.00)
   )
   ON CONFLICT (provider_id) DO UPDATE SET
     completed_jobs = EXCLUDED.completed_jobs,
     total_reviews = EXCLUDED.total_reviews,
     average_rating = EXCLUDED.average_rating,
     response_rate = EXCLUDED.response_rate,
+    total_earnings = EXCLUDED.total_earnings,
     updated_at = NOW();
   RETURN NEW;
 END;

@@ -30,6 +30,7 @@ interface PendingProvider {
   updated_at: string;
   category: { name: string; icon: string } | null;
   users: { full_name: string | null; email: string; avatar_url: string | null };
+  provider_documents?: { id: string }[];
 }
 
 type NavProp = NativeStackNavigationProp<AdminStackParamList>;
@@ -41,7 +42,6 @@ export default function PendingProvidersScreen() {
   const [loading, setLoading] = useState(true);
 
   const fetchPending = useCallback(async () => {
-    console.log('[PendingProvidersScreen] Fetching pending providers...');
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -49,21 +49,16 @@ export default function PendingProvidersScreen() {
         .select(`
           id, business_name, city, province, status, created_at, updated_at,
           category:categories(name, icon),
-          users!providers_id_fkey(full_name, email, avatar_url)
+          users!providers_id_fkey(full_name, email, avatar_url),
+          provider_documents(id)
         `)
         .eq('status', 'pending_review')
         .order('updated_at', { ascending: true });
-      
-      console.log('[PendingProvidersScreen] Data received:', data);
-      console.log('[PendingProvidersScreen] Providers count:', data?.length ?? 0);
-      
-      if (error) {
-        console.error('[PendingProvidersScreen] Fetch error:', error);
-      }
-      
+
+      if (error) throw error;
       setProviders((data ?? []) as unknown as PendingProvider[]);
     } catch (err) {
-      console.error('[PendingProvidersScreen] Fetch exception:', err);
+      console.error('[PendingProvidersScreen] Fetch error:', err);
     } finally {
       setLoading(false);
     }
@@ -73,7 +68,6 @@ export default function PendingProvidersScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      console.log('[PendingProvidersScreen] Screen focused, refetching...');
       fetchPending();
     }, [fetchPending])
   );
@@ -84,60 +78,30 @@ export default function PendingProvidersScreen() {
       {
         text: 'Approve',
         onPress: async () => {
-          console.log('[PendingProvidersScreen] === STARTING APPROVE ===');
-          console.log('[PendingProvidersScreen] Provider ID:', id);
-          console.log('[PendingProvidersScreen] Provider Name:', name);
-          console.log('[PendingProvidersScreen] Admin User ID:', user?.id);
-          
           try {
-            const updateData = {
-              status: 'approved' as const,
-              is_verified: true,
-              approved_at: new Date().toISOString(),
-              approved_by: user?.id ?? null,
-            };
-            console.log('[PendingProvidersScreen] Update payload:', updateData);
-            
-            const { data: updateDataResponse, error: updateError } = await supabase
+            const { error: updateError } = await supabase
               .from('providers')
-              .update(updateData)
-              .eq('id', id)
-              .select();
-            
-            console.log('[PendingProvidersScreen] Update response data:', updateDataResponse);
-            
+              .update({
+                status: 'approved' as const,
+                is_verified: true,
+                approved_at: new Date().toISOString(),
+                approved_by: user?.id ?? null,
+              })
+              .eq('id', id);
+
             if (updateError) {
-              console.error('[PendingProvidersScreen] === UPDATE FAILED ===');
-              console.error('[PendingProvidersScreen] Error details:', JSON.stringify(updateError, null, 2));
-              console.error('[PendingProvidersScreen] Error code:', updateError.code);
-              console.error('[PendingProvidersScreen] Error message:', updateError.message);
-              console.error('[PendingProvidersScreen] Error hint:', updateError.hint);
-              console.error('[PendingProvidersScreen] Error details:', updateError.details);
               Alert.alert('Error', `Failed to approve provider: ${updateError.message}`);
               return;
             }
-            
-            console.log('[PendingProvidersScreen] === UPDATE SUCCESS ===');
-            console.log('[PendingProvidersScreen] Rows affected:', updateDataResponse?.length ?? 0);
-            
-            const { error: logError } = await supabase.from('provider_verification_logs').insert({
+
+            await supabase.from('provider_verification_logs').insert({
               provider_id: id,
               action: 'approved',
               performed_by: user?.id ?? null,
             });
-            
-            if (logError) {
-              console.error('[PendingProvidersScreen] Log error:', logError);
-            } else {
-              console.log('[PendingProvidersScreen] Verification log inserted successfully');
-            }
-            
-            console.log('[PendingProvidersScreen] === REFRESHING LIST ===');
+
             await fetchPending();
-            console.log('[PendingProvidersScreen] === APPROVE COMPLETE ===');
           } catch (err) {
-            console.error('[PendingProvidersScreen] === APPROVE EXCEPTION ===');
-            console.error('[PendingProvidersScreen] Exception:', err);
             Alert.alert('Error', 'Failed to approve provider');
           }
         },
@@ -150,67 +114,33 @@ export default function PendingProvidersScreen() {
       'Reject Provider',
       `Enter rejection reason for ${name ?? 'this provider'}:`,
       async (reason) => {
-        if (!reason?.trim()) {
-          console.log('[PendingProvidersScreen] Reject cancelled - no reason provided');
-          return;
-        }
-        
-        console.log('[PendingProvidersScreen] === STARTING REJECT ===');
-        console.log('[PendingProvidersScreen] Provider ID:', id);
-        console.log('[PendingProvidersScreen] Provider Name:', name);
-        console.log('[PendingProvidersScreen] Admin User ID:', user?.id);
-        console.log('[PendingProvidersScreen] Rejection Reason:', reason.trim());
-        
+        if (!reason?.trim()) return;
+
         try {
-          const updateData = {
-            status: 'rejected' as const,
-            is_verified: false,
-            rejected_by: user?.id ?? null,
-            rejection_reason: reason.trim(),
-          };
-          console.log('[PendingProvidersScreen] Update payload:', updateData);
-          
-          const { data: updateDataResponse, error: updateError } = await supabase
+          const { error: updateError } = await supabase
             .from('providers')
-            .update(updateData)
-            .eq('id', id)
-            .select();
-          
-          console.log('[PendingProvidersScreen] Update response data:', updateDataResponse);
-          
+            .update({
+              status: 'rejected' as const,
+              is_verified: false,
+              rejected_by: user?.id ?? null,
+              rejection_reason: reason.trim(),
+            })
+            .eq('id', id);
+
           if (updateError) {
-            console.error('[PendingProvidersScreen] === UPDATE FAILED ===');
-            console.error('[PendingProvidersScreen] Error details:', JSON.stringify(updateError, null, 2));
-            console.error('[PendingProvidersScreen] Error code:', updateError.code);
-            console.error('[PendingProvidersScreen] Error message:', updateError.message);
-            console.error('[PendingProvidersScreen] Error hint:', updateError.hint);
-            console.error('[PendingProvidersScreen] Error details:', updateError.details);
             Alert.alert('Error', `Failed to reject provider: ${updateError.message}`);
             return;
           }
-          
-          console.log('[PendingProvidersScreen] === UPDATE SUCCESS ===');
-          console.log('[PendingProvidersScreen] Rows affected:', updateDataResponse?.length ?? 0);
-          
-          const { error: logError } = await supabase.from('provider_verification_logs').insert({
+
+          await supabase.from('provider_verification_logs').insert({
             provider_id: id,
             action: 'rejected',
             performed_by: user?.id ?? null,
             notes: reason.trim(),
           });
-          
-          if (logError) {
-            console.error('[PendingProvidersScreen] Log error:', logError);
-          } else {
-            console.log('[PendingProvidersScreen] Verification log inserted successfully');
-          }
-          
-          console.log('[PendingProvidersScreen] === REFRESHING LIST ===');
+
           await fetchPending();
-          console.log('[PendingProvidersScreen] === REJECT COMPLETE ===');
         } catch (err) {
-          console.error('[PendingProvidersScreen] === REJECT EXCEPTION ===');
-          console.error('[PendingProvidersScreen] Exception:', err);
           Alert.alert('Error', 'Failed to reject provider');
         }
       },
@@ -264,6 +194,12 @@ export default function PendingProvidersScreen() {
                       <Text style={styles.locText}>{[item.city, item.province].filter(Boolean).join(', ')}</Text>
                     </View>
                   )}
+                  <View style={[styles.docBadge, { backgroundColor: (item.provider_documents?.length ?? 0) > 0 ? COLORS.successLight : COLORS.errorLight }]}>
+                    <Ionicons name="document-outline" size={10} color={(item.provider_documents?.length ?? 0) > 0 ? COLORS.success : COLORS.error} />
+                    <Text style={[styles.docBadgeText, { color: (item.provider_documents?.length ?? 0) > 0 ? COLORS.success : COLORS.error }]}>
+                      {(item.provider_documents?.length ?? 0)} docs
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -330,6 +266,8 @@ const styles = StyleSheet.create({
   catText: { fontSize: FONTS.sizes.xs, color: COLORS.primary, fontFamily: FONTS.semiBold },
   locRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   locText: { fontSize: FONTS.sizes.xs, color: COLORS.textLight },
+  docBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: BORDER_RADIUS.full, paddingHorizontal: 6, paddingVertical: 2 },
+  docBadgeText: { fontSize: 10, fontFamily: FONTS.semiBold },
   bio: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, lineHeight: 20, marginBottom: SPACING.sm },
   appliedDate: { fontSize: FONTS.sizes.xs, color: COLORS.textLight, marginBottom: SPACING.sm },
   actions: { flexDirection: 'row', gap: SPACING.sm },

@@ -89,7 +89,7 @@ export default function ReviewScreen() {
     const rawExt = (uri.split('.').pop() ?? 'jpg').split('?')[0].split('#')[0].toLowerCase();
     const ext = rawExt === 'jpg' || rawExt === 'jpeg' ? 'jpeg' : rawExt === 'png' ? 'png' : 'jpeg';
     const mime = `image/${ext}`;
-    const path = `${user.id}/${Date.now()}.${ext}`;
+    const path = `${user.id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
     try {
       const publicUrl = await uploadImageToStorage('review-media', path, uri, mime);
       return publicUrl;
@@ -154,6 +154,10 @@ export default function ReviewScreen() {
       if (photos.length > 0) {
         const uploadResults = await Promise.all(photos.map((uri) => uploadReviewPhoto(uri)));
         photoUrls = uploadResults.filter((url): url is string => url !== null);
+        if (photoUrls.length < photos.length) {
+          const failedCount = photos.length - photoUrls.length;
+          showWarning(`${failedCount} photo(s) failed to upload. Review will be submitted with ${photoUrls.length} photo(s).`);
+        }
       }
 
       // 5. Build complete payload with denormalized customer fields
@@ -296,6 +300,13 @@ export default function ReviewScreen() {
               </View>
             </View>
 
+            <View style={styles.disclosureBox}>
+              <Ionicons name="information-circle-outline" size={16} color={COLORS.textLight} />
+              <Text style={styles.disclosureText}>
+                Photos and reviews you submit may be publicly displayed on provider profiles.
+              </Text>
+            </View>
+
             <Button
               title="Submit Review"
               onPress={handleSubmit}
@@ -371,4 +382,21 @@ const styles = StyleSheet.create({
   },
   addPhotoText: { fontSize: FONTS.sizes.xs, color: COLORS.primary, fontFamily: FONTS.semiBold },
   submitBtn: { marginBottom: SPACING.xl },
+  disclosureBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.surfaceSecondary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  disclosureText: {
+    flex: 1,
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.textLight,
+    lineHeight: 18,
+  },
 });

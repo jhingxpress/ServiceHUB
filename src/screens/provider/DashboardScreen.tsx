@@ -84,7 +84,7 @@ export default function ProviderDashboard() {
       pending: bookings.filter((b) => b.status === 'pending').length,
       active: bookings.filter((b) => ['accepted', 'in_progress'].includes(b.status)).length,
       completed: bookings.filter((b) => b.status === 'completed').length,
-      earnings: providerRes.data?.earnings_total ?? 0,
+      earnings: providerRes.data?.total_earnings ?? 0,
     });
 
     setChecklist(checklistRes.data ?? null);

@@ -51,7 +51,7 @@ export default function CategoryListScreen({ route, navigation }: Props) {
         .eq('parent_id', categoryId);
 
       const leafIds = (leafCategories ?? []).map((c: any) => c.id);
-      const categoryIds = leafIds.length > 0 ? leafIds : [categoryId];
+      const categoryIds = leafIds.length > 0 ? [...leafIds, categoryId] : [categoryId];
 
       // Step 2: Query services using leaf category IDs with inner join
       const { data } = await supabase

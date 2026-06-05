@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
@@ -79,6 +80,12 @@ export default function BookingDetailScreen() {
 
     return () => { supabase.removeChannel(channel); };
   }, [bookingId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchBooking();
+    }, [bookingId])
+  );
 
   const handleCancel = () => {
     Alert.alert('Cancel Booking', 'Are you sure you want to cancel this booking?', [
@@ -278,6 +285,12 @@ export default function BookingDetailScreen() {
               style={styles.actionBtn}
             />
           )}
+          {isCompleted && hasReview && (
+            <View style={styles.reviewedBadge}>
+              <Ionicons name="checkmark-circle" size={18} color={COLORS.success} />
+              <Text style={styles.reviewedText}>Review Submitted</Text>
+            </View>
+          )}
           {isCancellable && (
             <Button
               title="Cancel Booking"
@@ -350,4 +363,20 @@ const styles = StyleSheet.create({
   notesText: { fontSize: FONTS.sizes.base, color: COLORS.textSecondary, lineHeight: 22 },
   actions: { paddingHorizontal: SPACING.md, gap: SPACING.sm },
   actionBtn: { marginTop: 0 },
+  reviewedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.successLight ?? '#D1FAE5',
+    borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.success,
+  },
+  reviewedText: {
+    fontSize: FONTS.sizes.base,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.success,
+  },
 });

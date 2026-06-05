@@ -144,7 +144,7 @@ export default function MapDiscoveryScreen() {
       if (status !== 'granted') {
         Alert.alert(
           'Location Permission',
-          'Location access is needed to show nearby providers. You can still browse manually.'
+          'Location access is needed to show nearby providers. You can still browse manually.\n\nLocation information may be used for bookings, navigation, fraud prevention, and platform security.'
         );
         setUserLocation({ lat: 14.5995, lng: 120.9842 }); // Default: Manila
         return;

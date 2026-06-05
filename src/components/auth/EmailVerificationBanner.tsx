@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuthStore } from '../../stores/authStore';
+import { BETA_MODE } from '../../config/featureFlags';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../../constants/theme';
 import { RootStackParamList } from '../../navigation/types';
 
@@ -11,6 +12,7 @@ export default function EmailVerificationBanner() {
   const { user } = useAuthStore();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
+  if (BETA_MODE) return null;
   if (!user || user.email_verified) return null;
 
   return (
@@ -21,7 +23,7 @@ export default function EmailVerificationBanner() {
       </Text>
       <TouchableOpacity
         style={styles.btn}
-        onPress={() => navigation.navigate('Auth', { screen: 'EmailVerification' })}
+        onPress={() => navigation.navigate('Auth', { screen: 'EmailVerification', params: { email: user.email } })}
       >
         <Text style={styles.btnText}>Verify</Text>
       </TouchableOpacity>

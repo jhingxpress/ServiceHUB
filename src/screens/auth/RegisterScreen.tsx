@@ -7,6 +7,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,8 @@ import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { validators, validateForm } from '../../utils/validation';
 import { useErrorHandler } from '../../utils/errorHandler';
+import TermsOfServiceModal from '../../components/modals/TermsOfServiceModal';
+import PrivacyPolicyModal from '../../components/modals/PrivacyPolicyModal';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Register'>;
@@ -29,6 +32,9 @@ export default function RegisterScreen({ navigation }: Props) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const { showError } = useErrorHandler();
 
   const handleContinue = () => {
@@ -48,18 +54,25 @@ export default function RegisterScreen({ navigation }: Props) {
       return;
     }
 
+    if (!termsAccepted) {
+      setErrors({ ...validation.errors, termsAccepted: 'You must agree to the Terms of Service and Privacy Policy to continue.' });
+      Alert.alert('Consent Required', 'Please read and agree to the Terms of Service and Privacy Policy before creating an account.');
+      return;
+    }
+
     navigation.navigate('RoleSelection', {
       email: email.trim().toLowerCase(),
       password,
       fullName: fullName.trim(),
       phone: phone.trim() || undefined,
+      acceptedTerms: true,
     });
   };
 
   return (
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.kav}
       >
         <ScrollView
@@ -81,7 +94,7 @@ export default function RegisterScreen({ navigation }: Props) {
               value={fullName}
               onChangeText={setFullName}
               leftIcon="person-outline"
-              placeholder="John Doe"
+              placeholder="Juan Dela Cruz"
               autoCapitalize="words"
               error={errors.fullName}
             />
@@ -101,7 +114,7 @@ export default function RegisterScreen({ navigation }: Props) {
               onChangeText={setPhone}
               keyboardType="phone-pad"
               leftIcon="call-outline"
-              placeholder="+1 (555) 000-0000"
+              placeholder="0917 123 4567"
             />
             <Input
               label="Password"
@@ -122,12 +135,38 @@ export default function RegisterScreen({ navigation }: Props) {
               error={errors.confirmPassword}
             />
 
+            {/* Consent */}
+            <View style={styles.consentWrap}>
+              <TouchableOpacity
+                style={styles.consentRow}
+                onPress={() => {
+                  setTermsAccepted((prev) => !prev);
+                  if (errors.termsAccepted) {
+                    setErrors((prev) => { const n = { ...prev }; delete n.termsAccepted; return n; });
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+                  {termsAccepted && <Ionicons name="checkmark" size={14} color={COLORS.white} />}
+                </View>
+                <Text style={styles.consentText}>
+                  I have read and agree to the{' '}
+                  <Text style={styles.link} onPress={() => setShowTerms(true)}>Terms of Service</Text>
+                  {' '}and{' '}
+                  <Text style={styles.link} onPress={() => setShowPrivacy(true)}>Privacy Policy</Text>.
+                </Text>
+              </TouchableOpacity>
+              {errors.termsAccepted && <Text style={styles.consentError}>{errors.termsAccepted}</Text>}
+            </View>
+
             <Button
               title="Continue"
               onPress={handleContinue}
               fullWidth
               size="lg"
               style={styles.registerBtn}
+              disabled={!termsAccepted}
             />
           </View>
 
@@ -139,6 +178,9 @@ export default function RegisterScreen({ navigation }: Props) {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <TermsOfServiceModal visible={showTerms} onClose={() => setShowTerms(false)} />
+      <PrivacyPolicyModal visible={showPrivacy} onClose={() => setShowPrivacy(false)} />
     </SafeAreaView>
   );
 }
@@ -161,7 +203,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: FONTS.sizes.xxl,
     fontFamily: FONTS.bold,
-    color: COLORS.text,
+    color: COLORS.primary,
     marginBottom: SPACING.xs,
   },
   subtitle: {
@@ -186,4 +228,21 @@ const styles = StyleSheet.create({
   },
   loginText: { fontSize: FONTS.sizes.base, color: COLORS.textSecondary },
   loginLink: { fontSize: FONTS.sizes.base, color: COLORS.primary, fontFamily: FONTS.semiBold },
+  consentWrap: { marginTop: SPACING.sm, marginBottom: SPACING.sm },
+  consentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
+    marginTop: 2,
+  },
+  checkboxChecked: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  consentText: { flex: 1, fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, lineHeight: 20 },
+  link: { color: COLORS.primary, fontFamily: FONTS.semiBold },
+  consentError: { fontSize: FONTS.sizes.sm, color: COLORS.error, marginTop: SPACING.xs, marginLeft: 28 },
 });
