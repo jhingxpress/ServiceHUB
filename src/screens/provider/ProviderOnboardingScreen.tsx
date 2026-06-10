@@ -16,6 +16,13 @@ import ProviderVerificationPolicyModal from '../../components/modals/ProviderVer
 import TermsOfServiceModal from '../../components/modals/TermsOfServiceModal';
 import PrivacyPolicyModal from '../../components/modals/PrivacyPolicyModal';
 
+const toTitleCase = (str: string): string =>
+  str.toLowerCase().replace(/\b\w+\b/g, (word) => {
+    if (word === 'hvac') return 'HVAC';
+    if (word === 'it') return 'IT';
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  });
+
 const MAX_FILE_SIZE = 1024 * 1024 * 1024;
 const TOTAL_STEPS = 4;
 const STEP_TITLES = ['Business', 'Category', 'Documents', 'Review'];
@@ -76,20 +83,6 @@ const PROVINCE_SUGGESTIONS = [
   'Sorsogon','Metro Manila',
 ];
 
-const CATEGORY_EXAMPLES: Record<string, string[]> = {
-  'education & training': ['Subject Tutor','Music Lessons','Language Teacher','Driving Lessons','Skills Development','Review Center'],
-  'home services': ['Electrical Repair','Wiring Installation','Plumbing','Carpentry','Appliance Repair','Aircon Technician'],
-  'beauty & wellness': ['Hair Stylist','Makeup Artist','Massage Therapist','Nail Technician'],
-  'events & entertainment': ['Wedding Photography','Event Photography','Portrait Photography','Videography','Event Planning'],
-  'automotive': ['Car Repair','Oil Change','Tire Services','Car Detailing','Battery Replacement'],
-  'health & home care': ['Home Nursing','Physical Therapy','Senior Care','Home Cleaning','Disinfection Services'],
-  'technology & security': ['CCTV Installation','Computer Repair','Network Setup','Smart Home Setup','IT Support'],
-  'construction & renovation': ['House Renovation','Roofing','Tile Setting','Painting','Masonry'],
-  'hvac & appliances': ['Aircon Repair','Refrigerator Repair','Washing Machine Repair','Water Heater Repair'],
-  'logistics & transportation': ['Moving Services','Delivery','Truck Rental','Courier Services'],
-  'business services': ['Accounting','Tax Filing','Business Registration','Virtual Assistant'],
-  'pet services': ['Pet Grooming','Veterinary House Call','Pet Walking','Pet Boarding'],
-};
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'failed';
 
@@ -180,6 +173,7 @@ export default function ProviderOnboardingScreen() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [catLoading, setCatLoading] = useState(true);
+  const [catalogServices, setCatalogServices] = useState<string[]>([]);
 
   // Searchable suggestion dropdowns
   const [showCityDropdown, setShowCityDropdown] = useState(false);
@@ -199,17 +193,46 @@ export default function ProviderOnboardingScreen() {
   const [showPrivacy, setShowPrivacy] = useState(false);
 
   useEffect(() => {
-    loadCategories();
-    loadExistingData();
+    (async () => {
+      const cats = await loadCategories();
+      await loadExistingData(cats);
+    })();
   }, []);
 
-  // Auto-scroll to reveal examples when a category is selected on Step 2
+  // Log categories state changes for debugging
+  useEffect(() => {
+    console.log('[Onboarding] Categories loaded:', categories.length, 'parents:', categories.filter(c => c.is_parent).map(c => ({ id: c.id, name: c.name })));
+  }, [categories]);
+
+  // Log selected category changes for debugging
+  useEffect(() => {
+    const selected = categories.find(c => c.id === selectedCategoryId);
+    console.log('[Onboarding] selectedCategoryId:', selectedCategoryId, 'name:', selected?.name ?? 'NOT FOUND in categories');
+  }, [selectedCategoryId, categories]);
+
+  // Load suggested services from service_catalog when a category is selected on Step 2
   useEffect(() => {
     if (step === 2 && selectedCategoryId) {
-      const timer = setTimeout(() => {
-        scrollRef.current?.scrollToEnd({ animated: true });
-      }, 200);
-      return () => clearTimeout(timer);
+      const selectedCat = categories.find(c => c.id === selectedCategoryId);
+      console.log('[Catalog] Querying service_catalog with category_id:', selectedCategoryId, 'category_name:', selectedCat?.name ?? 'UNKNOWN');
+      supabase
+        .from('service_catalog')
+        .select('name')
+        .eq('category_id', selectedCategoryId)
+        .eq('is_active', true)
+        .order('sort_order')
+        .limit(6)
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('[Catalog] Error:', error);
+            setCatalogServices([]);
+          } else {
+            console.log('[Catalog] Results for', selectedCat?.name ?? selectedCategoryId, ':', data?.length ?? 0, 'services:', data?.map((d: { name: string }) => d.name) ?? []);
+            setCatalogServices(data?.map((item: { name: string }) => item.name) ?? []);
+          }
+        });
+    } else {
+      setCatalogServices([]);
     }
   }, [selectedCategoryId, step]);
 
@@ -223,10 +246,12 @@ export default function ProviderOnboardingScreen() {
     const cats = (data ?? []) as Category[];
     setCategories(cats);
     setCatLoading(false);
+    return cats;
   };
 
-  const loadExistingData = async () => {
+  const loadExistingData = async (cats: Category[]) => {
     if (!user) return;
+    console.log('[Onboarding] loadExistingData with', cats.length, 'categories');
     const { data } = await supabase.from('providers').select('*').eq('id', user.id).single();
     if (data) {
       setBusinessName(data.business_name ?? '');
@@ -239,7 +264,9 @@ export default function ProviderOnboardingScreen() {
       setYearsExp(data.years_of_experience ? String(data.years_of_experience) : '');
       setServiceArea(data.service_area ?? '');
       // Convert leaf category_id to parent for new onboarding UX
-      const provCat = categories.find(c => c.id === data.category_id);
+      console.log('[Onboarding] Provider category_id from DB:', data.category_id);
+      const provCat = cats.find(c => c.id === data.category_id);
+      console.log('[Onboarding] Mapped provCat:', provCat ? { id: provCat.id, name: provCat.name, is_parent: provCat.is_parent, parent_id: provCat.parent_id } : 'NOT FOUND');
       if (provCat?.is_parent) {
         setSelectedCategoryId(provCat.id);
         setSelectedParentId(provCat.id);
@@ -260,7 +287,9 @@ export default function ProviderOnboardingScreen() {
       .eq('is_primary', true)
       .single();
     if (pcData?.category_id) {
-      const cat = categories.find(c => c.id === pcData.category_id);
+      console.log('[Onboarding] provider_categories category_id from DB:', pcData.category_id);
+      const cat = cats.find(c => c.id === pcData.category_id);
+      console.log('[Onboarding] Mapped provider_categories cat:', cat ? { id: cat.id, name: cat.name, is_parent: cat.is_parent, parent_id: cat.parent_id } : 'NOT FOUND');
       if (cat?.is_parent) {
         setSelectedCategoryId(cat.id);
         setSelectedParentId(cat.id);
@@ -732,14 +761,17 @@ export default function ProviderOnboardingScreen() {
 
   const parentCategories = categories.filter(c => c.is_parent);
 
-  const getCategoryExamples = (catName: string): string[] => {
-    const key = catName.toLowerCase().trim();
-    return CATEGORY_EXAMPLES[key] ?? ['Various professional services'];
+  const chunk = <T,>(arr: T[], size: number): T[][] => {
+    const res: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) {
+      res.push(arr.slice(i, i + size));
+    }
+    return res;
   };
 
   const renderStep2 = () => {
     const selectedParent = parentCategories.find(p => p.id === selectedCategoryId);
-    const examples = selectedParent ? getCategoryExamples(selectedParent.name) : [];
+    const examples = catalogServices;
     return (
       <View>
         <Text style={styles.stepHeading}>Select Primary Category</Text>
@@ -748,46 +780,51 @@ export default function ProviderOnboardingScreen() {
           ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.xl }} />
           : (
             <View>
-              <View style={styles.catGrid}>
-                {parentCategories.map(parent => {
-                  const selected = parent.id === selectedCategoryId;
-                  return (
-                    <TouchableOpacity
-                      key={parent.id}
-                      style={[styles.catCard, selected && styles.catCardSelected, { borderColor: selected ? parent.color : COLORS.border }]}
-                      onPress={() => { setSelectedCategoryId(parent.id); setSelectedParentId(parent.id); }}
-                      activeOpacity={0.8}
-                    >
-                      <View style={[styles.catIcon, { backgroundColor: selected ? parent.color : `${parent.color}20` }]}>
-                        <Ionicons name={parent.icon as React.ComponentProps<typeof Ionicons>['name']} size={22} color={selected ? COLORS.white : parent.color} />
-                      </View>
-                      <Text style={[styles.catName, selected && styles.catNameSelected]} numberOfLines={2}>{parent.name}</Text>
-                      {selected && (
-                        <View style={[styles.catCheck, { backgroundColor: parent.color }]}>
-                          <Ionicons name="checkmark" size={10} color={COLORS.white} />
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {selectedParent && (
-                <View style={[styles.examplesBox, { borderLeftColor: selectedParent.color, borderLeftWidth: 4 }]}>
-                  <View style={styles.examplesHeader}>
-                    <Ionicons name="information-circle-outline" size={16} color={selectedParent.color} />
-                    <Text style={styles.examplesTitle}>{selectedParent.name}</Text>
+              {chunk(parentCategories, 2).map((row, rowIdx) => (
+                <React.Fragment key={rowIdx}>
+                  <View style={styles.catGridRow}>
+                    {row.map(parent => {
+                      const selected = parent.id === selectedCategoryId;
+                      return (
+                        <TouchableOpacity
+                          key={parent.id}
+                          style={[styles.catCard, selected && styles.catCardSelected, { borderColor: selected ? parent.color : COLORS.border }]}
+                          onPress={() => { console.log('[Onboarding] Tapped category:', parent.name, 'id:', parent.id); setSelectedCategoryId(parent.id); setSelectedParentId(parent.id); }}
+                          activeOpacity={0.8}
+                        >
+                          <View style={[styles.catIcon, { backgroundColor: selected ? parent.color : `${parent.color}20` }]}>
+                            <Ionicons name={parent.icon as React.ComponentProps<typeof Ionicons>['name']} size={22} color={selected ? COLORS.white : parent.color} />
+                          </View>
+                          <Text style={[styles.catName, selected && styles.catNameSelected]} numberOfLines={2}>{toTitleCase(parent.name)}</Text>
+                          {selected && (
+                            <View style={[styles.catCheck, { backgroundColor: parent.color }]}>
+                              <Ionicons name="checkmark" size={10} color={COLORS.white} />
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
-                  <View style={styles.examplesRow}>
-                    {examples.map(ex => (
-                      <View key={ex} style={[styles.exampleChip, { backgroundColor: `${selectedParent.color}18` }]}>
-                        <Text style={[styles.exampleChipText, { color: selectedParent.color }]}>{ex}</Text>
+                  {row.some(p => p.id === selectedCategoryId) && selectedParent && (
+                    <View style={[styles.examplesBox, { borderLeftColor: selectedParent.color, borderLeftWidth: 4 }]}>
+                      <View style={styles.examplesHeader}>
+                        <Ionicons name="information-circle-outline" size={16} color={selectedParent.color} />
+                        <Text style={styles.examplesTitle}>{toTitleCase(selectedParent.name)}</Text>
                       </View>
-                    ))}
-                  </View>
-                  <Text style={styles.examplesNote}>You will create your actual services later in Manage Services.</Text>
-                </View>
-              )}
+                      <View style={styles.examplesRow}>
+                        {examples.length > 0 ? examples.map(ex => (
+                          <View key={ex} style={[styles.exampleChip, { backgroundColor: `${selectedParent.color}18` }]}>
+                            <Text style={[styles.exampleChipText, { color: selectedParent.color }]}>{ex}</Text>
+                          </View>
+                        )) : (
+                          <Text style={styles.examplesEmpty}>No suggested services available for this category yet.</Text>
+                        )}
+                      </View>
+                      <Text style={styles.examplesNote}>You will create your actual services later in Manage Services.</Text>
+                    </View>
+                  )}
+                </React.Fragment>
+              ))}
             </View>
           )
         }
@@ -1208,6 +1245,7 @@ const styles = StyleSheet.create({
   inputMulti: { height: 100, paddingTop: SPACING.sm },
   row: { flexDirection: 'row', gap: SPACING.sm },
   catGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  catGridRow: { flexDirection: 'row', gap: SPACING.sm, width: '100%' },
   catCard: {
     width: '47%', backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.sm, borderWidth: 2, borderColor: COLORS.border,
@@ -1399,6 +1437,11 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.xs,
     color: COLORS.textSecondary,
     marginTop: SPACING.sm,
+    fontStyle: 'italic',
+  },
+  examplesEmpty: {
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.textSecondary,
     fontStyle: 'italic',
   },
 });

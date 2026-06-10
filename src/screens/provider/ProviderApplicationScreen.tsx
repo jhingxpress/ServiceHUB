@@ -14,6 +14,13 @@ import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/
 import Button from '../../components/ui/Button';
 import { Category } from '../../types';
 
+const toTitleCase = (str: string): string =>
+  str.toLowerCase().replace(/\b\w+\b/g, (word) => {
+    if (word === 'hvac') return 'HVAC';
+    if (word === 'it') return 'IT';
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  });
+
 type KYCStatus = 'not_submitted' | 'pending' | 'approved' | 'rejected';
 
 interface ProviderDocs {
@@ -253,7 +260,7 @@ export default function ProviderApplicationScreen() {
                   <Text style={styles.fieldLabel}>Service Category *</Text>
                   <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowCategoryPicker(true)}>
                     <Text style={[styles.pickerText, !form.category_id && { color: COLORS.textLight }]}>
-                      {form.category_name || 'Select your service category...'}
+                      {form.category_name ? toTitleCase(form.category_name) : 'Select your service category...'}
                     </Text>
                     <Ionicons name="chevron-down" size={18} color={COLORS.textSecondary} />
                   </TouchableOpacity>
@@ -283,7 +290,7 @@ export default function ProviderApplicationScreen() {
               <Text style={styles.sectionTitle}>Business Profile</Text>
               <SummaryRow label="Business" value={form.business_name} />
               <SummaryRow label="Owner" value={form.owner_name} />
-              <SummaryRow label="Category" value={form.category_name} />
+              <SummaryRow label="Category" value={form.category_name ? toTitleCase(form.category_name) : '-'} />
               <SummaryRow label="Address" value={form.business_address} />
             </View>
           ) : null}
@@ -368,7 +375,7 @@ export default function ProviderApplicationScreen() {
                 >
                   <Ionicons name={item.icon as React.ComponentProps<typeof Ionicons>['name']} size={22} color={form.category_id === item.id ? COLORS.primary : COLORS.textSecondary} />
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.catName, form.category_id === item.id && { color: COLORS.primary, fontFamily: FONTS.semiBold }]}>{item.name}</Text>
+                    <Text style={[styles.catName, form.category_id === item.id && { color: COLORS.primary, fontFamily: FONTS.semiBold }]}>{toTitleCase(item.name)}</Text>
                     {item.description && <Text style={styles.catDesc} numberOfLines={1}>{item.description}</Text>}
                   </View>
                   {form.category_id === item.id && <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} />}
