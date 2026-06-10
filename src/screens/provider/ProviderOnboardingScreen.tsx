@@ -500,6 +500,10 @@ export default function ProviderOnboardingScreen() {
     }
     setSubmitting(true);
     try {
+      console.log('[ONBOARDING] Provider ID', user?.id);
+      console.log('[ONBOARDING] Selected Category (parent)', selectedCategoryId);
+      console.log('[ONBOARDING] Selected Category name', categories.find(c => c.id === selectedCategoryId)?.name);
+
       const payload = {
         id: user!.id,
         business_name: businessName.trim(),
@@ -524,21 +528,31 @@ export default function ProviderOnboardingScreen() {
       const { error } = await supabase.from('providers').upsert(payload);
 
       if (error) {
+        console.error('[ONBOARDING] Provider upsert error:', error.message);
         throw error;
       }
+      console.log('[ONBOARDING] Provider upsert succeeded');
 
       // Insert / update provider_categories junction
       if (selectedCategoryId && user) {
+        console.log('[ONBOARDING] Inserting provider_categories', {
+          provider_id: user.id,
+          category_id: selectedCategoryId,
+        });
         await supabase.from('provider_categories').delete()
           .eq('provider_id', user.id).eq('is_primary', true);
-        const { error: pcErr } = await supabase.from('provider_categories').insert({
+        const { data: pcResult, error: pcErr } = await supabase.from('provider_categories').insert({
           provider_id: user.id,
           category_id: selectedCategoryId,
           is_primary: true,
-        });
+        }).select();
+        console.log('[ONBOARDING] Insert Result', { data: pcResult, error: pcErr?.message ?? null });
         if (pcErr) {
-          console.error('[handleSubmit] provider_categories insert error:', pcErr.message);
+          console.error('[ONBOARDING] Insert Error', pcErr.message);
+          Alert.alert('Warning', 'Provider profile saved, but category linking failed. Please contact support.');
         }
+      } else {
+        console.log('[ONBOARDING] Skipping provider_categories — no selectedCategoryId');
       }
 
       try {

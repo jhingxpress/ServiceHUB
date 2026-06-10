@@ -14,6 +14,7 @@ import { AuthStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../stores/authStore';
 import { useRecaptcha } from '../../components/recaptcha/RecaptchaV3';
 import { BETA_MODE } from '../../config/featureFlags';
+import { debugLogger } from '../../services/debugLogger';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'RoleSelection'>;
@@ -46,17 +47,42 @@ export default function RoleSelectionScreen({ route, navigation }: Props) {
       }
       // In BETA_MODE, signUp sets user state directly; RootNavigator auto-routes into the app.
     } catch (err: any) {
-      const message =
+      const rawMsg: string =
         err?.message ??
         err?.error_description ??
         err?.msg ??
         (typeof err === 'string' ? err : null) ??
         JSON.stringify(err);
-      console.log('[ROLESELECT] Sign up error:', message, 'raw:', err);
-      if (message.includes('reCAPTCHA')) {
-        Alert.alert('Security Check Failed', message || 'Please try again.');
+      const lower = (rawMsg ?? '').toLowerCase();
+      console.log('[ROLESELECT] Sign up error:', rawMsg, 'raw:', err);
+
+      if (lower.includes('email rate limit') || lower.includes('rate limit exceeded') || lower.includes('rate limit')) {
+        debugLogger.log('signup_rate_limited', { t: Date.now() });
+        Alert.alert(
+          'Email Already Sent',
+          "We've already sent a verification email. Please check your inbox and wait a few minutes before requesting another email."
+        );
+      } else if (lower.includes('user already registered') || lower.includes('already registered')) {
+        debugLogger.log('signup_existing_account', { t: Date.now() });
+        Alert.alert(
+          'Account Already Exists',
+          'This email already has an account. Try signing in or resetting your password.'
+        );
+      } else if (
+        lower.includes('fetch') ||
+        lower.includes('network request failed') ||
+        lower.includes('failed to fetch') ||
+        lower.includes('network')
+      ) {
+        debugLogger.log('signup_network_error', { t: Date.now() });
+        Alert.alert(
+          'Network Issue',
+          'Unable to confirm whether registration completed. Please check your inbox before trying again.'
+        );
+      } else if (lower.includes('recaptcha')) {
+        Alert.alert('Security Check Failed', rawMsg || 'Please try again.');
       } else {
-        Alert.alert('Sign Up Failed', message || 'Unknown error');
+        Alert.alert('Sign Up Failed', rawMsg || 'Unknown error');
       }
     } finally {
       setLoading(false);

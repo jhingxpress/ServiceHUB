@@ -301,11 +301,10 @@ export default function ProviderDashboard() {
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickRow}>
             {[
-              { label: 'Notifications', icon: 'notifications-outline', action: () => navigation.getParent()?.navigate('NotificationCenter'), badge: unreadCount > 0 ? formatBadgeCount(unreadCount) ?? undefined : undefined },
-              { label: 'Requests', icon: 'clipboard-outline', action: () => navigation.getParent()?.navigate('Requests'), badge: stats.pending > 0 ? stats.pending.toString() : undefined },
-              { label: 'Active Jobs', icon: 'play-circle-outline', action: () => navigation.getParent()?.navigate('ActiveJobs'), badge: stats.active > 0 ? stats.active.toString() : undefined },
+              { label: 'Pending', icon: 'time-outline', action: () => navigation.getParent()?.navigate('Requests'), badge: stats.pending > 0 ? stats.pending.toString() : undefined },
+              { label: 'Messages', icon: 'chatbubble-outline', action: () => navigation.getParent()?.navigate('Messages'), badge: undefined },
               { label: 'Services', icon: 'construct-outline', action: () => navigation.navigate('ManageServices') },
-              { label: 'Earnings', icon: 'wallet-outline', action: () => navigation.getParent()?.navigate('Earnings'), badge: stats.earnings > 0 ? `₱${stats.earnings}` : undefined },
+              { label: 'Reviews', icon: 'star-outline', action: () => navigation.navigate('ProviderReviews'), badge: newReviewCount > 0 ? newReviewCount.toString() : undefined },
             ].map((q) => (
               <TouchableOpacity
                 key={q.label}

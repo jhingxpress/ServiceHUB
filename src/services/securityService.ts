@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { debugLogger } from './debugLogger';
 
 export type RateLimitAction =
   | 'login'
@@ -126,23 +127,65 @@ export async function verifyRecaptchaToken(
   }
 }
 
-export async function checkUserStatus(userId: string): Promise<SecurityCheckResult> {
-  const { data, error } = await supabase
+export async function checkUserStatus(userId: string, caller?: string): Promise<SecurityCheckResult> {
+  const callerLabel = caller ?? 'unknown';
+  debugLogger.log('checkUserStatus_request', { userId, caller: callerLabel });
+
+  debugLogger.log('checkUserStatus_before_query', { caller: callerLabel, userId, t: Date.now() });
+  const { data, error, status } = await supabase
     .from('users')
     .select('status')
     .eq('id', userId)
     .single();
+  debugLogger.log('checkUserStatus_after_query', { caller: callerLabel, userId, t: Date.now() });
+
+  console.log('[STATUS CHECK]', {
+    userId,
+    data,
+    error,
+    code: (error as { code?: string })?.code,
+    status: data?.status,
+  });
+
+  debugLogger.log('checkUserStatus_response', {
+    userId,
+    hasData: !!data,
+    dataStatus: data?.status,
+    hasError: !!error,
+    errorCode: (error as { code?: string })?.code,
+    errorMessage: error?.message,
+  });
 
   if (error || !data) {
+    const code = (error as { code?: string })?.code;
+    console.warn('[SECURITY] checkUserStatus query failed', {
+      userId,
+      code,
+      message: error?.message,
+      httpStatus: status,
+    });
+
+    // If the profile row hasn't been created yet (PostgREST code PGRST116) let the
+    // auth flow continue — syncUserProfile() runs immediately afterward and will
+    // upsert the missing row. For any other error we fail closed as before.
+    if (code === 'PGRST116') {
+      debugLogger.log('checkUserStatus_PGRST116', { userId, allowed: true });
+      return { allowed: true };
+    }
+
+    debugLogger.log('checkUserStatus_error', { userId, code, allowed: false });
     return { allowed: false, error: 'Unable to verify account status.' };
   }
 
   if (data.status === 'suspended') {
+    debugLogger.log('checkUserStatus_suspended', { userId, allowed: false });
     return { allowed: false, error: 'Your account is suspended. Contact support.' };
   }
   if (data.status === 'banned') {
+    debugLogger.log('checkUserStatus_banned', { userId, allowed: false });
     return { allowed: false, error: 'Your account has been banned.' };
   }
 
+  debugLogger.log('checkUserStatus_allowed', { userId, status: data.status, allowed: true });
   return { allowed: true };
 }

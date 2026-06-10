@@ -14,6 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../../constants/theme';
+import TermsOfServiceModal from '../../components/modals/TermsOfServiceModal';
+import PrivacyPolicyModal from '../../components/modals/PrivacyPolicyModal';
 
 const TERMS_VERSION = '1.0';
 
@@ -40,13 +42,24 @@ export default function ProfileCompletionScreen() {
   };
 
   const handleSubmit = async () => {
+    console.log('[PROFILE] Continue pressed', {
+      role,
+      fullName: fullName.trim(),
+      phone: phone.trim(),
+      termsAccepted,
+      privacyAccepted,
+    });
+
     const error = validate();
     if (error) {
+      console.log('[PROFILE] Validation failed:', error);
       Alert.alert('Required', error);
       return;
     }
+
     setSubmitting(true);
     try {
+      console.log('[PROFILE] Calling completeProfileSetup...');
       await completeProfileSetup({
         full_name: fullName.trim(),
         phone: phone.trim(),
@@ -55,8 +68,9 @@ export default function ProfileCompletionScreen() {
         accepted_privacy_at: new Date().toISOString(),
         accepted_terms_version: TERMS_VERSION,
       });
-      // RootNavigator will auto-route once user state is refreshed
+      console.log('[PROFILE] completeProfileSetup succeeded — RootNavigator should switch');
     } catch (err) {
+      console.error('[PROFILE] completeProfileSetup error:', err);
       const msg = err instanceof Error ? err.message : 'Failed to save profile. Please try again.';
       Alert.alert('Error', msg);
     } finally {
@@ -192,6 +206,9 @@ export default function ProfileCompletionScreen() {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <TermsOfServiceModal visible={showTerms} onClose={() => setShowTerms(false)} />
+      <PrivacyPolicyModal visible={showPrivacy} onClose={() => setShowPrivacy(false)} />
     </SafeAreaView>
   );
 }

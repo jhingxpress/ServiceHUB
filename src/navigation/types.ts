@@ -3,6 +3,8 @@ import { NavigatorScreenParams } from '@react-navigation/native';
 export type RootStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
   ProfileCompletion: undefined;
+  EmailVerified: undefined;
+  ResetPassword: undefined;
   Customer: NavigatorScreenParams<CustomerStackParamList>;
   Provider: NavigatorScreenParams<ProviderStackParamList>;
   Admin: NavigatorScreenParams<AdminStackParamList>;
@@ -10,7 +12,7 @@ export type RootStackParamList = {
 
 export type AuthStackParamList = {
   Splash: undefined;
-  Login: undefined;
+  Login: { email?: string } | undefined;
   Register: undefined;
   RoleSelection: { email: string; password: string; fullName: string; phone?: string; acceptedTerms?: boolean };
   EmailVerification: { email?: string };

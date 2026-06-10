@@ -8,8 +8,9 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthStackParamList } from '../../navigation/types';
@@ -21,18 +22,32 @@ import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { validators, validateForm } from '../../utils/validation';
 import { useErrorHandler } from '../../utils/errorHandler';
+import DebugAuthScreen from '../debug/DebugAuthScreen';
 
-type Props = {
-  navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'>;
-};
+type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
-export default function LoginScreen({ navigation }: Props) {
-  const [email, setEmail] = useState('');
+export default function LoginScreen({ navigation, route }: Props) {
+  const prefillEmail = route.params?.email ?? '';
+  const [email, setEmail] = useState(prefillEmail);
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [debugVisible, setDebugVisible] = useState(false);
+  const [tapCount, setTapCount] = useState(0);
   const { signIn, signInWithGoogle, isLoading } = useAuthStore();
   const { execute } = useRecaptcha();
   const { showError } = useErrorHandler();
+
+  const handleLogoTap = () => {
+    setTapCount((prev) => {
+      const newCount = prev + 1;
+      if (newCount >= 5) {
+        setDebugVisible(true);
+        return 0;
+      }
+      setTimeout(() => setTapCount(0), 2000);
+      return newCount;
+    });
+  };
 
   const handleLogin = async () => {
     const validation = validateForm(
@@ -55,6 +70,8 @@ export default function LoginScreen({ navigation }: Props) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       if (errorMessage.includes('reCAPTCHA')) {
         showError(err, 'Security check failed. Please try again.');
+      } else if (errorMessage.toLowerCase().includes('verify your email') || errorMessage.toLowerCase().includes('email not confirmed')) {
+        navigation.navigate('EmailVerification', { email: email.trim().toLowerCase() });
       } else {
         showError(err, 'Login failed. Please check your credentials and try again.');
       }
@@ -74,14 +91,25 @@ export default function LoginScreen({ navigation }: Props) {
         >
           {/* Header */}
           <View style={styles.header}>
-            <Image
-              source={require('../../../assets/icon.png')}
-              style={styles.logoMiniImage}
-              resizeMode="contain"
-            />
+            <TouchableOpacity onPress={handleLogoTap} activeOpacity={0.9}>
+              <Image
+                source={require('../../../assets/icon.png')}
+                style={styles.logoMiniImage}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
             <Text style={styles.title}>Welcome back</Text>
             <Text style={styles.subtitle}>Sign in to your ServiceHub account</Text>
           </View>
+
+          {prefillEmail ? (
+            <View style={styles.verifiedBanner}>
+              <Ionicons name="checkmark-circle" size={18} color={COLORS.success} />
+              <Text style={styles.verifiedBannerText}>
+                Your email was verified on another device. Sign in below to continue.
+              </Text>
+            </View>
+          ) : null}
 
           {/* Form */}
           <View style={styles.form}>
@@ -154,6 +182,14 @@ export default function LoginScreen({ navigation }: Props) {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={debugVisible}
+        animationType="slide"
+        onRequestClose={() => setDebugVisible(false)}
+      >
+        <DebugAuthScreen onClose={() => setDebugVisible(false)} />
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -256,5 +292,23 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.base,
     color: COLORS.primary,
     fontFamily: FONTS.semiBold,
+  },
+  verifiedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.success + '18',
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.success + '40',
+  },
+  verifiedBannerText: {
+    flex: 1,
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.regular,
+    color: COLORS.success,
+    lineHeight: 18,
   },
 });

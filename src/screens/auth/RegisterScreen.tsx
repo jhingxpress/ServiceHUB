@@ -122,7 +122,7 @@ export default function RegisterScreen({ navigation }: Props) {
               onChangeText={setPassword}
               isPassword
               leftIcon="lock-closed-outline"
-              placeholder="Minimum 6 characters"
+              placeholder="Min 8 chars, uppercase, number"
               error={errors.password}
             />
             <Input

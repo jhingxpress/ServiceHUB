@@ -2,6 +2,9 @@
 // Supabase Edge Function — send-push-notification
 // Deploy: supabase functions deploy send-push-notification
 // Deno runtime — no npm imports needed
+//
+// CHANGELOG:
+// 2026-06-06 — Added complete Expo ticket and response diagnostic logging.
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -29,7 +32,8 @@ interface PushToken {
 interface ExpoTicket {
   id?: string;
   status: 'ok' | 'error';
-  details?: { error?: string };
+  details?: { error?: string; fault?: string };
+  message?: string;
 }
 
 serve(async (req: Request) => {
@@ -39,6 +43,24 @@ serve(async (req: Request) => {
 
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+  }
+
+  // ─────────────────────────────────────────────
+  // Caller authentication — shared secret guard
+  // PUSH_NOTIFICATION_SECRET must be set in Supabase Edge Function secrets.
+  // The DB trigger reads the same value from platform_config and sends it
+  // as the x-push-secret header. Direct / anonymous callers are rejected.
+  // ─────────────────────────────────────────────
+  const expectedSecret = Deno.env.get('PUSH_NOTIFICATION_SECRET');
+  if (expectedSecret) {
+    const incomingSecret = req.headers.get('x-push-secret');
+    if (!incomingSecret || incomingSecret !== expectedSecret) {
+      console.error('[push] Unauthorized: missing or invalid x-push-secret header');
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -74,7 +96,30 @@ serve(async (req: Request) => {
     );
   }
 
+  // Input validation
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_RE.test(user_id)) {
+    return new Response(
+      JSON.stringify({ error: 'user_id must be a valid UUID' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+  if (typeof title !== 'string' || title.length > 200) {
+    return new Response(
+      JSON.stringify({ error: 'title must be a string of 200 characters or fewer' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+  if (typeof body !== 'string' || body.length > 1000) {
+    return new Response(
+      JSON.stringify({ error: 'body must be a string of 1000 characters or fewer' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // ─────────────────────────────────────────────
   // 1. Fetch all push tokens for this user
+  // ─────────────────────────────────────────────
   const { data: tokens, error: tokenErr } = await db
     .from('user_push_tokens')
     .select('id, expo_push_token')
@@ -95,6 +140,8 @@ serve(async (req: Request) => {
     );
   }
 
+  console.log(`[push] Found ${tokens.length} token(s) for user ${user_id}`);
+
   const validTokens = (tokens as PushToken[]).filter(
     (t) => t.expo_push_token && t.expo_push_token.startsWith('ExponentPushToken[')
   );
@@ -106,7 +153,11 @@ serve(async (req: Request) => {
     );
   }
 
+  console.log('[push] Valid tokens:', validTokens.map((t) => t.expo_push_token));
+
+  // ─────────────────────────────────────────────
   // 2. Build Expo messages
+  // ─────────────────────────────────────────────
   const messages = validTokens.map((t) => ({
     to: t.expo_push_token,
     title,
@@ -117,13 +168,18 @@ serve(async (req: Request) => {
     priority: 'high',
   }));
 
+  console.log('[push] Messages payload:', JSON.stringify(messages, null, 2));
+
+  // ─────────────────────────────────────────────
   // 3. Send to Expo Push API (batch up to 100)
+  // ─────────────────────────────────────────────
   const BATCH_SIZE = 100;
   const allTickets: ExpoTicket[] = [];
 
   for (let i = 0; i < messages.length; i += BATCH_SIZE) {
     const batch = messages.slice(i, i + BATCH_SIZE);
     try {
+      console.log('[push] Sending batch to Expo...');
       const res = await fetch(EXPO_PUSH_URL, {
         method: 'POST',
         headers: {
@@ -133,21 +189,56 @@ serve(async (req: Request) => {
         },
         body: JSON.stringify(batch),
       });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error(`[push] Expo HTTP error ${res.status}:`, errorText);
+        continue;
+      }
+
       const result = await res.json();
+      console.log('[push] Expo raw response:', JSON.stringify(result, null, 2));
+
       if (Array.isArray(result.data)) {
         allTickets.push(...result.data);
+      } else if (result.errors) {
+        console.error('[push] Expo returned errors:', JSON.stringify(result.errors));
+      } else {
+        console.error('[push] Unexpected Expo response shape:', JSON.stringify(result));
       }
     } catch (err) {
       console.error('[push] Expo API error:', err);
     }
   }
 
-  // 4. Handle DeviceNotRegistered errors — remove invalid tokens
+  // ─────────────────────────────────────────────
+  // 4. Log every ticket detail
+  // ─────────────────────────────────────────────
+  console.log('[push] All tickets:', JSON.stringify(allTickets, null, 2));
+
+  allTickets.forEach((ticket, i) => {
+    if (ticket.status === 'error') {
+      console.error(
+        `[push] Ticket #${i} ERROR:`,
+        ticket.details?.error ?? 'unknown',
+        '| message:', ticket.message ?? 'none',
+        '| details:', JSON.stringify(ticket.details)
+      );
+    } else {
+      console.log(`[push] Ticket #${i} OK: id=${ticket.id}`);
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // 5. Handle DeviceNotRegistered errors — remove invalid tokens
+  // ─────────────────────────────────────────────
   const invalidTokenIds: string[] = [];
+
   allTickets.forEach((ticket, i) => {
     if (ticket.status === 'error' && ticket.details?.error === 'DeviceNotRegistered') {
       if (validTokens[i]) {
         invalidTokenIds.push(validTokens[i].id);
+        console.log(`[push] Marking token ${validTokens[i].id} as invalid (DeviceNotRegistered)`);
       }
     }
   });
@@ -169,6 +260,9 @@ serve(async (req: Request) => {
 
   console.log(`[push] Sent: ${sent}, Failed: ${failed}, Invalid removed: ${invalidTokenIds.length}`);
 
+  // ─────────────────────────────────────────────
+  // 6. Response
+  // ─────────────────────────────────────────────
   return new Response(
     JSON.stringify({
       sent,

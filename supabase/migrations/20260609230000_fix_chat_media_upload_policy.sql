@@ -1,0 +1,36 @@
+-- ============================================================
+-- SECURITY FIX: Drop weak chat-media upload policy
+-- Date: 2026-06-09
+-- ============================================================
+--
+-- Vulnerability (Finding 4.2):
+--   Migration 20260603190000_security_sprint_pre_launch.sql created
+--   "Chat media sender upload" alongside the existing booking-ownership
+--   policy "Chat media upload by participants". PostgreSQL evaluates
+--   INSERT policies using OR logic — if ANY WITH CHECK passes, the
+--   INSERT is allowed. The weak policy had no booking relationship check:
+--
+--     WITH CHECK (
+--       bucket_id = 'chat-media'
+--       AND NOT public.has_dangerous_extension(name)
+--     )
+--
+--   This allowed any authenticated user to upload to any path inside
+--   the chat-media bucket, regardless of booking participation.
+--
+-- Fix:
+--   Drop "Chat media sender upload". The correct policy
+--   "Chat media upload by participants" (from 20260601060000) remains
+--   active and enforces booking ownership on every upload.
+--
+-- Retained policy (unchanged):
+--   "Chat media upload by participants" — WITH CHECK (
+--     bucket_id = 'chat-media'
+--     AND (storage.foldername(name))[1] IN (
+--       SELECT id::text FROM public.bookings
+--       WHERE customer_id = auth.uid() OR provider_id = auth.uid()
+--     )
+--   )
+-- ============================================================
+
+DROP POLICY IF EXISTS "Chat media sender upload" ON storage.objects;

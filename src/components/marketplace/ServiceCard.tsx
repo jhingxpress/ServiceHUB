@@ -36,7 +36,7 @@ interface Props {
   onPress: () => void;
   showBookButton?: boolean;
   onBook?: () => void;
-  variant?: 'featured' | 'compact';
+  style?: object;
 }
 
 export default function ServiceCard({
@@ -44,30 +44,28 @@ export default function ServiceCard({
   onPress,
   showBookButton = false,
   onBook,
-  variant = 'featured',
+  style,
 }: Props) {
-  const formatPrice = (amount: number) => `₱${amount.toLocaleString('en-PH')}`;
-
   return (
     <TouchableOpacity
-      style={[styles.card, variant === 'compact' && styles.compactCard]}
+      style={[styles.card, style]}
       onPress={onPress}
       activeOpacity={0.85}
     >
       {/* Image */}
-      <View style={[styles.imageWrap, variant === 'compact' && styles.compactImageWrap]}>
+      <View style={styles.imageWrap}>
         {service.image_url ? (
           <Image source={{ uri: service.image_url }} style={styles.image} resizeMode="cover" />
         ) : (
           <View style={styles.imagePlaceholder}>
-            <Ionicons name="images-outline" size={32} color={COLORS.textLight} />
+            <Ionicons name="images-outline" size={24} color={COLORS.textLight} />
           </View>
         )}
       </View>
 
       {/* Content */}
       <View style={styles.content}>
-        <Text style={styles.serviceName} numberOfLines={1}>
+        <Text style={styles.serviceName} numberOfLines={2}>
           {service.name}
         </Text>
         <Text style={styles.providerName} numberOfLines={1}>
@@ -104,22 +102,18 @@ export default function ServiceCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.xl,
+    borderRadius: BORDER_RADIUS.lg,
     borderWidth: 1,
     borderColor: COLORS.border,
     overflow: 'hidden',
-    width: 220,
+    flex: 1,
+    minHeight: 220,
     ...SHADOWS.small,
-  },
-  compactCard: {
-    width: 160,
   },
   imageWrap: {
     width: '100%',
-    height: 140,
-  },
-  compactImageWrap: {
-    height: 110,
+    height: 100,
+    aspectRatio: 16 / 10,
   },
   image: {
     width: '100%',
@@ -133,17 +127,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   content: {
-    padding: SPACING.md,
+    padding: SPACING.sm,
     gap: 2,
+    flex: 1,
+    justifyContent: 'space-between',
   },
   serviceName: {
     fontFamily: FONTS.semiBold,
-    fontSize: FONTS.sizes.base,
+    fontSize: FONTS.sizes.sm,
     color: COLORS.text,
+    lineHeight: 18,
   },
   providerName: {
     fontFamily: FONTS.regular,
-    fontSize: FONTS.sizes.sm,
+    fontSize: FONTS.sizes.xs,
     color: COLORS.textSecondary,
     marginTop: 2,
   },
@@ -171,14 +168,14 @@ const styles = StyleSheet.create({
   },
   priceText: {
     fontFamily: FONTS.bold,
-    fontSize: FONTS.sizes.base,
+    fontSize: FONTS.sizes.sm,
     color: COLORS.primary,
   },
   bookBtn: {
     backgroundColor: COLORS.primary,
     borderRadius: BORDER_RADIUS.md,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
   },
   bookBtnText: {
     fontFamily: FONTS.semiBold,

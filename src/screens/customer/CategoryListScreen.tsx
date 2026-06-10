@@ -190,8 +190,10 @@ export default function CategoryListScreen({ route, navigation }: Props) {
       ) : (
         <FlatList
           data={filtered}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => `${item.id}-${index}`}
           renderItem={renderService}
+          numColumns={2}
+          columnWrapperStyle={styles.columnWrapper}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
@@ -240,32 +242,5 @@ const styles = StyleSheet.create({
   sortChipTextActive: { color: COLORS.white, fontFamily: FONTS.semiBold },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   list: { padding: SPACING.md, gap: SPACING.sm },
-  card: {
-    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.xl,
-    padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.medium,
-  },
-  cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm, marginBottom: SPACING.sm },
-  cardInfo: { flex: 1 },
-  providerName: { fontSize: FONTS.sizes.base, fontFamily: FONTS.bold, color: COLORS.text, marginBottom: 3 },
-  locRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 4 },
-  locText: { fontSize: FONTS.sizes.xs, color: COLORS.textLight },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  ratingText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
-  rateText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
-  bookBtn: {
-    backgroundColor: COLORS.primary, borderRadius: BORDER_RADIUS.md,
-    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
-  },
-  bookBtnText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.white },
-  bio: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, lineHeight: 19, marginBottom: SPACING.sm },
-  serviceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs, alignItems: 'center' },
-  serviceChip: {
-    backgroundColor: COLORS.primaryLight, borderRadius: BORDER_RADIUS.full,
-    paddingHorizontal: SPACING.sm, paddingVertical: 3,
-  },
-  serviceChipText: { fontSize: FONTS.sizes.xs, color: COLORS.primary, fontFamily: FONTS.semiBold },
-  moreServices: { fontSize: FONTS.sizes.xs, color: COLORS.textLight },
-  emptyState: { alignItems: 'center', paddingTop: SPACING.xxl, gap: SPACING.sm },
-  emptyTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.semiBold, color: COLORS.text },
-  emptySubtitle: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
+  columnWrapper: { justifyContent: 'space-between', gap: SPACING.sm },
 });

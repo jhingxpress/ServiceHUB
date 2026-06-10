@@ -11,6 +11,8 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  Modal,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,12 +44,15 @@ export default function BookingScreen() {
   const [time, setTime] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [timePickerMode, setTimePickerMode] = useState<'hour' | 'minute'>('hour');
   const [location, setLocation] = useState('');
   const [city, setCity] = useState('');
   const [province, setProvince] = useState('');
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [useProfileLocation, setUseProfileLocation] = useState(false);
+  const [locationMode, setLocationMode] = useState<'saved' | 'current' | 'manual' | null>(null);
+  const [providerDistance, setProviderDistance] = useState<string | null>(null);
   const latRef = useRef<number | null>(null);
   const lngRef = useRef<number | null>(null);
 
@@ -67,25 +72,25 @@ export default function BookingScreen() {
   const applyProfileLocation = () => {
     if (!user) return;
     setUseProfileLocation(true);
+    setLocationMode('saved');
     setLocation(user.address ?? '');
     setCity(user.city ?? '');
     setProvince(user.province ?? '');
     if (user.latitude != null && user.longitude != null) {
       setCoords(user.latitude, user.longitude);
     } else {
-      Alert.alert(
-        'No Saved Coordinates',
-        'Your saved address doesn\'t have GPS coordinates. Tap "Use Current Location" to capture them.'
-      );
+      setCoords(null, null);
     }
   };
 
   const clearProfileLocation = () => {
     setUseProfileLocation(false);
+    setLocationMode(null);
     setLocation('');
     setCity('');
     setProvince('');
     setCoords(null, null);
+    setProviderDistance(null);
   };
 
   const handleDetectBookingLocation = async () => {
@@ -102,12 +107,42 @@ export default function BookingScreen() {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       setCoords(loc.coords.latitude, loc.coords.longitude);
       setUseProfileLocation(false);
-      Alert.alert('Location Captured', `Latitude: ${loc.coords.latitude.toFixed(5)}, Longitude: ${loc.coords.longitude.toFixed(5)}`);
+      if (!locationMode) setLocationMode('current');
+      // Reverse geocode to get address text if available (only if no manual text exists)
+      if (locationMode !== 'manual' || !location.trim()) {
+        try {
+          const reverse = await Location.reverseGeocodeAsync({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+          });
+          const first = reverse?.[0];
+          if (first) {
+            const street = [first.street, first.streetNumber].filter(Boolean).join(' ');
+            const addr = [street, first.city, first.region].filter(Boolean).join(', ');
+            setLocation(addr || 'Current Location');
+            setCity(first.city ?? '');
+            setProvince(first.region ?? '');
+          } else if (!location.trim()) {
+            setLocation('Current Location');
+          }
+        } catch {
+          if (!location.trim()) setLocation('Current Location');
+        }
+      }
     } catch (err: any) {
       Alert.alert('Location Error', err.message || 'Unable to detect location. Please enter manually.');
     } finally {
       setDetectingLocation(false);
     }
+  };
+
+  const openInMaps = () => {
+    if (latRef.current == null || lngRef.current == null) return;
+    const url = Platform.select({
+      ios: `http://maps.apple.com/?q=${encodeURIComponent(location)}&ll=${latRef.current},${lngRef.current}`,
+      android: `geo:${latRef.current},${lngRef.current}?q=${encodeURIComponent(location)}`,
+    });
+    if (url) Linking.openURL(url);
   };
 
   const handlePickImage = async () => {
@@ -178,7 +213,7 @@ export default function BookingScreen() {
     const validation = validateForm(
       { location },
       {
-        location: (v) => validators.required(v, 'Service location'),
+        location: (v) => validators.required(v, 'Address'),
       }
     );
 
@@ -296,7 +331,7 @@ export default function BookingScreen() {
               />
             )}
 
-            {/* Time */}
+            {/* Time — Modern Digital Picker */}
             <Text style={styles.label}>Time</Text>
             <TouchableOpacity
               style={styles.pickerBtn}
@@ -306,107 +341,247 @@ export default function BookingScreen() {
               <Text style={styles.pickerText}>{format(time, 'h:mm a')}</Text>
               <Ionicons name="chevron-down" size={16} color={COLORS.textLight} />
             </TouchableOpacity>
-            {showTimePicker && (
-              <DateTimePicker
-                value={time}
-                mode="time"
-                onChange={(_: DateTimePickerEvent, selected?: Date) => {
-                  setShowTimePicker(false);
-                  if (selected) setTime(selected);
-                }}
-              />
-            )}
 
-            {/* Location */}
-            <Text style={styles.label}>Service Location *</Text>
+            {/* Digital Time Picker Modal */}
+            <Modal
+              visible={showTimePicker}
+              transparent
+              animationType="slide"
+              onRequestClose={() => setShowTimePicker(false)}
+            >
+              <View style={styles.modalOverlay}>
+                <View style={styles.timePickerCard}>
+                  <View style={styles.timePickerHeader}>
+                    <Text style={styles.timePickerTitle}>Select Time</Text>
+                    <TouchableOpacity onPress={() => setShowTimePicker(false)}>
+                      <Ionicons name="close" size={24} color={COLORS.text} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.timeDisplayRow}>
+                    <TouchableOpacity
+                      style={[styles.timeDisplayUnit, timePickerMode === 'hour' && styles.timeDisplayUnitActive]}
+                      onPress={() => setTimePickerMode('hour')}
+                    >
+                      <Text style={[styles.timeDisplayNumber, timePickerMode === 'hour' && styles.timeDisplayNumberActive]}>
+                        {time.getHours() % 12 === 0 ? '12' : String(time.getHours() % 12).padStart(2, '0')}
+                      </Text>
+                    </TouchableOpacity>
+                    <Text style={styles.timeDisplayColon}>:</Text>
+                    <TouchableOpacity
+                      style={[styles.timeDisplayUnit, timePickerMode === 'minute' && styles.timeDisplayUnitActive]}
+                      onPress={() => setTimePickerMode('minute')}
+                    >
+                      <Text style={[styles.timeDisplayNumber, timePickerMode === 'minute' && styles.timeDisplayNumberActive]}>
+                        {String(time.getMinutes()).padStart(2, '0')}
+                      </Text>
+                    </TouchableOpacity>
+                    <View style={styles.amPmWrap}>
+                      <TouchableOpacity
+                        style={[styles.amPmBtn, time.getHours() < 12 && styles.amPmBtnActive]}
+                        onPress={() => {
+                          const h = time.getHours();
+                          if (h >= 12) setTime(new Date(time.setHours(h - 12)));
+                        }}
+                      >
+                        <Text style={[styles.amPmText, time.getHours() < 12 && styles.amPmTextActive]}>AM</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.amPmBtn, time.getHours() >= 12 && styles.amPmBtnActive]}
+                        onPress={() => {
+                          const h = time.getHours();
+                          if (h < 12) setTime(new Date(time.setHours(h + 12)));
+                        }}
+                      >
+                        <Text style={[styles.amPmText, time.getHours() >= 12 && styles.amPmTextActive]}>PM</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Number pad */}
+                  <View style={styles.timePadGrid}>
+                    {timePickerMode === 'hour'
+                      ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
+                          <TouchableOpacity
+                            key={n}
+                            style={styles.timePadCell}
+                            onPress={() => {
+                              const isPM = time.getHours() >= 12;
+                              const newHour = isPM ? (n === 12 ? 12 : n + 12) : (n === 12 ? 0 : n);
+                              const newTime = new Date(time);
+                              newTime.setHours(newHour);
+                              setTime(newTime);
+                              setTimePickerMode('minute');
+                            }}
+                          >
+                            <Text style={styles.timePadNumber}>{n}</Text>
+                          </TouchableOpacity>
+                        ))
+                      : ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'].map((m) => (
+                          <TouchableOpacity
+                            key={m}
+                            style={styles.timePadCell}
+                            onPress={() => {
+                              const newTime = new Date(time);
+                              newTime.setMinutes(parseInt(m, 10));
+                              setTime(newTime);
+                            }}
+                          >
+                            <Text style={styles.timePadNumber}>{m}</Text>
+                          </TouchableOpacity>
+                        ))}
+                  </View>
+
+                  <Button
+                    title="Done"
+                    onPress={() => setShowTimePicker(false)}
+                    fullWidth
+                    size="md"
+                    style={{ marginTop: SPACING.md }}
+                  />
+                </View>
+              </View>
+            </Modal>
+
+            {/* Service Location */}
+            <Text style={styles.label}>Where should the service be performed?</Text>
+
+            {/* Option 1: Saved Address */}
             {user?.address && (
               <TouchableOpacity
-                style={[
-                  styles.profileLocationBtn,
-                  useProfileLocation && styles.profileLocationBtnActive,
-                ]}
-                onPress={useProfileLocation ? clearProfileLocation : applyProfileLocation}
+                style={[styles.locationOption, locationMode === 'saved' && styles.locationOptionActive]}
+                onPress={locationMode === 'saved' ? clearProfileLocation : applyProfileLocation}
               >
-                <Ionicons
-                  name={useProfileLocation ? 'checkbox' : 'square-outline'}
-                  size={20}
-                  color={useProfileLocation ? COLORS.primary : COLORS.textLight}
-                />
+                <View style={[styles.locationOptionIcon, { backgroundColor: COLORS.primaryLight }]}>
+                  <Ionicons name="home-outline" size={22} color={COLORS.primary} />
+                </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.profileLocationTitle}>Use my saved address</Text>
-                  <Text style={styles.profileLocationSub} numberOfLines={1}>
+                  <Text style={styles.locationOptionTitle}>Use Saved Address</Text>
+                  <Text style={styles.locationOptionSub} numberOfLines={2}>
                     {user.address}, {user.city ?? ''}
                   </Text>
                 </View>
+                <Ionicons
+                  name={locationMode === 'saved' ? 'radio-button-on' : 'radio-button-off'}
+                  size={22}
+                  color={locationMode === 'saved' ? COLORS.primary : COLORS.textLight}
+                />
               </TouchableOpacity>
             )}
-            <View style={styles.inputWrap}>
-              <Ionicons name="location-outline" size={18} color={COLORS.textLight} style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                value={location}
-                onChangeText={(text) => {
-                  setLocation(text);
-                  if (useProfileLocation) setUseProfileLocation(false);
-                }}
-                placeholder="Street address, barangay"
-                placeholderTextColor={COLORS.textLight}
-              />
-            </View>
 
-            <View style={styles.row}>
-              <View style={styles.half}>
-                <View style={styles.inputWrap}>
-                  <TextInput
-                    style={styles.textInput}
-                    value={city}
-                    onChangeText={(text) => {
-                      setCity(text);
-                      if (useProfileLocation) setUseProfileLocation(false);
-                    }}
-                    placeholder="City"
-                    placeholderTextColor={COLORS.textLight}
-                  />
-                </View>
-              </View>
-              <View style={styles.half}>
-                <View style={styles.inputWrap}>
-                  <TextInput
-                    style={styles.textInput}
-                    value={province}
-                    onChangeText={(text) => {
-                      setProvince(text);
-                      if (useProfileLocation) setUseProfileLocation(false);
-                    }}
-                    placeholder="Province"
-                    placeholderTextColor={COLORS.textLight}
-                  />
-                </View>
-              </View>
-            </View>
-
-            {/* Detect current location */}
+            {/* Option 2: Current Location */}
             <TouchableOpacity
-              style={styles.detectBtn}
-              onPress={handleDetectBookingLocation}
+              style={[styles.locationOption, locationMode === 'current' && styles.locationOptionActive]}
+              onPress={locationMode === 'current' ? clearProfileLocation : handleDetectBookingLocation}
               disabled={detectingLocation}
             >
-              {detectingLocation ? (
-                <ActivityIndicator size="small" color={COLORS.primary} />
-              ) : (
-                <Ionicons name="locate" size={18} color={COLORS.primary} />
-              )}
-              <Text style={styles.detectBtnText}>
-                {detectingLocation ? 'Detecting...' : 'Use Current Location'}
-              </Text>
+              <View style={[styles.locationOptionIcon, { backgroundColor: '#DCFCE7' }]}>
+                <Ionicons name="navigate-outline" size={22} color={COLORS.success} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.locationOptionTitle}>Use Current Location</Text>
+                <Text style={styles.locationOptionSub}>
+                  {detectingLocation ? 'Detecting GPS...' : 'Automatically use device GPS'}
+                </Text>
+              </View>
+              <Ionicons
+                name={locationMode === 'current' ? 'radio-button-on' : 'radio-button-off'}
+                size={22}
+                color={locationMode === 'current' ? COLORS.primary : COLORS.textLight}
+              />
             </TouchableOpacity>
 
-            {latitude != null && longitude != null && (
-              <View style={styles.capturedRow}>
-                <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
-                <Text style={styles.capturedText}>
-                  Location Captured — Lat: {latitude.toFixed(5)}, Lng: {longitude.toFixed(5)}
+            {/* Option 3: Enter Different Address */}
+            <TouchableOpacity
+              style={[styles.locationOption, locationMode === 'manual' && styles.locationOptionActive]}
+              onPress={() => {
+                if (locationMode === 'manual') {
+                  clearProfileLocation();
+                } else {
+                  setLocationMode('manual');
+                  setUseProfileLocation(false);
+                  setCoords(null, null);
+                  setLocation('');
+                  setCity('');
+                  setProvince('');
+                }
+              }}
+            >
+              <View style={[styles.locationOptionIcon, { backgroundColor: '#FEF3C7' }]}>
+                <Ionicons name="create-outline" size={22} color="#F59E0B" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.locationOptionTitle}>Enter Different Address</Text>
+                <Text style={styles.locationOptionSub}>
+                  Manual address entry
                 </Text>
+              </View>
+              <Ionicons
+                name={locationMode === 'manual' ? 'radio-button-on' : 'radio-button-off'}
+                size={22}
+                color={locationMode === 'manual' ? COLORS.primary : COLORS.textLight}
+              />
+            </TouchableOpacity>
+
+            {/* Manual address fields */}
+            {locationMode === 'manual' && (
+              <View style={styles.manualAddressWrap}>
+                <View style={styles.inputWrap}>
+                  <Ionicons name="location-outline" size={18} color={COLORS.textLight} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    value={location}
+                    onChangeText={setLocation}
+                    placeholder="Street address, barangay"
+                    placeholderTextColor={COLORS.textLight}
+                  />
+                </View>
+                <View style={styles.row}>
+                  <View style={styles.half}>
+                    <View style={styles.inputWrap}>
+                      <TextInput
+                        style={styles.textInput}
+                        value={city}
+                        onChangeText={setCity}
+                        placeholder="City"
+                        placeholderTextColor={COLORS.textLight}
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.half}>
+                    <View style={styles.inputWrap}>
+                      <TextInput
+                        style={styles.textInput}
+                        value={province}
+                        onChangeText={setProvince}
+                        placeholder="Province"
+                        placeholderTextColor={COLORS.textLight}
+                      />
+                    </View>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={styles.detectBtnSmall}
+                  onPress={handleDetectBookingLocation}
+                  disabled={detectingLocation}
+                >
+                  <Ionicons name="locate" size={16} color={COLORS.primary} />
+                  <Text style={styles.detectBtnSmallText}>Capture GPS for this address</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Location confirmation / open in maps */}
+            {latitude != null && longitude != null && locationMode && (
+              <View style={styles.locationConfirmRow}>
+                <Ionicons name="checkmark-circle" size={18} color={COLORS.success} />
+                <Text style={styles.locationConfirmText}>
+                  GPS coordinates captured
+                </Text>
+                <TouchableOpacity onPress={openInMaps} style={styles.openMapsBtn}>
+                  <Ionicons name="map-outline" size={14} color={COLORS.primary} />
+                  <Text style={styles.openMapsText}>Open in Maps</Text>
+                </TouchableOpacity>
               </View>
             )}
 
@@ -446,9 +621,23 @@ export default function BookingScreen() {
             </View>
           </View>
 
-          {/* Summary */}
+          {/* Booking Summary */}
           <View style={styles.summary}>
             <Text style={styles.summaryTitle}>Booking Summary</Text>
+            {location ? (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Service Address</Text>
+                <Text style={[styles.summaryValue, { flex: 1, textAlign: 'right', marginLeft: SPACING.sm }]} numberOfLines={2}>
+                  {[location, city, province].filter(Boolean).join(', ')}
+                </Text>
+              </View>
+            ) : null}
+            {providerDistance ? (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Distance</Text>
+                <Text style={styles.summaryValue}>{providerDistance}</Text>
+              </View>
+            ) : null}
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Date</Text>
               <Text style={styles.summaryValue}>{format(date, 'MMM d, yyyy')}</Text>
@@ -574,5 +763,205 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.md,
     backgroundColor: COLORS.surface, borderTopWidth: 1, borderTopColor: COLORS.border,
+  },
+
+  // Digital Time Picker styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  timePickerCard: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xl,
+  },
+  timePickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.md,
+  },
+  timePickerTitle: {
+    fontSize: FONTS.sizes.lg,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+  },
+  timeDisplayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  timeDisplayUnit: {
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  timeDisplayUnitActive: {
+    backgroundColor: COLORS.primaryLight,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  timeDisplayNumber: {
+    fontSize: 36,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+  },
+  timeDisplayNumberActive: {
+    color: COLORS.primary,
+  },
+  timeDisplayColon: {
+    fontSize: 36,
+    fontFamily: FONTS.bold,
+    color: COLORS.textSecondary,
+  },
+  amPmWrap: {
+    marginLeft: SPACING.sm,
+    gap: SPACING.xs,
+  },
+  amPmBtn: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    minWidth: 48,
+  },
+  amPmBtnActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  amPmText: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.textSecondary,
+  },
+  amPmTextActive: {
+    color: COLORS.white,
+  },
+  timePadGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+    justifyContent: 'center',
+  },
+  timePadCell: {
+    width: '30%',
+    minWidth: 80,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  timePadNumber: {
+    fontSize: FONTS.sizes.lg,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.text,
+  },
+
+  // Location styles
+  subLabel: {
+    fontSize: FONTS.sizes.xs,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
+    marginTop: -SPACING.xs,
+  },
+  locationOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    ...SHADOWS.small,
+  },
+  locationOptionActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryLight,
+  },
+  locationOptionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locationOptionTitle: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.text,
+  },
+  locationOptionSub: {
+    fontSize: FONTS.sizes.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  manualAddressWrap: {
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  detectBtnSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  detectBtnSmallText: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.primary,
+  },
+  locationConfirmRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: '#F0FDF4',
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  locationConfirmText: {
+    flex: 1,
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.success,
+    fontFamily: FONTS.medium,
+  },
+  openMapsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  openMapsText: {
+    fontSize: FONTS.sizes.xs,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.primary,
   },
 });

@@ -9,6 +9,9 @@ import CustomerNavigator from './CustomerNavigator';
 import ProviderNavigator from './ProviderNavigator';
 import AdminNavigator from './AdminNavigator';
 import ProfileCompletionScreen from '../screens/auth/ProfileCompletionScreen';
+import EmailVerifiedScreen from '../screens/auth/EmailVerifiedScreen';
+import ResetPasswordScreen from '../screens/auth/ResetPasswordScreen';
+import { debugLogger } from '../services/debugLogger';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -19,9 +22,9 @@ function isProfileComplete(user: { accepted_terms_at: string | null; role: strin
 }
 
 export default function RootNavigator() {
-  const { user, isInitialized } = useAuthStore();
+  const { user, isInitialized, isAuthenticating, emailJustVerified, passwordResetMode } = useAuthStore();
 
-  if (!isInitialized) {
+  if (!isInitialized || isAuthenticating) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color={COLORS.primary} />
@@ -31,8 +34,9 @@ export default function RootNavigator() {
 
   const profileComplete = isProfileComplete(user);
 
-  console.log('[ROOT DECISION]', {
+  const decision = {
     isInitialized,
+    isAuthenticating,
     hasUser: !!user,
     userId: user?.id ?? null,
     email: user?.email ?? null,
@@ -40,35 +44,49 @@ export default function RootNavigator() {
     emailVerified: user?.email_verified ?? null,
     acceptedTerms: user?.accepted_terms_at ?? null,
     profileComplete,
-  });
+    emailJustVerified,
+    passwordResetMode,
+  };
+
+  console.log('[ROOT DECISION]', decision);
+  debugLogger.log('RootNavigator_decision', decision);
+
+  let screenName = '';
+  if (passwordResetMode) {
+    screenName = 'ResetPasswordScreen';
+  } else if (!user) {
+    screenName = 'AuthNavigator';
+  } else if (emailJustVerified) {
+    screenName = 'EmailVerifiedScreen';
+  } else if (!profileComplete) {
+    screenName = 'ProfileCompletionScreen';
+  } else if (user.role === 'customer') {
+    screenName = 'CustomerNavigator';
+  } else if (user.role === 'provider') {
+    screenName = 'ProviderNavigator';
+  } else {
+    screenName = 'AdminNavigator';
+  }
+
+  debugLogger.log('RootNavigator_screen', { screen: screenName });
+  console.log('[ROOT SCREEN]', screenName);
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {!user ? (
-        <>
-          {console.log('[ROOT SCREEN]', 'AuthNavigator')}
-          <Stack.Screen name="Auth" component={AuthNavigator} />
-        </>
+      {passwordResetMode ? (
+        <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+      ) : !user ? (
+        <Stack.Screen name="Auth" component={AuthNavigator} />
+      ) : emailJustVerified ? (
+        <Stack.Screen name="EmailVerified" component={EmailVerifiedScreen} />
       ) : !profileComplete ? (
-        <>
-          {console.log('[ROOT SCREEN]', 'ProfileCompletionScreen')}
-          <Stack.Screen name="ProfileCompletion" component={ProfileCompletionScreen} />
-        </>
+        <Stack.Screen name="ProfileCompletion" component={ProfileCompletionScreen} />
       ) : user.role === 'customer' ? (
-        <>
-          {console.log('[ROOT SCREEN]', 'CustomerNavigator')}
-          <Stack.Screen name="Customer" component={CustomerNavigator} />
-        </>
+        <Stack.Screen name="Customer" component={CustomerNavigator} />
       ) : user.role === 'provider' ? (
-        <>
-          {console.log('[ROOT SCREEN]', 'ProviderNavigator')}
-          <Stack.Screen name="Provider" component={ProviderNavigator} />
-        </>
+        <Stack.Screen name="Provider" component={ProviderNavigator} />
       ) : (
-        <>
-          {console.log('[ROOT SCREEN]', 'AdminNavigator')}
-          <Stack.Screen name="Admin" component={AdminNavigator} />
-        </>
+        <Stack.Screen name="Admin" component={AdminNavigator} />
       )}
     </Stack.Navigator>
   );

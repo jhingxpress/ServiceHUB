@@ -262,6 +262,7 @@ export default function HomeScreen() {
                 <ServiceCard
                   service={item}
                   onPress={() => navigation.navigate('ServiceDetail', { serviceId: item.id })}
+                  style={{ width: 220 }}
                 />
               )}
             />

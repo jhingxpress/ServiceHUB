@@ -890,10 +890,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS booking_accepted_welcome ON public.bookings;
-CREATE TRIGGER booking_accepted_welcome
-  AFTER UPDATE ON public.bookings
-  FOR EACH ROW EXECUTE FUNCTION public.send_welcome_message();
+-- Trigger migrated to 20260602190000_fix_accept_booking_trigger.sql
+-- Use bookings_send_welcome_message with proper WHEN clause instead
 
 -- Mark messages as read when user opens chat
 CREATE OR REPLACE FUNCTION public.mark_messages_read(p_booking_id UUID, p_user_id UUID)

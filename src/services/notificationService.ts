@@ -1,8 +1,9 @@
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import Constants from 'expo-constants';
 
 const EAS_PROJECT_ID = '8fcfed4e-bbe6-4787-a1c1-88ae62fbf65d';
 const DEVICE_ID_KEY = 'servicehub_device_id';
@@ -73,62 +74,58 @@ async function getDeviceId(): Promise<string> {
 // Call on login / app resume when user is authenticated
 // ─────────────────────────────────────────────
 export async function registerPushToken(userId: string): Promise<string | null> {
+  console.log('[PUSH AUDIT] registerPushToken called');
+  console.log('[PUSH AUDIT] userId', userId);
+
+  const env = Constants.expoConfig?.extra?.eas?.projectId ?? 'unknown';
+  const appOwnership = Constants.appOwnership ?? 'unknown';
+  const executionEnv = Constants.executionEnvironment ?? 'unknown';
+  console.log('[PUSH] executionEnvironment:', executionEnv, '| appOwnership:', appOwnership, '| projectId:', env);
+
   if (!Device.isDevice) {
-    console.log('[Notifications] Simulator detected — skipping push token registration');
+    console.log('[PUSH] Simulator detected — skipping push token registration');
     return null;
   }
+  console.log('[PUSH] Device.isDevice = true');
 
   await setupNotificationChannels();
 
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  console.log('[PUSH AUDIT] existingStatus', existingStatus);
   let finalStatus = existingStatus;
 
-  if (existingStatus === 'undetermined') {
-    // First-time disclosure before system prompt
-    Alert.alert(
-      'Enable Notifications',
-      'Notifications are used for bookings, chat messages, provider approvals, and important account updates. You can manage this anytime in your device settings.',
-      [
-        { text: 'Not Now', style: 'cancel', onPress: () => {} },
-        {
-          text: 'Enable',
-          onPress: async () => {
-            const { status } = await Notifications.requestPermissionsAsync();
-            // Continue permission flow in caller via re-invoke
-          },
-        },
-      ]
-    );
-    // Return early; permission will be requested on next app open if user tapped "Enable"
-    return null;
-  }
-
   if (existingStatus !== 'granted') {
+    console.log('[PUSH] Requesting notification permissions...');
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
+    console.log('[PUSH AUDIT] finalStatus', finalStatus);
   }
 
   if (finalStatus !== 'granted') {
-    console.log('[Notifications] Permission denied');
+    console.log('[PUSH] Permission denied — aborting token registration');
     return null;
   }
 
   let token: string;
   try {
+    console.log('[PUSH] Calling getExpoPushTokenAsync...');
     const tokenData = await Notifications.getExpoPushTokenAsync({
       projectId: EAS_PROJECT_ID,
     });
     token = tokenData.data;
-  } catch {
-    console.error('[Notifications] Failed to get push token');
+    console.log('[PUSH AUDIT] token', token);
+  } catch (err) {
+    console.error('[PUSH] Failed to get push token:', err instanceof Error ? err.message : String(err));
     return null;
   }
 
   const cachedToken = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
   const deviceId = await getDeviceId();
+  console.log('[PUSH] cachedToken:', cachedToken, '| newToken:', token, '| deviceId:', deviceId);
 
   // Only upsert if token changed
   if (cachedToken !== token) {
+    console.log('[PUSH] Saving token to DB');
     const { error } = await supabase
       .from('user_push_tokens')
       .upsert(
@@ -143,10 +140,13 @@ export async function registerPushToken(userId: string): Promise<string | null> 
       );
 
     if (error) {
-      console.error('[Notifications] Failed to save push token');
+      console.error('[PUSH] Failed to save push token to DB:', error.message);
     } else {
+      console.log('[PUSH] Token saved to DB successfully');
       await AsyncStorage.setItem(PUSH_TOKEN_KEY, token);
     }
+  } else {
+    console.log('[PUSH] Token unchanged — skipping DB upsert');
   }
 
   return token;

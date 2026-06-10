@@ -1,6 +1,6 @@
-// Centralized feature flags for Beta Mode
-// Set BETA_MODE = false to restore full authentication enforcement.
+// Centralized feature flags
+// BETA_MODE = false enforces email verification on all sign-in/sign-up flows.
 
-export const BETA_MODE = true;
+export const BETA_MODE = false;
 
-export const ENABLE_GOOGLE_SIGNIN = !BETA_MODE;
+export const ENABLE_GOOGLE_SIGNIN = true;

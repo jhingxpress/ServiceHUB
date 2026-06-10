@@ -94,45 +94,71 @@ export default function ManageServicesScreen() {
 
   const openCatalog = async () => {
     if (!user) return;
+    console.log('[SERVICE] Build Audit v3');
+    console.log('[SERVICE] Current user.id', user?.id);
     setCatalogStep('group');
     setSelectedGroup(null);
     setSelectedTemplateIds(new Set());
     setCatalogLoading(true);
 
-    // Get provider's linked leaf category IDs from provider_categories
-    const { data: pcData } = await supabase
+    // Get provider's linked categories with parent info
+    const { data: pcData, error: pcError } = await supabase
       .from('provider_categories')
-      .select('category_id')
+      .select('category_id, categories(id, parent_id, name, is_parent)')
       .eq('provider_id', user.id);
 
-    const leafCategoryIds = (pcData ?? []).map((c: any) => c.category_id);
+    if (pcError) {
+      console.error('[SERVICE] provider_categories query error:', pcError);
+    }
 
-    if (leafCategoryIds.length === 0) {
-      // Fallback: no linked categories — show all active groups so provider can still browse
-      const { data: groups } = await supabase
-        .from('service_groups')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-      setServiceGroups((groups ?? []) as ServiceGroup[]);
+    console.log('[SERVICE] Provider categories raw', pcData);
+
+    const leafCategoryIds = (pcData ?? []).map((c: any) => c.category_id).filter(Boolean);
+    const parentCategoryIds = (pcData ?? [])
+      .map((c: any) => c.categories?.parent_id)
+      .filter((id: string | null) => !!id);
+    const allCategoryIds = [...new Set([...leafCategoryIds, ...parentCategoryIds])];
+    const categoryNames = (pcData ?? []).map((c: any) => c.categories?.name).filter(Boolean);
+
+    console.log('[SERVICE] Category names', categoryNames);
+    console.log('[SERVICE] allCategoryIds', allCategoryIds);
+
+    if (allCategoryIds.length === 0) {
+      console.log('[SERVICE] No linked categories in provider_categories');
+      setServiceGroups([]);
       setCatalogLoading(false);
       return;
     }
 
-    // Query service_groups owned by the provider's leaf categories only.
-    // leaf_category_id prevents parent-category service leakage.
-    const { data: groups, error } = await supabase
+    const { data: groupsByLeaf, error: leafErr } = await supabase
       .from('service_groups')
       .select('*')
-      .in('leaf_category_id', leafCategoryIds)
-      .eq('is_active', true)
-      .order('name');
+      .in('leaf_category_id', allCategoryIds)
+      .eq('is_active', true);
 
-    if (error) {
-      console.error('[openCatalog] service_groups query error:', error);
-    }
+    const { data: groupsByParent, error: parentErr } = await supabase
+      .from('service_groups')
+      .select('*')
+      .in('category_id', allCategoryIds)
+      .eq('is_active', true);
 
-    setServiceGroups((groups ?? []) as ServiceGroup[]);
+    if (leafErr) console.error('[SERVICE] groupsByLeaf error:', leafErr);
+    if (parentErr) console.error('[SERVICE] groupsByParent error:', parentErr);
+
+    console.log('[SERVICE] groupsByLeaf', groupsByLeaf?.length);
+    console.log('[SERVICE] groupsByParent', groupsByParent?.length);
+
+    // Merge and deduplicate by id
+    const merged = new Map<string, ServiceGroup>();
+    (groupsByLeaf ?? []).forEach((g: any) => merged.set(g.id, g as ServiceGroup));
+    (groupsByParent ?? []).forEach((g: any) => merged.set(g.id, g as ServiceGroup));
+    const mergedGroups = Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name));
+
+    console.log('[SERVICE] mergedGroups', mergedGroups?.length);
+    console.log('[SERVICE] mergedGroupNames', mergedGroups?.map((g) => g.name));
+
+    setServiceGroups(mergedGroups);
+    console.log('[SERVICE] setServiceGroups', mergedGroups?.length);
     setCatalogLoading(false);
   };
 
@@ -141,13 +167,20 @@ export default function ManageServicesScreen() {
     setCatalogStep('template');
     setCatalogLoading(true);
 
-    const { data: templates } = await supabase
+    console.log('[SERVICE] selectGroup:', group.name, 'groupId:', group.id);
+
+    const { data: templates, error: templateErr } = await supabase
       .from('service_templates')
       .select('*')
       .eq('service_group_id', group.id)
       .eq('is_active', true)
       .order('name');
 
+    if (templateErr) {
+      console.error('[SERVICE] service_templates query error:', templateErr);
+    }
+
+    console.log('[SERVICE] Templates returned:', templates?.length ?? 0, 'for group:', group.name);
     setServiceTemplates((templates ?? []) as ServiceTemplate[]);
     setCatalogLoading(false);
   };
@@ -356,6 +389,8 @@ export default function ManageServicesScreen() {
   // =========================
 
   const renderCatalogContent = () => {
+    console.log('[SERVICE] renderCatalogContent — catalogStep:', catalogStep, 'catalogLoading:', catalogLoading, 'serviceGroups.length:', serviceGroups.length, 'serviceTemplates.length:', serviceTemplates.length);
+
     if (catalogLoading) {
       return (
         <View style={styles.catalogCenter}>
@@ -686,6 +721,15 @@ export default function ManageServicesScreen() {
 
       {/* Service Catalog Modal */}
       <Modal visible={catalogStep !== 'none'} animationType="slide" transparent>
+        {(() => {
+          console.log('[SERVICE MODAL]', {
+            visible: catalogStep !== 'none',
+            groupsCount: serviceGroups?.length,
+            templatesCount: serviceTemplates?.length,
+            catalogStep,
+          });
+          return null;
+        })()}
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={[styles.modal, { maxHeight: '90%' }]}>
             <View style={styles.modalHeader}>

@@ -143,6 +143,9 @@ export default function ProviderApplicationScreen() {
     if (missing.length > 0) { Alert.alert('Incomplete', 'Please upload all required documents (marked with *).'); return; }
 
     setSubmitting(true);
+    console.log('[ONBOARDING-OLD] Provider ID', user?.id);
+    console.log('[ONBOARDING-OLD] Selected category_id', form.category_id);
+
     const { error } = await supabase.from('providers').upsert({
       id: user?.id,
       business_name: form.business_name.trim(),
@@ -156,7 +159,26 @@ export default function ProviderApplicationScreen() {
       is_verified: false,
     });
 
-    if (error) { Alert.alert('Error', error.message); setSubmitting(false); return; }
+    if (error) {
+      console.error('[ONBOARDING-OLD] Provider upsert error:', error.message);
+      Alert.alert('Error', error.message);
+      setSubmitting(false);
+      return;
+    }
+    console.log('[ONBOARDING-OLD] Provider upsert succeeded');
+
+    // Also insert provider_categories so the service catalog can find groups
+    if (user?.id && form.category_id) {
+      await supabase.from('provider_categories').delete()
+        .eq('provider_id', user.id).eq('is_primary', true);
+      const { data: pcResult, error: pcErr } = await supabase.from('provider_categories').insert({
+        provider_id: user.id,
+        category_id: form.category_id,
+        is_primary: true,
+      }).select();
+      console.log('[ONBOARDING-OLD] provider_categories result', { data: pcResult, error: pcErr?.message ?? null });
+      if (pcErr) console.error('[ONBOARDING-OLD] provider_categories insert error:', pcErr.message);
+    }
 
     await refreshProfile();
     setStatus('pending');

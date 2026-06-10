@@ -8,6 +8,7 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -316,52 +317,53 @@ export default function SearchScreen() {
           <ActivityIndicator color={COLORS.primary} size="large" />
         </View>
       ) : (
-        <FlatList
-          data={[
-            ...(services.length > 0
-              ? [{ _type: 'section_services' as const, label: 'Services' }]
-              : []),
-            ...services.map((s) => ({ _type: 'service' as const, data: s })),
-            ...(providers.length > 0
-              ? [{ _type: 'section_providers' as const, label: 'Providers' }]
-              : []),
-            ...providers.map((p) => ({ _type: 'provider' as const, data: p })),
-          ]}
-          keyExtractor={(item, index) =>
-            item._type.startsWith('section')
-              ? item._type
-              : `${item._type}-${(item as any).data.id}-${index}`
-          }
-          renderItem={({ item }) => {
-            if (item._type === 'section_services') {
-              return (
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitleText}>{item.label}</Text>
-                </View>
-              );
-            }
-            if (item._type === 'section_providers') {
-              return (
-                <View style={[styles.sectionHeaderRow, { marginTop: SPACING.lg }]}>
-                  <Text style={styles.sectionTitleText}>{item.label}</Text>
-                </View>
-              );
-            }
-            if (item._type === 'service') {
-              return (
-                <ServiceCard
-                  service={item.data}
-                  onPress={() => navigation.navigate('ServiceDetail', { serviceId: item.data.id })}
-                  showBookButton
-                  onBook={() => navigation.navigate('ServiceDetail', { serviceId: item.data.id })}
-                />
-              );
-            }
-            return renderProvider({ item: item.data });
-          }}
-          contentContainerStyle={styles.list}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
+        >
+          {/* Services Grid */}
+          {services.length > 0 && (
+            <>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitleText}>Services</Text>
+              </View>
+              <FlatList
+                data={services}
+                keyExtractor={(item, index) => `${item.id}-${index}`}
+                renderItem={({ item }) => (
+                  <ServiceCard
+                    service={item}
+                    onPress={() => navigation.navigate('ServiceDetail', { serviceId: item.id })}
+                    showBookButton
+                    onBook={() => navigation.navigate('ServiceDetail', { serviceId: item.id })}
+                  />
+                )}
+                numColumns={2}
+                columnWrapperStyle={styles.columnWrapper}
+                scrollEnabled={false}
+                showsVerticalScrollIndicator={false}
+              />
+            </>
+          )}
+
+          {/* Providers List */}
+          {providers.length > 0 && (
+            <>
+              <View style={[styles.sectionHeaderRow, { marginTop: SPACING.lg }]}>
+                <Text style={styles.sectionTitleText}>Providers</Text>
+              </View>
+              <FlatList
+                data={providers}
+                keyExtractor={(item, index) => `${item.id}-${index}`}
+                renderItem={renderProvider}
+                scrollEnabled={false}
+                showsVerticalScrollIndicator={false}
+              />
+            </>
+          )}
+
+          {/* Empty State */}
+          {services.length === 0 && providers.length === 0 && (
             nearbyMode ? (
               <EmptyState
                 icon="locate-outline"
@@ -375,8 +377,8 @@ export default function SearchScreen() {
                 subtitle="Try adjusting your search or category filter"
               />
             )
-          }
-        />
+          )}
+        </ScrollView>
       )}
     </SafeAreaView>
   );
@@ -412,7 +414,8 @@ const styles = StyleSheet.create({
   filterText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, fontFamily: FONTS.medium },
   filterTextActive: { color: COLORS.white, fontFamily: FONTS.semiBold },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  list: { padding: SPACING.md, gap: SPACING.sm, flexGrow: 1 },
+  scrollContent: { padding: SPACING.md, flexGrow: 1 },
+  columnWrapper: { justifyContent: 'space-between', gap: SPACING.sm },
   card: {
     flexDirection: 'row',
     backgroundColor: COLORS.surface,

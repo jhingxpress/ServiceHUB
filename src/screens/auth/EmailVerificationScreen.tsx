@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   AppState,
+  AppStateStatus,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,8 +14,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../../constants/theme';
+import { debugLogger } from '../../services/debugLogger';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'EmailVerification'>;
+
+// How often to poll for cross-device verification (ms)
+const POLL_INTERVAL_MS = 5000;
+const RESEND_COOLDOWN_SECS = 60;
 
 export default function EmailVerificationScreen({ route, navigation }: Props) {
   const { email } = route.params ?? {};
@@ -23,6 +29,15 @@ export default function EmailVerificationScreen({ route, navigation }: Props) {
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
+  const [cooldownSecs, setCooldownSecs] = useState(0);
+  const [resendError, setResendError] = useState('');
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Track when the app was last backgrounded to debounce AppState checks
+  const backgroundedAtRef = useRef<number | null>(null);
+  // Suppress the useFocusEffect check on the very first mount (avoids false
+  // "not verified" flash before the deep link handler has a chance to run)
+  const isFirstFocusRef = useRef(true);
 
   const runVerificationCheck = useCallback(async (source: string) => {
     console.log('[VERIFY] EmailVerificationScreen: running check from', source);
@@ -58,24 +73,108 @@ export default function EmailVerificationScreen({ route, navigation }: Props) {
     }
   }, [checkEmailVerified]);
 
-  // Auto-check when screen comes into focus (user returns from email app)
+  // Automatic polling — detects verification performed on another device.
+  // Uses sequential setTimeout (not setInterval) to avoid overlapping calls.
+  // Pauses automatically when the screen loses focus; resumes when refocused.
   useFocusEffect(
     useCallback(() => {
-      console.log('[VERIFY] EmailVerificationScreen: screen focused');
+      let cancelled = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+
+      const runPoll = async () => {
+        if (cancelled) return;
+        debugLogger.log('EmailVerification_poll_check', { t: Date.now() });
+        try {
+          const result = await checkEmailVerified();
+          if (cancelled) return;
+          if (result.verified) {
+            debugLogger.log('EmailVerification_verified_detected', { t: Date.now() });
+            console.log('[VERIFY POLL] verification detected — RootNavigator will navigate automatically');
+            debugLogger.log('EmailVerification_poll_stop', { reason: 'verified', t: Date.now() });
+            // checkEmailVerified() already called set({ user: profile });
+            // RootNavigator reacts to the user state change and navigates.
+            return; // Do not reschedule
+          }
+        } catch (err) {
+          console.error('[VERIFY POLL] error:', err);
+        }
+        if (!cancelled) {
+          timer = setTimeout(runPoll, POLL_INTERVAL_MS);
+        }
+      };
+
+      debugLogger.log('EmailVerification_poll_start', { intervalMs: POLL_INTERVAL_MS, t: Date.now() });
+      console.log('[VERIFY POLL] started — polling every', POLL_INTERVAL_MS, 'ms');
+      // Delay first poll so the screen fully renders before hitting the network
+      timer = setTimeout(runPoll, POLL_INTERVAL_MS);
+
+      return () => {
+        cancelled = true;
+        if (timer) clearTimeout(timer);
+        debugLogger.log('EmailVerification_poll_stop', { reason: 'focus_lost_or_unmount', t: Date.now() });
+        console.log('[VERIFY POLL] stopped');
+      };
+    }, [checkEmailVerified])
+  );
+
+  // Skip check on the very first focus so we don't race with the deep link handler.
+  // All subsequent focuses (user navigated back here manually) still trigger a check.
+  useFocusEffect(
+    useCallback(() => {
+      if (isFirstFocusRef.current) {
+        isFirstFocusRef.current = false;
+        console.log('[VERIFY] EmailVerificationScreen: first focus — skipping auto-check');
+        return;
+      }
+      console.log('[VERIFY] EmailVerificationScreen: screen re-focused');
       runVerificationCheck('focus');
     }, [runVerificationCheck])
   );
 
-  // Also check when app returns from background (user tapped email link in email app)
+  // Only check when app returns from background if the user was genuinely away
+  // (>= 1500 ms). This prevents the deep link arrival — which also causes an
+  // AppState active event — from triggering a premature check before
+  // exchangeCodeForSession has run.
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
-        console.log('[VERIFY] EmailVerificationScreen: app became active');
-        runVerificationCheck('app-active');
+    const handleStateChange = (nextState: AppStateStatus) => {
+      if (nextState === 'background' || nextState === 'inactive') {
+        backgroundedAtRef.current = Date.now();
+      } else if (nextState === 'active' && backgroundedAtRef.current !== null) {
+        const elapsed = Date.now() - backgroundedAtRef.current;
+        backgroundedAtRef.current = null;
+        if (elapsed >= 1500) {
+          console.log('[VERIFY] EmailVerificationScreen: app returned from background after', elapsed, 'ms');
+          runVerificationCheck('app-active');
+        } else {
+          console.log('[VERIFY] EmailVerificationScreen: app active too quickly (', elapsed, 'ms) — skipping check to avoid deep-link race');
+        }
       }
-    });
+    };
+    const sub = AppState.addEventListener('change', handleStateChange);
     return () => sub.remove();
   }, [runVerificationCheck]);
+
+  useEffect(() => {
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
+  }, []);
+
+  const startCooldown = useCallback(() => {
+    debugLogger.log('resend_verification_cooldown_started', { t: Date.now() });
+    console.log('[VERIFY] Resend cooldown started —', RESEND_COOLDOWN_SECS, 's');
+    setCooldownSecs(RESEND_COOLDOWN_SECS);
+    cooldownRef.current = setInterval(() => {
+      setCooldownSecs(prev => {
+        if (prev <= 1) {
+          if (cooldownRef.current) clearInterval(cooldownRef.current);
+          cooldownRef.current = null;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
 
   const handleCheck = async () => {
     console.log('[VERIFY] Button pressed — I have verified my email');
@@ -84,13 +183,27 @@ export default function EmailVerificationScreen({ route, navigation }: Props) {
 
   const handleResend = async () => {
     if (!email) return;
+    if (cooldownSecs > 0) {
+      debugLogger.log('resend_verification_blocked_cooldown', { remaining: cooldownSecs, t: Date.now() });
+      console.log('[VERIFY] Resend blocked — cooldown active:', cooldownSecs, 's remaining');
+      return;
+    }
     setResending(true);
+    setResendError('');
     try {
       await resendVerificationEmail(email);
       setResent(true);
+      startCooldown();
       setTimeout(() => setResent(false), 3000);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      const msg = (err?.message ?? '').toLowerCase();
+      if (msg.includes('rate limit') || msg.includes('email rate limit')) {
+        setResendError(
+          "We've already sent a verification email. Please check your inbox and wait a few minutes before requesting another email."
+        );
+      } else {
+        setResendError(err?.message ?? 'Failed to resend. Please try again.');
+      }
     } finally {
       setResending(false);
     }
@@ -152,15 +265,37 @@ export default function EmailVerificationScreen({ route, navigation }: Props) {
           </Text>
         </TouchableOpacity>
 
+        {resendError ? (
+          <View style={styles.statusBox}>
+            <Ionicons name="alert-circle" size={18} color={COLORS.error} />
+            <Text style={[styles.statusText, { color: COLORS.error }]}>{resendError}</Text>
+          </View>
+        ) : null}
+
         <TouchableOpacity
-          style={[styles.btnSecondary, resending && styles.btnDisabled]}
+          style={[styles.btnSecondary, (resending || cooldownSecs > 0) && styles.btnDisabled]}
           onPress={handleResend}
-          disabled={resending}
+          disabled={resending || cooldownSecs > 0}
           activeOpacity={0.85}
         >
           <Text style={styles.btnSecondaryText}>
-            {resent ? 'Verification email resent!' : resending ? 'Sending…' : 'Resend verification email'}
+            {resent
+              ? 'Verification email resent!'
+              : resending
+              ? 'Sending…'
+              : cooldownSecs > 0
+              ? `Resend in ${cooldownSecs}s`
+              : 'Resend verification email'}
           </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.crossDeviceBtn}
+          onPress={() => navigation.navigate('Login', { email: email?.trim().toLowerCase() })}
+          activeOpacity={0.75}
+        >
+          <Ionicons name="checkmark-circle-outline" size={16} color={COLORS.primary} />
+          <Text style={styles.crossDeviceBtnText}>Verified on another device? Continue to Sign In</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -262,6 +397,20 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.base,
     fontFamily: FONTS.semiBold,
     color: COLORS.text,
+  },
+  crossDeviceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.xs,
+    paddingVertical: SPACING.sm,
+  },
+  crossDeviceBtnText: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.medium,
+    color: COLORS.primary,
+    textDecorationLine: 'underline',
   },
   backLink: {
     marginTop: SPACING.sm,
