@@ -214,7 +214,8 @@ export default function ProviderOnboardingScreen() {
   useEffect(() => {
     if (step === 2 && selectedCategoryId) {
       const selectedCat = categories.find(c => c.id === selectedCategoryId);
-      console.log('[Catalog] Querying service_catalog with category_id:', selectedCategoryId, 'category_name:', selectedCat?.name ?? 'UNKNOWN');
+      console.log('[Catalog] selectedCategoryId:', selectedCategoryId);
+      console.log('[Catalog] selectedCategoryName:', selectedCat?.name ?? 'UNKNOWN');
       supabase
         .from('service_catalog')
         .select('name')
@@ -223,11 +224,12 @@ export default function ProviderOnboardingScreen() {
         .order('sort_order')
         .limit(6)
         .then(({ data, error }) => {
+          console.log('[Catalog] result count:', data?.length ?? 0);
+          console.log('[Catalog] services:', data);
           if (error) {
             console.error('[Catalog] Error:', error);
             setCatalogServices([]);
           } else {
-            console.log('[Catalog] Results for', selectedCat?.name ?? selectedCategoryId, ':', data?.length ?? 0, 'services:', data?.map((d: { name: string }) => d.name) ?? []);
             setCatalogServices(data?.map((item: { name: string }) => item.name) ?? []);
           }
         });
@@ -235,6 +237,11 @@ export default function ProviderOnboardingScreen() {
       setCatalogServices([]);
     }
   }, [selectedCategoryId, step]);
+
+  // Log catalogServices state after it updates
+  useEffect(() => {
+    console.log('[Catalog] catalogServices state:', catalogServices);
+  }, [catalogServices]);
 
   // Debug log for Provider Verification Policy modal visibility
   useEffect(() => {
@@ -772,6 +779,7 @@ export default function ProviderOnboardingScreen() {
   const renderStep2 = () => {
     const selectedParent = parentCategories.find(p => p.id === selectedCategoryId);
     const examples = catalogServices;
+    console.log('[Catalog] renderStep2 examples:', examples, 'selectedParent:', selectedParent?.name ?? 'none');
     return (
       <View>
         <Text style={styles.stepHeading}>Select Primary Category</Text>
