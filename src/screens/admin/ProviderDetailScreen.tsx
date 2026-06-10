@@ -15,14 +15,22 @@ import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/
 import Avatar from '../../components/ui/Avatar';
 
 // Extract the object path from a full Supabase storage public URL
-const extractStoragePath = (fullUrl: string): string | null => {
+const extractStoragePath = (fullUrl: string): { bucket: string; path: string } | null => {
   if (!fullUrl) return null;
-  // URL format: https://<project>.supabase.co/storage/v1/object/public/provider-documents/<path>
-  const marker = '/provider-documents/';
-  const idx = fullUrl.indexOf(marker);
-  if (idx !== -1) return fullUrl.slice(idx + marker.length);
-  // If already a relative path, return as-is
-  if (!fullUrl.startsWith('http')) return fullUrl;
+  // Try provider-documents bucket
+  let marker = '/provider-documents/';
+  let idx = fullUrl.indexOf(marker);
+  if (idx !== -1) {
+    return { bucket: 'provider-documents', path: fullUrl.slice(idx + marker.length) };
+  }
+  // Try kyc-documents bucket (legacy ProviderApplicationScreen uploads)
+  marker = '/kyc-documents/';
+  idx = fullUrl.indexOf(marker);
+  if (idx !== -1) {
+    return { bucket: 'kyc-documents', path: fullUrl.slice(idx + marker.length) };
+  }
+  // If already a relative path, assume provider-documents bucket
+  if (!fullUrl.startsWith('http')) return { bucket: 'provider-documents', path: fullUrl };
   return null;
 };
 
@@ -47,6 +55,7 @@ interface ProviderDetailData {
   users: { full_name: string | null; email: string | null; phone: string | null; avatar_url: string | null };
   category: { name: string; icon: string } | null;
   services: { id: string; name: string; price: number; is_active: boolean }[];
+  kyc_documents: Record<string, string> | null;
 }
 
 interface DocRecord {
@@ -92,6 +101,34 @@ const ID_TYPE_LABELS: Record<string, string> = {
   tin_id: 'TIN ID',
 };
 
+// Convert legacy kyc_documents JSON blob into DocRecord format for unified display
+const KYC_DOC_TYPE_MAP: Record<string, { document_type: string; category_type: string; side: string | null }> = {
+  gov_id_front: { document_type: 'valid_id', category_type: 'valid_id', side: 'front' },
+  gov_id_back: { document_type: 'valid_id', category_type: 'valid_id', side: 'back' },
+  selfie_with_id: { document_type: 'selfie_with_id', category_type: 'valid_id', side: null },
+  business_permit: { document_type: 'business_permit', category_type: 'business_permit', side: null },
+  certifications: { document_type: 'other_supporting', category_type: 'other_supporting', side: null },
+};
+
+const convertKycDocs = (kyc: Record<string, string> | null): DocRecord[] => {
+  if (!kyc) return [];
+  return Object.entries(kyc)
+    .filter(([, url]) => !!url)
+    .map(([field, url]) => {
+      const mapped = KYC_DOC_TYPE_MAP[field] || { document_type: field, category_type: 'other_supporting', side: null };
+      return {
+        id: `kyc-${field}`,
+        document_type: mapped.document_type,
+        category_type: mapped.category_type,
+        id_type: null,
+        side: mapped.side,
+        file_url: url,
+        status: 'pending',
+        uploaded_at: new Date().toISOString(),
+      };
+    });
+};
+
 const getDocumentLabel = (doc: DocRecord): string => {
   if (doc.category_type === 'valid_id' && doc.id_type) {
     const idLabel = ID_TYPE_LABELS[doc.id_type] || doc.id_type;
@@ -135,7 +172,8 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           rejection_reason, created_at, updated_at,
           users!providers_id_fkey(full_name, email, phone, avatar_url),
           category:categories(name, icon),
-          services(id, name, price, is_active)
+          services(id, name, price, is_active),
+          kyc_documents
         `).eq('id', providerId).single(),
         supabase.from('provider_documents').select('*').eq('provider_id', providerId).order('uploaded_at'),
         supabase.from('provider_verification_logs').select(`
@@ -144,18 +182,20 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
         `).eq('provider_id', providerId).order('created_at', { ascending: false }),
       ]);
       if (provRes.error) throw provRes.error;
-      const docs = (docsRes.data ?? []) as DocRecord[];
+      const tableDocs = (docsRes.data ?? []) as DocRecord[];
+      const kycDocs = convertKycDocs((provRes.data as any)?.kyc_documents ?? null);
+      const allDocs = [...tableDocs, ...kycDocs];
       setProvider(provRes.data as unknown as ProviderDetailData);
-      setDocuments(docs);
+      setDocuments(allDocs);
       setLogs((logsRes.data ?? []) as unknown as LogEntry[]);
 
       // Generate signed URLs for private bucket images
       const urlMap: Record<string, string> = {};
       await Promise.all(
-        docs.map(async (doc) => {
-          const path = extractStoragePath(doc.file_url);
-          if (path) {
-            const { data } = await supabase.storage.from('provider-documents').createSignedUrl(path, 3600);
+        allDocs.map(async (doc) => {
+          const extracted = extractStoragePath(doc.file_url);
+          if (extracted) {
+            const { data } = await supabase.storage.from(extracted.bucket).createSignedUrl(extracted.path, 3600);
             if (data?.signedUrl) urlMap[doc.id] = data.signedUrl;
           }
         })

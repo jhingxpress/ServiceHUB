@@ -188,8 +188,28 @@ export default function ChatRoomScreen() {
   };
 
   const openImageViewer = (imageUrl: string, allImageUrls: string[]) => {
+    console.log('[ChatViewer] Tapped imageUrl:', imageUrl);
+    console.log('[ChatViewer] All image URLs:', allImageUrls);
     const idx = allImageUrls.indexOf(imageUrl);
-    setViewerImages(allImageUrls.map((uri) => ({ uri })));
+    const images = allImageUrls.map((uri) => ({ uri }));
+    console.log('[ChatViewer] Opening viewer with', images.length, 'images, index:', idx);
+
+    // Pre-fetch dimensions to help react-native-image-viewing render correctly
+    images.forEach((img, i) => {
+      if (img.uri) {
+        Image.getSize(
+          img.uri,
+          (width, height) => {
+            console.log('[ChatViewer] Image', i, 'dimensions:', width, 'x', height);
+          },
+          (err) => {
+            console.error('[ChatViewer] Image', i, 'getSize failed:', err);
+          }
+        );
+      }
+    });
+
+    setViewerImages(images);
     setViewerIndex(idx >= 0 ? idx : 0);
     setViewerVisible(true);
   };

@@ -15,6 +15,7 @@ import { CompositeNavigationProp, useNavigation } from '@react-navigation/native
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { supabase } from '../../lib/supabase';
+import { toTitleCase } from '../../utils/formatting';
 import { useAuthStore } from '../../stores/authStore';
 import { Category, Provider, Booking } from '../../types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
@@ -36,23 +37,6 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-function getCategoryDisplayLabel(name: string): string {
-  const map: Record<string, string> = {
-    'HOME SERVICES': 'Home Services',
-    'HVAC & APPLIANCES': 'HVAC & Appliances',
-    'AUTOMOTIVE': 'Automotive',
-    'CONSTRUCTION & RENOVATION': 'Construction',
-    'EVENTS & ENTERTAINMENT': 'Events',
-    'BEAUTY & WELLNESS': 'Beauty',
-    'TECHNOLOGY & SECURITY': 'Technology',
-    'LOGISTICS & TRANSPORTATION': 'Logistics',
-    'BUSINESS SERVICES': 'Business',
-    'EDUCATION & TRAINING': 'Education',
-    'PET SERVICES': 'Pet Services',
-    'HEALTH & HOME CARE': 'Health & Home',
-  };
-  return map[name] ?? name;
-}
 
 export default function HomeScreen() {
   const navigation = useNavigation<NavProp>();
@@ -284,13 +268,13 @@ export default function HomeScreen() {
               <TouchableOpacity
                 key={cat.id}
                 style={styles.categoryCard}
-                onPress={() => navigation.navigate('CategoryList', { categoryId: cat.id, categoryName: cat.name })}
+                onPress={() => navigation.navigate('CategoryList', { categoryId: cat.id, categoryName: toTitleCase(cat.name) })}
                 activeOpacity={0.8}
               >
                 <View style={[styles.categoryIcon, { backgroundColor: (cat.color ?? COLORS.primary) + '18' }]}>
                   <Ionicons name={cat.icon as React.ComponentProps<typeof Ionicons>['name']} size={26} color={cat.color ?? COLORS.primary} />
                 </View>
-                <Text style={styles.categoryName} numberOfLines={2} textBreakStrategy="simple">{getCategoryDisplayLabel(cat.name)}</Text>
+                <Text style={styles.categoryName} numberOfLines={2} textBreakStrategy="simple">{toTitleCase(cat.name)}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -325,7 +309,7 @@ export default function HomeScreen() {
                   {item.business_name ?? 'Provider'}
                 </Text>
                 <Text style={styles.providerCategory} numberOfLines={1}>
-                  {item.categories?.name ?? 'Services'}
+                  {toTitleCase(item.categories?.name) ?? 'Services'}
                 </Text>
                 <View style={styles.providerRating}>
                   <Ionicons name="star" size={12} color="#F59E0B" />

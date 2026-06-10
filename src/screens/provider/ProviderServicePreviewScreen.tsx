@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
+import { toTitleCase } from '../../utils/formatting';
 import { useAuthStore } from '../../stores/authStore';
 import { Service, ServiceImage, Provider, ProviderCategory, ProviderPortfolio } from '../../types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
@@ -98,7 +99,7 @@ export default function ProviderServicePreviewScreen() {
   };
 
   const primaryCategory = providerCategories.find((c) => c.is_primary) ?? providerCategories[0];
-  const categoryName = primaryCategory?.categories?.name ?? 'Service';
+  const categoryName = toTitleCase(primaryCategory?.categories?.name) ?? 'Service';
 
   if (loading) {
     return (

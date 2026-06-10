@@ -16,6 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
+import { toTitleCase } from '../../utils/formatting';
 import { Provider, Category } from '../../types';
 import ServiceCard from '../../components/marketplace/ServiceCard';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
@@ -229,7 +230,7 @@ export default function SearchScreen() {
             <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} />
           )}
         </View>
-        <Text style={styles.category}>{item.categories?.name ?? 'General'}</Text>
+        <Text style={styles.category}>{toTitleCase(item.categories?.name) ?? 'General'}</Text>
         <View style={styles.metaRow}>
           <View style={styles.ratingRow}>
             <Ionicons name="star" size={13} color="#F59E0B" />

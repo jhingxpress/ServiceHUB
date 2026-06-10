@@ -109,15 +109,17 @@ CREATE TABLE IF NOT EXISTS public.service_catalog (
 
 DO $$
 DECLARE
-  v_home UUID; v_air UUID; v_auto UUID; v_clean UUID; v_beauty UUID;
-  v_event UUID; v_photo UUID; v_food UUID; v_trans UUID; v_prop UUID;
+  v_home UUID; v_air UUID; v_auto UUID; v_construction UUID; v_clean UUID; v_beauty UUID;
+  v_tech UUID; v_event UUID; v_photo UUID; v_food UUID; v_trans UUID; v_prop UUID;
   v_acc UUID; v_biz UUID; v_edu UUID; v_pet UUID; v_health UUID;
 BEGIN
   SELECT id INTO v_home FROM public.categories WHERE name='HOME SERVICES';
   SELECT id INTO v_air FROM public.categories WHERE name='HVAC & APPLIANCES';
   SELECT id INTO v_auto FROM public.categories WHERE name='AUTOMOTIVE';
+  SELECT id INTO v_construction FROM public.categories WHERE name='CONSTRUCTION & RENOVATION';
   SELECT id INTO v_clean FROM public.categories WHERE name='CLEANING SERVICES';
   SELECT id INTO v_beauty FROM public.categories WHERE name='BEAUTY & WELLNESS';
+  SELECT id INTO v_tech FROM public.categories WHERE name='TECHNOLOGY & SECURITY';
   SELECT id INTO v_event FROM public.categories WHERE name='EVENTS & ENTERTAINMENT';
   SELECT id INTO v_photo FROM public.categories WHERE name='PHOTOGRAPHY & MEDIA';
   SELECT id INTO v_food FROM public.categories WHERE name='FOOD & CATERING';
@@ -198,6 +200,22 @@ BEGIN
     (v_clean,'Mattress Cleaning','Dust mite removal, stain treatment, and disinfection',10)
   ON CONFLICT (category_id,name) DO NOTHING;
 
+  -- 4.5. CONSTRUCTION & RENOVATION (12)
+  INSERT INTO public.service_catalog (category_id,name,description,sort_order) VALUES
+    (v_construction,'General Contractor','Full-service construction project management and labor',1),
+    (v_construction,'House Renovation','Complete home renovation and remodeling services',2),
+    (v_construction,'Kitchen Renovation','Kitchen cabinet, countertop, and layout redesign',3),
+    (v_construction,'Bathroom Renovation','Bathroom fixture, tiling, and plumbing upgrades',4),
+    (v_construction,'Room Extension','Additional room construction and wall extension',5),
+    (v_construction,'Roofing Installation','New roof construction and complete roof replacement',6),
+    (v_construction,'Flooring Installation','Tile, hardwood, vinyl, and epoxy floor installation',7),
+    (v_construction,'Drywall Installation','Interior drywall fitting, taping, and mudding',8),
+    (v_construction,'Ceiling Construction','Drop ceiling, coffered ceiling, and skylight installation',9),
+    (v_construction,'Concrete Works','Concrete pouring, slab, driveway, and foundation work',10),
+    (v_construction,'Structural Repair','Foundation crack repair, beam replacement, and stabilization',11),
+    (v_construction,'Demolition Service','Safe interior and exterior structure demolition and debris removal',12)
+  ON CONFLICT (category_id,name) DO NOTHING;
+
   -- 5. BEAUTY & WELLNESS (12)
   INSERT INTO public.service_catalog (category_id,name,description,sort_order) VALUES
     (v_beauty,'Haircut','Men and women haircut and styling',1),
@@ -212,6 +230,22 @@ BEGIN
     (v_beauty,'Eyebrow Threading','Precise brow shaping and facial hair threading',10),
     (v_beauty,'Lash Extensions','Eyelash extension application and removal',11),
     (v_beauty,'Hair Treatment','Rebonding, keratin, and hair spa treatments',12)
+  ON CONFLICT (category_id,name) DO NOTHING;
+
+  -- 5.5. TECHNOLOGY & SECURITY (12)
+  INSERT INTO public.service_catalog (category_id,name,description,sort_order) VALUES
+    (v_tech,'CCTV Installation','Security camera system setup, wiring, and configuration',1),
+    (v_tech,'CCTV Repair','Camera troubleshooting, lens cleaning, and DVR maintenance',2),
+    (v_tech,'Smart Home Setup','IoT device integration, smart lighting, and automation hubs',3),
+    (v_tech,'Access Control System','Biometric, RFID, and keypad entry system installation',4),
+    (v_tech,'Alarm System Installation','Burglar and fire alarm sensor and panel setup',5),
+    (v_tech,'Network Setup','Home and office LAN, WiFi, and router configuration',6),
+    (v_tech,'Computer Repair','Hardware diagnostics, component replacement, and virus removal',7),
+    (v_tech,'Laptop Repair','Screen replacement, battery swap, and motherboard repair',8),
+    (v_tech,'Printer Repair','Printer maintenance, ink system repair, and connectivity fix',9),
+    (v_tech,'Mobile Phone Repair','Screen, battery, charging port, and water damage repair',10),
+    (v_tech,'Data Recovery','Hard drive, SSD, and USB flash drive data retrieval',11),
+    (v_tech,'Cybersecurity Audit','Network vulnerability scan and security hardening review',12)
   ON CONFLICT (category_id,name) DO NOTHING;
 
   -- 6. EVENTS & OCCASIONS (12)

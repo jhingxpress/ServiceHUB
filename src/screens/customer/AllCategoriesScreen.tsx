@@ -12,28 +12,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CustomerStackParamList } from '../../navigation/types';
 import { supabase } from '../../lib/supabase';
+import { toTitleCase } from '../../utils/formatting';
 import { Category } from '../../types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 
 type Props = NativeStackScreenProps<CustomerStackParamList, 'AllCategories'>;
-
-function getCategoryDisplayLabel(name: string): string {
-  const map: Record<string, string> = {
-    'HOME SERVICES': 'Home Services',
-    'HVAC & APPLIANCES': 'HVAC & Appliances',
-    'AUTOMOTIVE': 'Automotive',
-    'CONSTRUCTION & RENOVATION': 'Construction',
-    'EVENTS & ENTERTAINMENT': 'Events',
-    'BEAUTY & WELLNESS': 'Beauty',
-    'TECHNOLOGY & SECURITY': 'Technology',
-    'LOGISTICS & TRANSPORTATION': 'Logistics',
-    'BUSINESS SERVICES': 'Business',
-    'EDUCATION & TRAINING': 'Education',
-    'PET SERVICES': 'Pet Services',
-    'HEALTH & HOME CARE': 'Health & Home',
-  };
-  return map[name] ?? name;
-}
 
 export default function AllCategoriesScreen({ navigation }: Props) {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -75,7 +58,7 @@ export default function AllCategoriesScreen({ navigation }: Props) {
           <TouchableOpacity
             key={cat.id}
             style={styles.card}
-            onPress={() => navigation.navigate('CategoryList', { categoryId: cat.id, categoryName: cat.name })}
+            onPress={() => navigation.navigate('CategoryList', { categoryId: cat.id, categoryName: toTitleCase(cat.name) })}
             activeOpacity={0.8}
           >
             <View style={[styles.iconWrap, { backgroundColor: (cat.color ?? COLORS.primary) + '18' }]}>
@@ -86,7 +69,7 @@ export default function AllCategoriesScreen({ navigation }: Props) {
               />
             </View>
             <Text style={styles.name} numberOfLines={2} textBreakStrategy="simple">
-              {getCategoryDisplayLabel(cat.name)}
+              {toTitleCase(cat.name)}
             </Text>
           </TouchableOpacity>
         ))}

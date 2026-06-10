@@ -16,6 +16,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import MapView, { Marker, Callout, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { supabase } from '../../lib/supabase';
+import { toTitleCase } from '../../utils/formatting';
 import { Category } from '../../types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
@@ -230,7 +231,7 @@ export default function MapDiscoveryScreen() {
         <Avatar uri={item.profile_photo_url ?? item.business_logo} name={item.business_name} size={52} />
         <View style={styles.cardInfo}>
           <Text style={styles.cardName} numberOfLines={1}>{item.business_name ?? 'Provider'}</Text>
-          <Text style={styles.cardCategory}>{item.categories?.name ?? 'Services'}</Text>
+          <Text style={styles.cardCategory}>{toTitleCase(item.categories?.name) ?? 'Services'}</Text>
           <View style={styles.cardMeta}>
             <Ionicons name="star" size={12} color="#F59E0B" />
             <Text style={styles.cardRating}>{Number(item.rating).toFixed(1)}</Text>

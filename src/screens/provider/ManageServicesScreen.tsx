@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
+import { toTitleCase } from '../../utils/formatting';
 import { validateImagePickerAsset } from '../../utils/fileValidation';
 import { useAuthStore } from '../../stores/authStore';
 import { Service, ProviderCategory, ServiceGroup, ServiceTemplate } from '../../types';
@@ -563,7 +564,7 @@ export default function ManageServicesScreen() {
                     lc.is_primary && { color: COLORS.white, fontFamily: FONTS.bold },
                   ]}
                 >
-                  {lc.categories?.name ?? 'Category'}
+                  {toTitleCase(lc.categories?.name) ?? 'Category'}
                 </Text>
               </View>
             ))}

@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CustomerStackParamList } from '../../navigation/types';
 import { supabase } from '../../lib/supabase';
+import { toTitleCase } from '../../utils/formatting';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 import EmptyState from '../../components/ui/EmptyState';
@@ -89,7 +90,7 @@ export default function ProviderListScreen({ route, navigation }: Props) {
       <Avatar uri={item.profile_photo_url ?? item.business_logo} name={item.business_name} size={56} borderColor={COLORS.primary} />
       <View style={styles.listCardInfo}>
         <Text style={styles.providerName}>{item.business_name ?? 'Provider'}</Text>
-        <Text style={styles.categoryText}>{item.category?.name ?? ''}</Text>
+        <Text style={styles.categoryText}>{toTitleCase(item.category?.name ?? '')}</Text>
         <View style={styles.metaRow}>
           {!!item.rating && (
             <View style={styles.ratingPill}>
@@ -123,7 +124,7 @@ export default function ProviderListScreen({ route, navigation }: Props) {
     >
       <Avatar uri={item.profile_photo_url ?? item.business_logo} name={item.business_name} size={64} />
       <Text style={styles.gridName} numberOfLines={1}>{item.business_name ?? 'Pro'}</Text>
-      <Text style={styles.gridCategory} numberOfLines={1}>{item.category?.name ?? ''}</Text>
+      <Text style={styles.gridCategory} numberOfLines={1}>{toTitleCase(item.category?.name ?? '')}</Text>
       {!!item.rating && (
         <View style={styles.gridRating}>
           <Ionicons name="star" size={11} color="#F59E0B" />

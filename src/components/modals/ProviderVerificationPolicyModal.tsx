@@ -26,7 +26,7 @@ export default function ProviderVerificationPolicyModal({ visible, onClose }: Pr
       statusBarTranslucent
     >
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <View style={styles.card} pointerEvents="box-none">
+        <View style={styles.card} onStartShouldSetResponder={() => true}>
           <View style={styles.cardInner}>
             {/* Header */}
             <View style={styles.header}>

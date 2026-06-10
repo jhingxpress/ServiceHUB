@@ -9,17 +9,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import { validateImagePickerAsset } from '../../utils/fileValidation';
+import { toTitleCase } from '../../utils/formatting';
 import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Button from '../../components/ui/Button';
 import { Category } from '../../types';
-
-const toTitleCase = (str: string): string =>
-  str.toLowerCase().replace(/\b\w+\b/g, (word) => {
-    if (word === 'hvac') return 'HVAC';
-    if (word === 'it') return 'IT';
-    return word.charAt(0).toUpperCase() + word.slice(1);
-  });
 
 type KYCStatus = 'not_submitted' | 'pending' | 'approved' | 'rejected';
 

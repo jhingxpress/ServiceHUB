@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { supabase } from '../../lib/supabase';
+import { toTitleCase } from '../../utils/formatting';
 import { validateImagePickerAsset } from '../../utils/fileValidation';
 import { useAuthStore } from '../../stores/authStore';
 import { Category } from '../../types';
@@ -16,12 +17,6 @@ import ProviderVerificationPolicyModal from '../../components/modals/ProviderVer
 import TermsOfServiceModal from '../../components/modals/TermsOfServiceModal';
 import PrivacyPolicyModal from '../../components/modals/PrivacyPolicyModal';
 
-const toTitleCase = (str: string): string =>
-  str.toLowerCase().replace(/\b\w+\b/g, (word) => {
-    if (word === 'hvac') return 'HVAC';
-    if (word === 'it') return 'IT';
-    return word.charAt(0).toUpperCase() + word.slice(1);
-  });
 
 const MAX_FILE_SIZE = 1024 * 1024 * 1024;
 const TOTAL_STEPS = 4;
