@@ -11,7 +11,7 @@ import { supabase } from '../../lib/supabase';
 import { toTitleCase } from '../../utils/formatting';
 import { validateImagePickerAsset } from '../../utils/fileValidation';
 import { useAuthStore } from '../../stores/authStore';
-import { Service, ProviderCategory, ServiceGroup, ServiceTemplate } from '../../types';
+import { Service, ProviderCategory } from '../../types';
 import * as ImagePicker from 'expo-image-picker';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Button from '../../components/ui/Button';
@@ -23,7 +23,14 @@ interface ServiceWithExtras extends Service {
   image_count?: number;
 }
 
-type CatalogStep = 'group' | 'template' | 'none';
+interface CatalogService {
+  id: string;
+  category_id: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  sort_order: number;
+}
 
 export default function ManageServicesScreen() {
   const navigation = useNavigation<NavProp>();
@@ -38,10 +45,8 @@ export default function ManageServicesScreen() {
   const [form, setForm] = useState({ name: '', description: '', price: '', duration: '' });
 
   // Service Catalog state
-  const [catalogStep, setCatalogStep] = useState<CatalogStep>('none');
-  const [serviceGroups, setServiceGroups] = useState<ServiceGroup[]>([]);
-  const [serviceTemplates, setServiceTemplates] = useState<ServiceTemplate[]>([]);
-  const [selectedGroup, setSelectedGroup] = useState<ServiceGroup | null>(null);
+  const [catalogVisible, setCatalogVisible] = useState(false);
+  const [catalogServices, setCatalogServices] = useState<CatalogService[]>([]);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<string>>(new Set());
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [creatingFromTemplates, setCreatingFromTemplates] = useState(false);
@@ -98,8 +103,7 @@ export default function ManageServicesScreen() {
     if (!user) return;
     console.log('[SERVICE] Build Audit v3');
     console.log('[SERVICE] Current user.id', user?.id);
-    setCatalogStep('group');
-    setSelectedGroup(null);
+    setCatalogVisible(true);
     setSelectedTemplateIds(new Set());
     setCatalogLoading(true);
 
@@ -127,37 +131,24 @@ export default function ManageServicesScreen() {
 
     if (allCategoryIds.length === 0) {
       console.log('[SERVICE] No linked categories in provider_categories');
-      setServiceGroups([]);
+      setCatalogServices([]);
       setCatalogLoading(false);
       return;
     }
 
-    const { data: groupsByLeaf, error: leafErr } = await supabase
-      .from('service_groups')
-      .select('*')
-      .in('leaf_category_id', allCategoryIds)
-      .eq('is_active', true);
-
-    const { data: groupsByParent, error: parentErr } = await supabase
-      .from('service_groups')
-      .select('*')
+    const { data: catalogData, error: catalogErr } = await supabase
+      .from('service_catalog')
+      .select('id, category_id, name, description, is_active, sort_order')
       .in('category_id', allCategoryIds)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .order('sort_order')
+      .order('name');
 
-    if (leafErr) console.error('[SERVICE] groupsByLeaf error:', leafErr);
-    if (parentErr) console.error('[SERVICE] groupsByParent error:', parentErr);
+    if (catalogErr) {
+      console.error('[SERVICE] service_catalog query error:', catalogErr);
+    }
 
-    console.log('[SERVICE] groupsByLeaf', groupsByLeaf?.length);
-    console.log('[SERVICE] groupsByParent', groupsByParent?.length);
-
-    // Merge and deduplicate by id
-    const merged = new Map<string, ServiceGroup>();
-    (groupsByLeaf ?? []).forEach((g: any) => merged.set(g.id, g as ServiceGroup));
-    (groupsByParent ?? []).forEach((g: any) => merged.set(g.id, g as ServiceGroup));
-    const mergedGroups = Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name));
-
-    console.log('[SERVICE] mergedGroups', mergedGroups?.length);
-    console.log('[SERVICE] mergedGroupNames', mergedGroups?.map((g) => g.name));
+    console.log('[SERVICE] catalogData', catalogData?.length);
 
     // Fetch parent category names for grouping
     const { data: catData } = await supabase.from('categories').select('id, name').eq('is_parent', true);
@@ -165,31 +156,8 @@ export default function ManageServicesScreen() {
     (catData ?? []).forEach((c: any) => { map[c.id] = c.name; });
     setCategoryMap(map);
 
-    setServiceGroups(mergedGroups);
-    console.log('[SERVICE] setServiceGroups', mergedGroups?.length);
-    setCatalogLoading(false);
-  };
-
-  const selectGroup = async (group: ServiceGroup) => {
-    setSelectedGroup(group);
-    setCatalogStep('template');
-    setCatalogLoading(true);
-
-    console.log('[SERVICE] selectGroup:', group.name, 'groupId:', group.id);
-
-    const { data: templates, error: templateErr } = await supabase
-      .from('service_templates')
-      .select('*')
-      .eq('service_group_id', group.id)
-      .eq('is_active', true)
-      .order('name');
-
-    if (templateErr) {
-      console.error('[SERVICE] service_templates query error:', templateErr);
-    }
-
-    console.log('[SERVICE] Templates returned:', templates?.length ?? 0, 'for group:', group.name);
-    setServiceTemplates((templates ?? []) as ServiceTemplate[]);
+    setCatalogServices((catalogData ?? []) as CatalogService[]);
+    console.log('[SERVICE] setCatalogServices', catalogData?.length);
     setCatalogLoading(false);
   };
 
@@ -210,8 +178,8 @@ export default function ManageServicesScreen() {
     setCreatingFromTemplates(true);
 
     const existingNames = new Set(services.map((s) => s.name.toLowerCase().trim()));
-    const selectedTemplates = serviceTemplates.filter((t) => selectedTemplateIds.has(t.id));
-    const toCreate = selectedTemplates.filter((t) => !existingNames.has(t.name.toLowerCase().trim()));
+    const selectedItems = catalogServices.filter((t) => selectedTemplateIds.has(t.id));
+    const toCreate = selectedItems.filter((t) => !existingNames.has(t.name.toLowerCase().trim()));
 
     if (toCreate.length === 0) {
       Alert.alert('No new services', 'All selected services already exist in your list.');
@@ -238,8 +206,7 @@ export default function ManageServicesScreen() {
         supabase.rpc('refresh_provider_score', { p_provider_id: user.id }),
       ]);
 
-      setCatalogStep('none');
-      setSelectedGroup(null);
+      setCatalogVisible(false);
       setSelectedTemplateIds(new Set());
       fetchServices();
       Alert.alert('Success', `${toCreate.length} service(s) added successfully.`);
@@ -251,8 +218,7 @@ export default function ManageServicesScreen() {
   };
 
   const closeCatalog = () => {
-    setCatalogStep('none');
-    setSelectedGroup(null);
+    setCatalogVisible(false);
     setSelectedTemplateIds(new Set());
   };
 
@@ -397,7 +363,7 @@ export default function ManageServicesScreen() {
   // =========================
 
   const renderCatalogContent = () => {
-    console.log('[SERVICE] renderCatalogContent — catalogStep:', catalogStep, 'catalogLoading:', catalogLoading, 'serviceGroups.length:', serviceGroups.length, 'serviceTemplates.length:', serviceTemplates.length);
+    console.log('[SERVICE] renderCatalogContent — catalogLoading:', catalogLoading, 'catalogServices.length:', catalogServices.length);
 
     if (catalogLoading) {
       return (
@@ -407,58 +373,78 @@ export default function ManageServicesScreen() {
       );
     }
 
-    if (catalogStep === 'group') {
-      if (serviceGroups.length === 0) {
-        return (
-          <View style={styles.catalogCenter}>
-            <Ionicons name="cube-outline" size={48} color={COLORS.textMuted} />
-            <Text style={styles.catalogEmptyTitle}>No Service Groups</Text>
-            <Text style={styles.catalogEmptyText}>No service groups found for your categories.</Text>
-            <Button title="Create Custom Service" onPress={() => { closeCatalog(); openAdd(); }} fullWidth style={{ marginTop: SPACING.md }} />
-          </View>
-        );
-      }
-
+    if (catalogServices.length === 0) {
       return (
-        <View style={{ flex: 1 }}>
-          <Text style={styles.catalogSubtitle}>Select a service group to see available templates</Text>
-          <SectionList
-            sections={(() => {
-              const grouped: Record<string, ServiceGroup[]> = {};
-              serviceGroups.forEach((g) => {
-                const catName = categoryMap[g.category_id] || 'Other';
-                if (!grouped[catName]) grouped[catName] = [];
-                grouped[catName].push(g);
-              });
-              return Object.entries(grouped)
-                .sort((a, b) => a[0].localeCompare(b[0]))
-                .map(([title, data]) => ({ title, data }));
-            })()}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingBottom: 120 }}
-            renderSectionHeader={({ section: { title } }) => (
-              <Text style={styles.catalogSectionHeader}>{title}</Text>
-            )}
-            renderItem={({ item }) => (
-                <TouchableOpacity style={styles.groupCard} onPress={() => selectGroup(item)} activeOpacity={0.8}>
-                  <View style={styles.groupIconWrap}>
-                    <Ionicons
-                      name={(item.icon as React.ComponentProps<typeof Ionicons>['name']) || 'cube-outline'}
-                      size={24}
-                      color={COLORS.primary}
-                    />
-                  </View>
-                  <View style={styles.groupInfo}>
-                    <Text style={styles.groupName}>{item.name}</Text>
-                    {item.description ? (
-                      <Text style={styles.groupDesc} numberOfLines={2}>{item.description}</Text>
-                    ) : null}
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
-                </TouchableOpacity>
-            )}
+        <View style={styles.catalogCenter}>
+          <Ionicons name="cube-outline" size={48} color={COLORS.textMuted} />
+          <Text style={styles.catalogEmptyTitle}>No Catalog Services</Text>
+          <Text style={styles.catalogEmptyText}>No services found for your categories.</Text>
+          <Button title="Create Custom Service" onPress={() => { closeCatalog(); openAdd(); }} fullWidth style={{ marginTop: SPACING.md }} />
+        </View>
+      );
+    }
+
+    return (
+      <View style={{ flex: 1 }}>
+        <Text style={styles.catalogSubtitle}>Select the services you offer</Text>
+        <SectionList
+          sections={(() => {
+            const grouped: Record<string, CatalogService[]> = {};
+            catalogServices.forEach((item) => {
+              const catName = categoryMap[item.category_id] || 'Other';
+              if (!grouped[catName]) grouped[catName] = [];
+              grouped[catName].push(item);
+            });
+            return Object.entries(grouped)
+              .sort((a, b) => a[0].localeCompare(b[0]))
+              .map(([title, data]) => ({ title, data }));
+          })()}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 120 }}
+          renderSectionHeader={({ section: { title } }) => (
+            <Text style={styles.catalogSectionHeader}>{title}</Text>
+          )}
+          renderItem={({ item }) => {
+            const isSelected = selectedTemplateIds.has(item.id);
+            const alreadyExists = services.some((s) => s.name.toLowerCase().trim() === item.name.toLowerCase().trim());
+            return (
+              <TouchableOpacity
+                style={[styles.templateRow, isSelected && styles.templateRowSelected, alreadyExists && styles.templateRowDisabled]}
+                onPress={() => { if (!alreadyExists) toggleTemplate(item.id); }}
+                activeOpacity={alreadyExists ? 1 : 0.7}
+              >
+                <View style={styles.templateCheckbox}>
+                  {alreadyExists ? (
+                    <Ionicons name="checkmark-circle" size={22} color={COLORS.success} />
+                  ) : isSelected ? (
+                    <Ionicons name="checkbox" size={22} color={COLORS.primary} />
+                  ) : (
+                    <Ionicons name="square-outline" size={22} color={COLORS.textMuted} />
+                  )}
+                </View>
+                <View style={styles.templateInfo}>
+                  <Text style={[styles.templateName, alreadyExists && { color: COLORS.textMuted }]}>{item.name}</Text>
+                  {item.description ? (
+                    <Text style={[styles.templateDesc, alreadyExists && { color: COLORS.textMuted }]} numberOfLines={2}>{item.description}</Text>
+                  ) : null}
+                  {alreadyExists && (
+                    <Text style={styles.templateExistsLabel}>Already added</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          }}
+        />
+        <View style={styles.catalogFooter}>
+          <Text style={styles.catalogCount}>{selectedTemplateIds.size} selected</Text>
+          <Button
+            title="Add Selected Services"
+            onPress={createFromTemplates}
+            loading={creatingFromTemplates}
+            disabled={selectedTemplateIds.size === 0}
+            fullWidth
           />
           <Button
             title="Create Custom Service"
@@ -468,89 +454,8 @@ export default function ManageServicesScreen() {
             style={{ marginTop: SPACING.sm }}
           />
         </View>
-      );
-    }
-
-    if (catalogStep === 'template') {
-      return (
-        <View style={{ flex: 1 }}>
-          <View style={styles.catalogHeaderRow}>
-            <TouchableOpacity onPress={() => { setCatalogStep('group'); setSelectedGroup(null); setSelectedTemplateIds(new Set()); }} style={styles.catalogBackBtn}>
-              <Ionicons name="arrow-back" size={18} color={COLORS.primary} />
-              <Text style={styles.catalogBackText}>Groups</Text>
-            </TouchableOpacity>
-            <Text style={styles.catalogGroupTitle}>{selectedGroup?.name}</Text>
-            <View style={{ width: 60 }} />
-          </View>
-          <Text style={styles.catalogSubtitle}>Select the services you offer</Text>
-
-          {serviceTemplates.length === 0 ? (
-            <View style={styles.catalogCenter}>
-              <Text style={styles.catalogEmptyTitle}>No Templates</Text>
-              <Text style={styles.catalogEmptyText}>No service templates found in this group.</Text>
-              <Button title="Create Custom Service" onPress={() => { closeCatalog(); openAdd(); }} fullWidth style={{ marginTop: SPACING.md }} />
-            </View>
-          ) : (
-            <FlatList
-              data={serviceTemplates}
-              keyExtractor={(item) => item.id}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: SPACING.xl }}
-              renderItem={({ item }) => {
-                const isSelected = selectedTemplateIds.has(item.id);
-                const alreadyExists = services.some((s) => s.name.toLowerCase().trim() === item.name.toLowerCase().trim());
-                return (
-                  <TouchableOpacity
-                    style={[styles.templateRow, isSelected && styles.templateRowSelected, alreadyExists && styles.templateRowDisabled]}
-                    onPress={() => { if (!alreadyExists) toggleTemplate(item.id); }}
-                    activeOpacity={alreadyExists ? 1 : 0.7}
-                  >
-                    <View style={styles.templateCheckbox}>
-                      {alreadyExists ? (
-                        <Ionicons name="checkmark-circle" size={22} color={COLORS.success} />
-                      ) : isSelected ? (
-                        <Ionicons name="checkbox" size={22} color={COLORS.primary} />
-                      ) : (
-                        <Ionicons name="square-outline" size={22} color={COLORS.textMuted} />
-                      )}
-                    </View>
-                    <View style={styles.templateInfo}>
-                      <Text style={[styles.templateName, alreadyExists && { color: COLORS.textMuted }]}>{item.name}</Text>
-                      {item.description ? (
-                        <Text style={[styles.templateDesc, alreadyExists && { color: COLORS.textMuted }]} numberOfLines={2}>{item.description}</Text>
-                      ) : null}
-                      {alreadyExists && (
-                        <Text style={styles.templateExistsLabel}>Already added</Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                );
-              }}
-            />
-          )}
-
-          <View style={styles.catalogFooter}>
-            <Text style={styles.catalogCount}>{selectedTemplateIds.size} selected</Text>
-            <Button
-              title="Add Selected Services"
-              onPress={createFromTemplates}
-              loading={creatingFromTemplates}
-              disabled={selectedTemplateIds.size === 0}
-              fullWidth
-            />
-            <Button
-              title="Create Custom Service"
-              onPress={() => { closeCatalog(); openAdd(); }}
-              variant="outline"
-              fullWidth
-              style={{ marginTop: SPACING.sm }}
-            />
-          </View>
-        </View>
-      );
-    }
-
-    return null;
+      </View>
+    );
   };
 
   return (
@@ -741,22 +646,18 @@ export default function ManageServicesScreen() {
       </Modal>
 
       {/* Service Catalog Modal */}
-      <Modal visible={catalogStep !== 'none'} animationType="slide" transparent>
+      <Modal visible={catalogVisible} animationType="slide" transparent>
         {(() => {
           console.log('[SERVICE MODAL]', {
-            visible: catalogStep !== 'none',
-            groupsCount: serviceGroups?.length,
-            templatesCount: serviceTemplates?.length,
-            catalogStep,
+            visible: catalogVisible,
+            catalogCount: catalogServices?.length,
           });
           return null;
         })()}
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={[styles.modal, { maxHeight: '90%' }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {catalogStep === 'group' ? 'Service Catalog' : selectedGroup?.name}
-              </Text>
+              <Text style={styles.modalTitle}>Service Catalog</Text>
               <TouchableOpacity onPress={closeCatalog}>
                 <Ionicons name="close" size={24} color={COLORS.text} />
               </TouchableOpacity>
