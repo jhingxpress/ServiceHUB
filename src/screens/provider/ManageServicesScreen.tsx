@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, SectionList, TouchableOpacity, StyleSheet, Alert,
   Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
@@ -423,7 +423,7 @@ export default function ManageServicesScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.catalogSubtitle}>Select a service group to see available templates</Text>
           <SectionList
-            sections={useMemo(() => {
+            sections={(() => {
               const grouped: Record<string, ServiceGroup[]> = {};
               serviceGroups.forEach((g) => {
                 const catName = categoryMap[g.category_id] || 'Other';
@@ -433,7 +433,7 @@ export default function ManageServicesScreen() {
               return Object.entries(grouped)
                 .sort((a, b) => a[0].localeCompare(b[0]))
                 .map(([title, data]) => ({ title, data }));
-            }, [serviceGroups, categoryMap])}
+            })()}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             style={{ flex: 1 }}
