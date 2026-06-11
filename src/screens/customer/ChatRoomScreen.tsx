@@ -60,6 +60,37 @@ export default function ChatRoomScreen() {
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [viewerImages, setViewerImages] = useState<{ uri: string }[]>([]);
+  const [signedImageUrls, setSignedImageUrls] = useState<Record<string, string>>({});
+
+  const generateSignedUrls = useCallback(async (msgs: Message[]) => {
+    const imageMsgs = msgs.filter((m) => m.message_type === 'image' && m.image_url);
+    if (imageMsgs.length === 0) return;
+    const newMap: Record<string, string> = {};
+    await Promise.all(
+      imageMsgs.map(async (msg) => {
+        const url = msg.image_url!;
+        const marker = '/object/public/chat-media/';
+        const idx = url.indexOf(marker);
+        const path = idx !== -1 ? url.slice(idx + marker.length) : null;
+        console.log(`[ChatSigned] msg.id=${msg.id} path=${path}`);
+        if (!path) return;
+        try {
+          const { data, error } = await supabase.storage
+            .from('chat-media')
+            .createSignedUrl(path, 86400);
+          console.log(`[ChatSigned] signedUrl=${data?.signedUrl ?? 'null'} error=${error?.message ?? 'none'}`);
+          if (data?.signedUrl) newMap[msg.id] = data.signedUrl;
+          // If data?.signedUrl is falsy, msg.id is NOT added to newMap.
+          // The spread { ...prev, ...newMap } will preserve any existing
+          // entry for this message rather than overwriting it with nothing.
+        } catch (err) {
+          console.warn(`[ChatSigned] createSignedUrl threw for ${msg.id}:`, err);
+          // Silently skip — existing signed URL in state is preserved.
+        }
+      })
+    );
+    setSignedImageUrls((prev) => ({ ...prev, ...newMap }));
+  }, []);
 
   const markAsRead = useCallback(async () => {
     if (!user) return;
@@ -94,10 +125,17 @@ export default function ChatRoomScreen() {
     if (error) {
       // Failed to fetch messages
     }
-    setMessages((data ?? []) as Message[]);
+    console.log('[ChatRoom] fetchMessages count:', data?.length ?? 0, 'error:', error?.message ?? 'none');
+    const imageMessages = (data ?? []).filter((m: any) => m.message_type === 'image');
+    imageMessages.forEach((m: any, i: number) => {
+      console.log(`[ChatRoom] image msg[${i}]: id=${m.id} image_url=${m.image_url}`);
+    });
+    const fetched = (data ?? []) as Message[];
+    setMessages(fetched);
     setLoading(false);
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
-  }, [bookingId]);
+    generateSignedUrls(fetched);
+  }, [bookingId, generateSignedUrls]);
 
   useEffect(() => {
     fetchMessages();
@@ -110,7 +148,11 @@ export default function ChatRoomScreen() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `booking_id=eq.${bookingId}` },
         (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message]);
+          const newMsg = payload.new as Message;
+          setMessages((prev) => [...prev, newMsg]);
+          if (newMsg.message_type === 'image' && newMsg.image_url) {
+            generateSignedUrls([newMsg]);
+          }
           setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
         }
       )
@@ -138,7 +180,8 @@ export default function ChatRoomScreen() {
     useCallback(() => {
       markAsRead();
       markChatNotificationsRead();
-    }, [markAsRead, markChatNotificationsRead])
+      generateSignedUrls(messages);
+    }, [markAsRead, markChatNotificationsRead, generateSignedUrls, messages])
   );
 
   const handleSend = async () => {
@@ -188,27 +231,31 @@ export default function ChatRoomScreen() {
   };
 
   const openImageViewer = (imageUrl: string, allImageUrls: string[]) => {
-    console.log('[ChatViewer] Tapped imageUrl:', imageUrl);
-    console.log('[ChatViewer] All image URLs:', allImageUrls);
+    console.log('[ChatViewer] ===== OPEN VIEWER =====');
+    console.log('[ChatViewer] tapped imageUrl:', imageUrl);
+    console.log('[ChatViewer] allImageUrls count:', allImageUrls.length);
+    allImageUrls.forEach((u, i) => console.log(`[ChatViewer] allImageUrls[${i}]:`, u));
     const idx = allImageUrls.indexOf(imageUrl);
+    console.log('[ChatViewer] resolved index:', idx);
     const images = allImageUrls.map((uri) => ({ uri }));
-    console.log('[ChatViewer] Opening viewer with', images.length, 'images, index:', idx);
 
-    // Pre-fetch dimensions to help react-native-image-viewing render correctly
+    // Pre-fetch dimensions — if getSize fails, the URL is the problem
     images.forEach((img, i) => {
-      if (img.uri) {
-        Image.getSize(
-          img.uri,
-          (width, height) => {
-            console.log('[ChatViewer] Image', i, 'dimensions:', width, 'x', height);
-          },
-          (err) => {
-            console.error('[ChatViewer] Image', i, 'getSize failed:', err);
-          }
-        );
-      }
+      console.log(`[ChatViewer] calling Image.getSize for [${i}]:`, img.uri);
+      Image.getSize(
+        img.uri,
+        (width, height) => {
+          console.log(`[ChatViewer] getSize OK [${i}]: ${width}x${height} uri=${img.uri}`);
+        },
+        (err) => {
+          console.error(`[ChatViewer] getSize FAILED [${i}]: uri=${img.uri} error=`, err);
+        }
+      );
     });
 
+    console.log('[ChatViewer] setting viewerImages:', JSON.stringify(images));
+    console.log('[ChatViewer] setting viewerIndex:', idx >= 0 ? idx : 0);
+    console.log('[ChatViewer] setting viewerVisible: true');
     setViewerImages(images);
     setViewerIndex(idx >= 0 ? idx : 0);
     setViewerVisible(true);
@@ -252,7 +299,8 @@ export default function ChatRoomScreen() {
 
   const uploadAndSendImage = async (uri: string) => {
     if (!user) return;
-
+    console.log('[ChatUpload] ===== START UPLOAD =====');
+    console.log('[ChatUpload] local uri:', uri);
     setUploadingImage(true);
 
     const tempId = `temp-img-${Date.now()}`;
@@ -280,12 +328,14 @@ export default function ChatRoomScreen() {
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `${bookingId}/${fileName}`;
 
+      console.log('[ChatUpload] filePath:', filePath, 'mimeType:', mimeType);
       const publicUrl = await uploadImageToStorage(
         'chat-media',
         filePath,
         uri,
         mimeType
       );
+      console.log('[ChatUpload] publicUrl returned:', publicUrl);
 
       const { data: insertData, error: insertError } = await supabase
         .from('messages')
@@ -300,6 +350,8 @@ export default function ChatRoomScreen() {
         .select('id, booking_id, sender_id, receiver_id, content, image_url, message_type, is_read, created_at')
         .single();
 
+      console.log('[ChatUpload] insert error:', insertError?.message ?? 'none');
+      console.log('[ChatUpload] insertData image_url:', (insertData as any)?.image_url);
       if (insertError) throw insertError;
 
       setMessages((prev) =>
@@ -307,6 +359,7 @@ export default function ChatRoomScreen() {
       );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Image upload failed';
+      console.error('[ChatUpload] CAUGHT ERROR:', message);
       Alert.alert('Upload Failed', message);
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
     } finally {
@@ -329,9 +382,12 @@ export default function ChatRoomScreen() {
   const renderMessage = ({ item }: { item: Message }) => {
     const isOwn = item.sender_id === user?.id;
     const isImage = item.message_type === 'image';
-    const allImageUrls = messages
+    const resolvedImageUrl = item.image_url
+      ? (signedImageUrls[item.id] ?? item.image_url)
+      : null;
+    const allResolvedImageUrls = messages
       .filter((m) => m.message_type === 'image' && m.image_url)
-      .map((m) => m.image_url!);
+      .map((m) => signedImageUrls[m.id] ?? m.image_url!);
 
     return (
       <View style={[styles.msgRow, isOwn && styles.msgRowOwn]}>
@@ -343,17 +399,20 @@ export default function ChatRoomScreen() {
           />
         )}
         <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
-          {isImage && item.image_url ? (
+          {isImage && resolvedImageUrl ? (
             <TouchableOpacity
               activeOpacity={0.85}
-              onPress={() => openImageViewer(item.image_url!, allImageUrls)}
+              onPress={() => {
+                console.log('[ChatViewer] Bubble tapped, resolvedImageUrl:', resolvedImageUrl);
+                openImageViewer(resolvedImageUrl, allResolvedImageUrls);
+              }}
             >
               <Image
-                source={{ uri: item.image_url }}
+                source={{ uri: resolvedImageUrl }}
                 style={styles.chatImage}
                 resizeMode="cover"
-                onLoad={() => {}}
-                onError={() => {}}
+                onLoad={() => console.log('[ChatRoom][IMG] Thumbnail loaded:', resolvedImageUrl)}
+                onError={(e) => console.error('[ChatRoom][IMG] Thumbnail error:', resolvedImageUrl, e.nativeEvent.error)}
               />
             </TouchableOpacity>
           ) : (

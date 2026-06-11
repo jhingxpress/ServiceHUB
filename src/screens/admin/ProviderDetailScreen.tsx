@@ -182,26 +182,64 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
         `).eq('provider_id', providerId).order('created_at', { ascending: false }),
       ]);
       if (provRes.error) throw provRes.error;
+
+      // --- DEBUG: Raw provider row ---
+      console.log('[ProvDoc] ===== PROVIDER ROW =====');
+      console.log('[ProvDoc] provider.id:', (provRes.data as any)?.id);
+      console.log('[ProvDoc] provider.status:', (provRes.data as any)?.status);
+      console.log('[ProvDoc] kyc_documents raw value:', JSON.stringify((provRes.data as any)?.kyc_documents));
+      console.log('[ProvDoc] kyc_documents type:', typeof (provRes.data as any)?.kyc_documents);
+      console.log('[ProvDoc] kyc_documents keys:', (provRes.data as any)?.kyc_documents ? Object.keys((provRes.data as any).kyc_documents) : 'null/undefined');
+
+      // --- DEBUG: provider_documents table ---
+      console.log('[ProvDoc] ===== provider_documents TABLE =====');
+      console.log('[ProvDoc] docsRes.error:', docsRes.error?.message ?? 'none');
+      console.log('[ProvDoc] docsRes.data count:', docsRes.data?.length ?? 0);
+      (docsRes.data ?? []).forEach((d: any, i: number) => {
+        console.log(`[ProvDoc] table doc[${i}]: id=${d.id} type=${d.document_type} status=${d.status} url=${d.file_url}`);
+      });
+
       const tableDocs = (docsRes.data ?? []) as DocRecord[];
-      const kycDocs = convertKycDocs((provRes.data as any)?.kyc_documents ?? null);
+      const rawKyc = (provRes.data as any)?.kyc_documents ?? null;
+      const kycDocs = convertKycDocs(rawKyc);
+
+      // --- DEBUG: converted KYC docs ---
+      console.log('[ProvDoc] ===== KYC DOCS CONVERTED =====');
+      console.log('[ProvDoc] kycDocs count:', kycDocs.length);
+      kycDocs.forEach((d, i) => {
+        console.log(`[ProvDoc] kyc doc[${i}]: id=${d.id} type=${d.document_type} url=${d.file_url}`);
+      });
+
       const allDocs = [...tableDocs, ...kycDocs];
+      console.log('[ProvDoc] ===== MERGED allDocs count:', allDocs.length, '=====');
+
       setProvider(provRes.data as unknown as ProviderDetailData);
       setDocuments(allDocs);
       setLogs((logsRes.data ?? []) as unknown as LogEntry[]);
 
       // Generate signed URLs for private bucket images
       const urlMap: Record<string, string> = {};
+      console.log('[ProvDoc] ===== SIGNED URL GENERATION =====');
       await Promise.all(
         allDocs.map(async (doc) => {
           const extracted = extractStoragePath(doc.file_url);
+          console.log(`[ProvDoc] doc.id=${doc.id} file_url=${doc.file_url}`);
+          console.log(`[ProvDoc] extractStoragePath result:`, JSON.stringify(extracted));
           if (extracted) {
-            const { data } = await supabase.storage.from(extracted.bucket).createSignedUrl(extracted.path, 3600);
-            if (data?.signedUrl) urlMap[doc.id] = data.signedUrl;
+            const { data: signedData, error: signedErr } = await supabase.storage
+              .from(extracted.bucket)
+              .createSignedUrl(extracted.path, 3600);
+            console.log(`[ProvDoc] signedUrl for ${doc.id}: ${signedData?.signedUrl ?? 'null'} error: ${signedErr?.message ?? 'none'}`);
+            if (signedData?.signedUrl) urlMap[doc.id] = signedData.signedUrl;
+          } else {
+            console.log(`[ProvDoc] SKIPPED signed URL for ${doc.id} — extractStoragePath returned null`);
           }
         })
       );
+      console.log('[ProvDoc] ===== urlMap keys:', Object.keys(urlMap), '=====');
       setSignedUrls(urlMap);
     } catch (err: any) {
+      console.error('[ProvDoc] loadData CAUGHT ERROR:', err?.message ?? err);
       setError(err?.message ?? 'Failed to load provider details');
     } finally {
       setLoading(false);
@@ -388,15 +426,21 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           <Text style={styles.sectionTitle}>Documents ({documents.length})</Text>
           {documents.length === 0
             ? <Text style={styles.emptyText}>No documents uploaded yet.</Text>
-            : documents.map(doc => (
+            : documents.map(doc => {
+              const resolvedUrl = signedUrls[doc.id] ?? doc.file_url;
+              console.log(`[ProvDoc][RENDER] doc.id=${doc.id} type=${doc.document_type} hasSignedUrl=${!!signedUrls[doc.id]} resolvedUrl=${resolvedUrl}`);
+              return (
               <View key={doc.id} style={styles.docCard}>
                 <TouchableOpacity style={styles.docRow} onPress={() => {
-                  setPreviewImage(signedUrls[doc.id] ?? doc.file_url);
+                  console.log(`[ProvDoc][PREVIEW] Tapped doc.id=${doc.id} resolvedUrl=${resolvedUrl}`);
+                  setPreviewImage(resolvedUrl);
                 }}>
                   <Image
-                    source={{ uri: signedUrls[doc.id] ?? doc.file_url }}
+                    source={{ uri: resolvedUrl }}
                     style={styles.docThumbnail}
                     resizeMode="cover"
+                    onLoad={() => console.log(`[ProvDoc][IMAGE] Loaded doc.id=${doc.id}`)}
+                    onError={(e) => console.error(`[ProvDoc][IMAGE] Error doc.id=${doc.id}:`, e.nativeEvent.error)}
                   />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.docType}>{getDocumentLabel(doc)}</Text>
@@ -445,7 +489,8 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
                   </View>
                 )}
               </View>
-            ))
+            );
+            })
           }
         </View>
 
