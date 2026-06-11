@@ -161,6 +161,21 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [processingDoc, setProcessingDoc] = useState<string | null>(null);
 
+  // Temporary debug panel state
+  const [debugSummary, setDebugSummary] = useState<{
+    providerId: string;
+    status: string;
+    kycExists: boolean;
+    kycCount: number;
+    tableDocsCount: number;
+    mergedDocsCount: number;
+    firstTableUrl: string | null;
+    firstKycUrl: string | null;
+    signedSuccessCount: number;
+    signedFailCount: number;
+    signedErrors: string[];
+  } | null>(null);
+
   const loadData = async () => {
     setLoading(true);
     setError(null);
@@ -219,6 +234,9 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
 
       // Generate signed URLs for private bucket images
       const urlMap: Record<string, string> = {};
+      const signedErrors: string[] = [];
+      let signedSuccessCount = 0;
+      let signedFailCount = 0;
       console.log('[ProvDoc] ===== SIGNED URL GENERATION =====');
       await Promise.all(
         allDocs.map(async (doc) => {
@@ -230,14 +248,36 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
               .from(extracted.bucket)
               .createSignedUrl(extracted.path, 3600);
             console.log(`[ProvDoc] signedUrl for ${doc.id}: ${signedData?.signedUrl ?? 'null'} error: ${signedErr?.message ?? 'none'}`);
-            if (signedData?.signedUrl) urlMap[doc.id] = signedData.signedUrl;
+            if (signedData?.signedUrl) {
+              urlMap[doc.id] = signedData.signedUrl;
+              signedSuccessCount++;
+            } else {
+              signedFailCount++;
+              if (signedErr?.message) signedErrors.push(signedErr.message);
+            }
           } else {
             console.log(`[ProvDoc] SKIPPED signed URL for ${doc.id} — extractStoragePath returned null`);
+            signedFailCount++;
           }
         })
       );
       console.log('[ProvDoc] ===== urlMap keys:', Object.keys(urlMap), '=====');
       setSignedUrls(urlMap);
+
+      // Populate debug summary
+      setDebugSummary({
+        providerId: (provRes.data as any)?.id ?? providerId,
+        status: (provRes.data as any)?.status ?? 'unknown',
+        kycExists: !!rawKyc,
+        kycCount: kycDocs.length,
+        tableDocsCount: tableDocs.length,
+        mergedDocsCount: allDocs.length,
+        firstTableUrl: tableDocs[0]?.file_url ?? null,
+        firstKycUrl: kycDocs[0]?.file_url ?? null,
+        signedSuccessCount,
+        signedFailCount,
+        signedErrors: signedErrors.slice(0, 3),
+      });
     } catch (err: any) {
       console.error('[ProvDoc] loadData CAUGHT ERROR:', err?.message ?? err);
       setError(err?.message ?? 'Failed to load provider details');
@@ -420,6 +460,32 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
             ) : null}
           </View>
         </View>
+
+        {/* Temporary Debug Panel */}
+        {debugSummary && (
+          <View style={styles.debugPanel}>
+            <Text style={styles.debugTitle}>DEBUG</Text>
+            <Text style={styles.debugLine}>Provider ID: {debugSummary.providerId}</Text>
+            <Text style={styles.debugLine}>Status: {debugSummary.status}</Text>
+            <Text style={styles.debugLine}>kyc_documents exists: {String(debugSummary.kycExists)}</Text>
+            <Text style={styles.debugLine}>kyc_documents count: {debugSummary.kycCount}</Text>
+            <Text style={styles.debugLine}>provider_documents count: {debugSummary.tableDocsCount}</Text>
+            <Text style={styles.debugLine}>mergedDocs count: {debugSummary.mergedDocsCount}</Text>
+            <Text style={styles.debugLine}>first provider_documents file_url:</Text>
+            <Text style={styles.debugLine}>{debugSummary.firstTableUrl ?? '(none)'}</Text>
+            <Text style={styles.debugLine}>first kyc_documents URL:</Text>
+            <Text style={styles.debugLine}>{debugSummary.firstKycUrl ?? '(none)'}</Text>
+            <Text style={styles.debugLine}>signed URL generation: {debugSummary.signedSuccessCount} success / {debugSummary.signedFailCount} failed</Text>
+            {debugSummary.signedErrors.length > 0 && (
+              <>
+                <Text style={styles.debugLine}>signed URL error(s):</Text>
+                {debugSummary.signedErrors.map((err, i) => (
+                  <Text key={i} style={styles.debugError}>{err}</Text>
+                ))}
+              </>
+            )}
+          </View>
+        )}
 
         {/* Documents */}
         <View style={styles.section}>
@@ -849,5 +915,32 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.base,
     fontFamily: FONTS.semiBold,
     color: COLORS.text,
+  },
+  // Temporary debug panel styles
+  debugPanel: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    borderWidth: 2,
+    borderColor: '#ff6b6b',
+  },
+  debugTitle: {
+    fontSize: FONTS.sizes.base,
+    fontFamily: FONTS.bold,
+    color: '#ff6b6b',
+    marginBottom: SPACING.sm,
+  },
+  debugLine: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.regular,
+    color: '#eee',
+    lineHeight: 20,
+  },
+  debugError: {
+    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.regular,
+    color: '#ff6b6b',
+    lineHeight: 20,
   },
 });
