@@ -163,11 +163,17 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
 
   // Temporary debug panel state
   const [debugSummary, setDebugSummary] = useState<{
-    providerId: string;
+    providerIdFromParam: string;
+    providerIdFromRow: string;
+    idsMatch: boolean;
     status: string;
     kycExists: boolean;
     kycCount: number;
     tableDocsCount: number;
+    docsQueryError: string | null;
+    totalDocsUnfiltered: number | null;
+    totalDocsUnfilteredError: string | null;
+    sampleStoredProviderIds: string[];
     mergedDocsCount: number;
     firstTableUrl: string | null;
     firstKycUrl: string | null;
@@ -180,7 +186,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const [provRes, docsRes, logsRes] = await Promise.all([
+      const [provRes, docsRes, logsRes, unfilteredRes, sampleRes] = await Promise.all([
         supabase.from('providers').select(`
           id, business_name, business_address, city, province, business_email, business_phone,
           service_description, service_area, years_of_experience, status, is_verified,
@@ -195,8 +201,13 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           id, action, notes, created_at,
           performer:users!provider_verification_logs_performed_by_fkey(full_name)
         `).eq('provider_id', providerId).order('created_at', { ascending: false }),
+        supabase.from('provider_documents').select('*', { count: 'exact', head: true }),
+        supabase.from('provider_documents').select('provider_id, document_type').limit(5),
       ]);
       if (provRes.error) throw provRes.error;
+
+      console.log('[ProvDoc] unfilteredRes count:', unfilteredRes.count, 'error:', unfilteredRes.error?.message ?? 'none');
+      console.log('[ProvDoc] sampleRes rows:', JSON.stringify(sampleRes.data), 'error:', sampleRes.error?.message ?? 'none');
 
       // --- DEBUG: Raw provider row ---
       console.log('[ProvDoc] ===== PROVIDER ROW =====');
@@ -264,13 +275,22 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
       console.log('[ProvDoc] ===== urlMap keys:', Object.keys(urlMap), '=====');
       setSignedUrls(urlMap);
 
+      const providerIdFromRow = (provRes.data as any)?.id ?? '';
+      const sampleProviderIds = (sampleRes.data ?? []).map((r: any) => r.provider_id as string);
+
       // Populate debug summary
       setDebugSummary({
-        providerId: (provRes.data as any)?.id ?? providerId,
+        providerIdFromParam: providerId,
+        providerIdFromRow,
+        idsMatch: providerId === providerIdFromRow,
         status: (provRes.data as any)?.status ?? 'unknown',
         kycExists: !!rawKyc,
         kycCount: kycDocs.length,
         tableDocsCount: tableDocs.length,
+        docsQueryError: docsRes.error?.message ?? null,
+        totalDocsUnfiltered: unfilteredRes.count ?? null,
+        totalDocsUnfilteredError: unfilteredRes.error?.message ?? null,
+        sampleStoredProviderIds: sampleProviderIds,
         mergedDocsCount: allDocs.length,
         firstTableUrl: tableDocs[0]?.file_url ?? null,
         firstKycUrl: kycDocs[0]?.file_url ?? null,
@@ -464,26 +484,52 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
         {/* Temporary Debug Panel */}
         {debugSummary && (
           <View style={styles.debugPanel}>
-            <Text style={styles.debugTitle}>DEBUG</Text>
-            <Text style={styles.debugLine}>Provider ID: {debugSummary.providerId}</Text>
+            <Text style={styles.debugTitle}>DEBUG — ID AUDIT</Text>
+
+            <Text style={styles.debugLine}>providerId (param): {debugSummary.providerIdFromParam}</Text>
+            <Text style={styles.debugLine}>providers.id (DB row): {debugSummary.providerIdFromRow}</Text>
+            <Text style={[styles.debugLine, { color: debugSummary.idsMatch ? '#4ade80' : '#ff6b6b' }]}>
+              IDs match: {String(debugSummary.idsMatch)}
+            </Text>
+            <Text style={styles.debugLine}>providers.user_id: (no column — id IS auth uid)</Text>
             <Text style={styles.debugLine}>Status: {debugSummary.status}</Text>
-            <Text style={styles.debugLine}>kyc_documents exists: {String(debugSummary.kycExists)}</Text>
-            <Text style={styles.debugLine}>kyc_documents count: {debugSummary.kycCount}</Text>
-            <Text style={styles.debugLine}>provider_documents count: {debugSummary.tableDocsCount}</Text>
+
+            <Text style={styles.debugTitle}>provider_documents QUERY</Text>
+            <Text style={styles.debugLine}>filter: provider_id = {debugSummary.providerIdFromParam}</Text>
+            <Text style={styles.debugLine}>filtered count: {debugSummary.tableDocsCount}</Text>
+            <Text style={[styles.debugLine, { color: debugSummary.docsQueryError ? '#ff6b6b' : '#4ade80' }]}>
+              query error: {debugSummary.docsQueryError ?? 'none'}
+            </Text>
+            <Text style={[styles.debugLine, {
+              color: (debugSummary.totalDocsUnfiltered ?? 0) > 0 && debugSummary.tableDocsCount === 0 ? '#ff6b6b' : '#eee'
+            }]}>
+              total rows (no filter): {debugSummary.totalDocsUnfiltered ?? 'n/a'}
+            </Text>
+            <Text style={[styles.debugLine, { color: debugSummary.totalDocsUnfilteredError ? '#ff6b6b' : '#4ade80' }]}>
+              unfiltered error: {debugSummary.totalDocsUnfilteredError ?? 'none'}
+            </Text>
+            <Text style={styles.debugLine}>sample stored provider_ids ({debugSummary.sampleStoredProviderIds.length}):</Text>
+            {debugSummary.sampleStoredProviderIds.length === 0
+              ? <Text style={styles.debugLine}>  (table empty or RLS blocks all)</Text>
+              : debugSummary.sampleStoredProviderIds.map((pid, i) => (
+                  <Text key={i} style={[styles.debugLine, {
+                    color: pid === debugSummary.providerIdFromParam ? '#4ade80' : '#ffcc00'
+                  }]}>  [{i}] {pid}</Text>
+                ))
+            }
+
+            <Text style={styles.debugTitle}>kyc_documents</Text>
+            <Text style={styles.debugLine}>exists: {String(debugSummary.kycExists)}</Text>
+            <Text style={styles.debugLine}>count: {debugSummary.kycCount}</Text>
+            <Text style={styles.debugLine}>first URL: {debugSummary.firstKycUrl ?? '(none)'}</Text>
+
+            <Text style={styles.debugTitle}>MERGE &amp; SIGNED URLS</Text>
             <Text style={styles.debugLine}>mergedDocs count: {debugSummary.mergedDocsCount}</Text>
-            <Text style={styles.debugLine}>first provider_documents file_url:</Text>
-            <Text style={styles.debugLine}>{debugSummary.firstTableUrl ?? '(none)'}</Text>
-            <Text style={styles.debugLine}>first kyc_documents URL:</Text>
-            <Text style={styles.debugLine}>{debugSummary.firstKycUrl ?? '(none)'}</Text>
-            <Text style={styles.debugLine}>signed URL generation: {debugSummary.signedSuccessCount} success / {debugSummary.signedFailCount} failed</Text>
-            {debugSummary.signedErrors.length > 0 && (
-              <>
-                <Text style={styles.debugLine}>signed URL error(s):</Text>
-                {debugSummary.signedErrors.map((err, i) => (
-                  <Text key={i} style={styles.debugError}>{err}</Text>
-                ))}
-              </>
-            )}
+            <Text style={styles.debugLine}>first provider_documents URL: {debugSummary.firstTableUrl ?? '(none)'}</Text>
+            <Text style={styles.debugLine}>signed: {debugSummary.signedSuccessCount} success / {debugSummary.signedFailCount} failed</Text>
+            {debugSummary.signedErrors.map((err, i) => (
+              <Text key={i} style={styles.debugError}>signed error: {err}</Text>
+            ))}
           </View>
         )}
 
