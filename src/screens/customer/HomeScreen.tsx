@@ -491,7 +491,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md, gap: SPACING.sm,
   },
   categoryCard: {
-    width: '30%',
+    width: '31.5%',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
     borderRadius: BORDER_RADIUS.xl,

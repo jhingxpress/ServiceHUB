@@ -55,11 +55,14 @@ export default function BookingDetailScreen() {
     
     // Check if review exists
     if (data) {
-      const { data: reviewData } = await supabase
+      const { data: reviewData, error: reviewErr } = await supabase
         .from('reviews')
         .select('id')
         .eq('booking_id', bookingId)
-        .single();
+        .maybeSingle();
+      if (reviewErr) {
+        console.error('[BookingDetail] Review check error:', reviewErr.message);
+      }
       setHasReview(!!reviewData);
     }
     

@@ -161,32 +161,11 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [processingDoc, setProcessingDoc] = useState<string | null>(null);
 
-  // Temporary debug panel state
-  const [debugSummary, setDebugSummary] = useState<{
-    providerIdFromParam: string;
-    providerIdFromRow: string;
-    idsMatch: boolean;
-    status: string;
-    kycExists: boolean;
-    kycCount: number;
-    tableDocsCount: number;
-    docsQueryError: string | null;
-    totalDocsUnfiltered: number | null;
-    totalDocsUnfilteredError: string | null;
-    sampleStoredProviderIds: string[];
-    mergedDocsCount: number;
-    firstTableUrl: string | null;
-    firstKycUrl: string | null;
-    signedSuccessCount: number;
-    signedFailCount: number;
-    signedErrors: string[];
-  } | null>(null);
-
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [provRes, docsRes, logsRes, unfilteredRes, sampleRes] = await Promise.all([
+      const [provRes, docsRes, logsRes] = await Promise.all([
         supabase.from('providers').select(`
           id, business_name, business_address, city, province, business_email, business_phone,
           service_description, service_area, years_of_experience, status, is_verified,
@@ -201,43 +180,13 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           id, action, notes, created_at,
           performer:users!provider_verification_logs_performed_by_fkey(full_name)
         `).eq('provider_id', providerId).order('created_at', { ascending: false }),
-        supabase.from('provider_documents').select('*', { count: 'exact', head: true }),
-        supabase.from('provider_documents').select('provider_id, document_type').limit(5),
       ]);
       if (provRes.error) throw provRes.error;
-
-      console.log('[ProvDoc] unfilteredRes count:', unfilteredRes.count, 'error:', unfilteredRes.error?.message ?? 'none');
-      console.log('[ProvDoc] sampleRes rows:', JSON.stringify(sampleRes.data), 'error:', sampleRes.error?.message ?? 'none');
-
-      // --- DEBUG: Raw provider row ---
-      console.log('[ProvDoc] ===== PROVIDER ROW =====');
-      console.log('[ProvDoc] provider.id:', (provRes.data as any)?.id);
-      console.log('[ProvDoc] provider.status:', (provRes.data as any)?.status);
-      console.log('[ProvDoc] kyc_documents raw value:', JSON.stringify((provRes.data as any)?.kyc_documents));
-      console.log('[ProvDoc] kyc_documents type:', typeof (provRes.data as any)?.kyc_documents);
-      console.log('[ProvDoc] kyc_documents keys:', (provRes.data as any)?.kyc_documents ? Object.keys((provRes.data as any).kyc_documents) : 'null/undefined');
-
-      // --- DEBUG: provider_documents table ---
-      console.log('[ProvDoc] ===== provider_documents TABLE =====');
-      console.log('[ProvDoc] docsRes.error:', docsRes.error?.message ?? 'none');
-      console.log('[ProvDoc] docsRes.data count:', docsRes.data?.length ?? 0);
-      (docsRes.data ?? []).forEach((d: any, i: number) => {
-        console.log(`[ProvDoc] table doc[${i}]: id=${d.id} type=${d.document_type} status=${d.status} url=${d.file_url}`);
-      });
 
       const tableDocs = (docsRes.data ?? []) as DocRecord[];
       const rawKyc = (provRes.data as any)?.kyc_documents ?? null;
       const kycDocs = convertKycDocs(rawKyc);
-
-      // --- DEBUG: converted KYC docs ---
-      console.log('[ProvDoc] ===== KYC DOCS CONVERTED =====');
-      console.log('[ProvDoc] kycDocs count:', kycDocs.length);
-      kycDocs.forEach((d, i) => {
-        console.log(`[ProvDoc] kyc doc[${i}]: id=${d.id} type=${d.document_type} url=${d.file_url}`);
-      });
-
       const allDocs = [...tableDocs, ...kycDocs];
-      console.log('[ProvDoc] ===== MERGED allDocs count:', allDocs.length, '=====');
 
       setProvider(provRes.data as unknown as ProviderDetailData);
       setDocuments(allDocs);
@@ -245,61 +194,22 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
 
       // Generate signed URLs for private bucket images
       const urlMap: Record<string, string> = {};
-      const signedErrors: string[] = [];
-      let signedSuccessCount = 0;
-      let signedFailCount = 0;
-      console.log('[ProvDoc] ===== SIGNED URL GENERATION =====');
       await Promise.all(
         allDocs.map(async (doc) => {
           const extracted = extractStoragePath(doc.file_url);
-          console.log(`[ProvDoc] doc.id=${doc.id} file_url=${doc.file_url}`);
-          console.log(`[ProvDoc] extractStoragePath result:`, JSON.stringify(extracted));
           if (extracted) {
-            const { data: signedData, error: signedErr } = await supabase.storage
+            const { data: signedData } = await supabase.storage
               .from(extracted.bucket)
               .createSignedUrl(extracted.path, 3600);
-            console.log(`[ProvDoc] signedUrl for ${doc.id}: ${signedData?.signedUrl ?? 'null'} error: ${signedErr?.message ?? 'none'}`);
             if (signedData?.signedUrl) {
               urlMap[doc.id] = signedData.signedUrl;
-              signedSuccessCount++;
-            } else {
-              signedFailCount++;
-              if (signedErr?.message) signedErrors.push(signedErr.message);
             }
-          } else {
-            console.log(`[ProvDoc] SKIPPED signed URL for ${doc.id} — extractStoragePath returned null`);
-            signedFailCount++;
           }
         })
       );
-      console.log('[ProvDoc] ===== urlMap keys:', Object.keys(urlMap), '=====');
       setSignedUrls(urlMap);
-
-      const providerIdFromRow = (provRes.data as any)?.id ?? '';
-      const sampleProviderIds = (sampleRes.data ?? []).map((r: any) => r.provider_id as string);
-
-      // Populate debug summary
-      setDebugSummary({
-        providerIdFromParam: providerId,
-        providerIdFromRow,
-        idsMatch: providerId === providerIdFromRow,
-        status: (provRes.data as any)?.status ?? 'unknown',
-        kycExists: !!rawKyc,
-        kycCount: kycDocs.length,
-        tableDocsCount: tableDocs.length,
-        docsQueryError: docsRes.error?.message ?? null,
-        totalDocsUnfiltered: unfilteredRes.count ?? null,
-        totalDocsUnfilteredError: unfilteredRes.error?.message ?? null,
-        sampleStoredProviderIds: sampleProviderIds,
-        mergedDocsCount: allDocs.length,
-        firstTableUrl: tableDocs[0]?.file_url ?? null,
-        firstKycUrl: kycDocs[0]?.file_url ?? null,
-        signedSuccessCount,
-        signedFailCount,
-        signedErrors: signedErrors.slice(0, 3),
-      });
     } catch (err: any) {
-      console.error('[ProvDoc] loadData CAUGHT ERROR:', err?.message ?? err);
+      console.error('[ProviderDetail] loadData error:', err?.message ?? err);
       setError(err?.message ?? 'Failed to load provider details');
     } finally {
       setLoading(false);
@@ -481,58 +391,6 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           </View>
         </View>
 
-        {/* Temporary Debug Panel */}
-        {debugSummary && (
-          <View style={styles.debugPanel}>
-            <Text style={styles.debugTitle}>DEBUG — ID AUDIT</Text>
-
-            <Text style={styles.debugLine}>providerId (param): {debugSummary.providerIdFromParam}</Text>
-            <Text style={styles.debugLine}>providers.id (DB row): {debugSummary.providerIdFromRow}</Text>
-            <Text style={[styles.debugLine, { color: debugSummary.idsMatch ? '#4ade80' : '#ff6b6b' }]}>
-              IDs match: {String(debugSummary.idsMatch)}
-            </Text>
-            <Text style={styles.debugLine}>providers.user_id: (no column — id IS auth uid)</Text>
-            <Text style={styles.debugLine}>Status: {debugSummary.status}</Text>
-
-            <Text style={styles.debugTitle}>provider_documents QUERY</Text>
-            <Text style={styles.debugLine}>filter: provider_id = {debugSummary.providerIdFromParam}</Text>
-            <Text style={styles.debugLine}>filtered count: {debugSummary.tableDocsCount}</Text>
-            <Text style={[styles.debugLine, { color: debugSummary.docsQueryError ? '#ff6b6b' : '#4ade80' }]}>
-              query error: {debugSummary.docsQueryError ?? 'none'}
-            </Text>
-            <Text style={[styles.debugLine, {
-              color: (debugSummary.totalDocsUnfiltered ?? 0) > 0 && debugSummary.tableDocsCount === 0 ? '#ff6b6b' : '#eee'
-            }]}>
-              total rows (no filter): {debugSummary.totalDocsUnfiltered ?? 'n/a'}
-            </Text>
-            <Text style={[styles.debugLine, { color: debugSummary.totalDocsUnfilteredError ? '#ff6b6b' : '#4ade80' }]}>
-              unfiltered error: {debugSummary.totalDocsUnfilteredError ?? 'none'}
-            </Text>
-            <Text style={styles.debugLine}>sample stored provider_ids ({debugSummary.sampleStoredProviderIds.length}):</Text>
-            {debugSummary.sampleStoredProviderIds.length === 0
-              ? <Text style={styles.debugLine}>  (table empty or RLS blocks all)</Text>
-              : debugSummary.sampleStoredProviderIds.map((pid, i) => (
-                  <Text key={i} style={[styles.debugLine, {
-                    color: pid === debugSummary.providerIdFromParam ? '#4ade80' : '#ffcc00'
-                  }]}>  [{i}] {pid}</Text>
-                ))
-            }
-
-            <Text style={styles.debugTitle}>kyc_documents</Text>
-            <Text style={styles.debugLine}>exists: {String(debugSummary.kycExists)}</Text>
-            <Text style={styles.debugLine}>count: {debugSummary.kycCount}</Text>
-            <Text style={styles.debugLine}>first URL: {debugSummary.firstKycUrl ?? '(none)'}</Text>
-
-            <Text style={styles.debugTitle}>MERGE &amp; SIGNED URLS</Text>
-            <Text style={styles.debugLine}>mergedDocs count: {debugSummary.mergedDocsCount}</Text>
-            <Text style={styles.debugLine}>first provider_documents URL: {debugSummary.firstTableUrl ?? '(none)'}</Text>
-            <Text style={styles.debugLine}>signed: {debugSummary.signedSuccessCount} success / {debugSummary.signedFailCount} failed</Text>
-            {debugSummary.signedErrors.map((err, i) => (
-              <Text key={i} style={styles.debugError}>signed error: {err}</Text>
-            ))}
-          </View>
-        )}
-
         {/* Documents */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Documents ({documents.length})</Text>
@@ -540,19 +398,15 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
             ? <Text style={styles.emptyText}>No documents uploaded yet.</Text>
             : documents.map(doc => {
               const resolvedUrl = signedUrls[doc.id] ?? doc.file_url;
-              console.log(`[ProvDoc][RENDER] doc.id=${doc.id} type=${doc.document_type} hasSignedUrl=${!!signedUrls[doc.id]} resolvedUrl=${resolvedUrl}`);
               return (
               <View key={doc.id} style={styles.docCard}>
                 <TouchableOpacity style={styles.docRow} onPress={() => {
-                  console.log(`[ProvDoc][PREVIEW] Tapped doc.id=${doc.id} resolvedUrl=${resolvedUrl}`);
                   setPreviewImage(resolvedUrl);
                 }}>
                   <Image
                     source={{ uri: resolvedUrl }}
                     style={styles.docThumbnail}
                     resizeMode="cover"
-                    onLoad={() => console.log(`[ProvDoc][IMAGE] Loaded doc.id=${doc.id}`)}
-                    onError={(e) => console.error(`[ProvDoc][IMAGE] Error doc.id=${doc.id}:`, e.nativeEvent.error)}
                   />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.docType}>{getDocumentLabel(doc)}</Text>
@@ -961,32 +815,5 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.base,
     fontFamily: FONTS.semiBold,
     color: COLORS.text,
-  },
-  // Temporary debug panel styles
-  debugPanel: {
-    backgroundColor: '#1a1a2e',
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
-    borderWidth: 2,
-    borderColor: '#ff6b6b',
-  },
-  debugTitle: {
-    fontSize: FONTS.sizes.base,
-    fontFamily: FONTS.bold,
-    color: '#ff6b6b',
-    marginBottom: SPACING.sm,
-  },
-  debugLine: {
-    fontSize: FONTS.sizes.sm,
-    fontFamily: FONTS.regular,
-    color: '#eee',
-    lineHeight: 20,
-  },
-  debugError: {
-    fontSize: FONTS.sizes.sm,
-    fontFamily: FONTS.regular,
-    color: '#ff6b6b',
-    lineHeight: 20,
   },
 });

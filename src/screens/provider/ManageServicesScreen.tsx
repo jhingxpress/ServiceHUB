@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet, Alert,
+  View, Text, FlatList, SectionList, TouchableOpacity, StyleSheet, Alert,
   Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -45,6 +45,7 @@ export default function ManageServicesScreen() {
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<string>>(new Set());
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [creatingFromTemplates, setCreatingFromTemplates] = useState(false);
+  const [categoryMap, setCategoryMap] = useState<Record<string, string>>({});
 
   const fetchServices = useCallback(async () => {
     if (!user) return;
@@ -157,6 +158,12 @@ export default function ManageServicesScreen() {
 
     console.log('[SERVICE] mergedGroups', mergedGroups?.length);
     console.log('[SERVICE] mergedGroupNames', mergedGroups?.map((g) => g.name));
+
+    // Fetch parent category names for grouping
+    const { data: catData } = await supabase.from('categories').select('id, name').eq('is_parent', true);
+    const map: Record<string, string> = {};
+    (catData ?? []).forEach((c: any) => { map[c.id] = c.name; });
+    setCategoryMap(map);
 
     setServiceGroups(mergedGroups);
     console.log('[SERVICE] setServiceGroups', mergedGroups?.length);
@@ -415,12 +422,25 @@ export default function ManageServicesScreen() {
       return (
         <View style={{ flex: 1 }}>
           <Text style={styles.catalogSubtitle}>Select a service group to see available templates</Text>
-          <FlatList
-            data={serviceGroups}
+          <SectionList
+            sections={useMemo(() => {
+              const grouped: Record<string, ServiceGroup[]> = {};
+              serviceGroups.forEach((g) => {
+                const catName = categoryMap[g.category_id] || 'Other';
+                if (!grouped[catName]) grouped[catName] = [];
+                grouped[catName].push(g);
+              });
+              return Object.entries(grouped)
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([title, data]) => ({ title, data }));
+            }, [serviceGroups, categoryMap])}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             style={{ flex: 1 }}
             contentContainerStyle={{ paddingBottom: 120 }}
+            renderSectionHeader={({ section: { title } }) => (
+              <Text style={styles.catalogSectionHeader}>{title}</Text>
+            )}
             renderItem={({ item }) => (
                 <TouchableOpacity style={styles.groupCard} onPress={() => selectGroup(item)} activeOpacity={0.8}>
                   <View style={styles.groupIconWrap}>
@@ -815,6 +835,7 @@ const styles = StyleSheet.create({
   catalogSubtitle: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginBottom: SPACING.md },
   catalogEmptyTitle: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.semiBold, color: COLORS.text, marginTop: SPACING.md },
   catalogEmptyText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, textAlign: 'center', marginTop: SPACING.sm, paddingHorizontal: SPACING.lg },
+  catalogSectionHeader: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.textSecondary, marginTop: SPACING.md, marginBottom: SPACING.xs, textTransform: 'uppercase' },
   groupCard: {
     flexDirection: 'row',
     alignItems: 'center',

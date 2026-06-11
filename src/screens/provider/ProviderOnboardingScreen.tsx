@@ -435,12 +435,14 @@ export default function ProviderOnboardingScreen() {
     }));
     try {
       const url = await uploadWithRetry(uri, path, mimeType);
-      await supabase.from('provider_documents').delete()
+      const { error: delError } = await supabase.from('provider_documents').delete()
         .eq('provider_id', user!.id).eq('document_type', 'valid_id').eq('side', side);
-      await supabase.from('provider_documents').insert({
+      if (delError) throw new Error(`Failed to replace existing document: ${delError.message}`);
+      const { error: insError } = await supabase.from('provider_documents').insert({
         provider_id: user!.id, document_type: 'valid_id', category_type: 'valid_id',
         id_type: validId.idType, side, file_url: url, status: 'pending',
       });
+      if (insError) throw new Error(`Failed to save document record: ${insError.message}`);
       setValidId(prev => ({
         ...prev,
         [side]: { ...prev[side], uploadedUrl: url, state: 'success', error: null },
@@ -468,8 +470,11 @@ export default function ProviderOnboardingScreen() {
   };
 
   const removeValidIdSide = async (side: 'front' | 'back') => {
-    if (user) await supabase.from('provider_documents').delete()
-      .eq('provider_id', user.id).eq('document_type', 'valid_id').eq('side', side);
+    if (user) {
+      const { error: delError } = await supabase.from('provider_documents').delete()
+        .eq('provider_id', user.id).eq('document_type', 'valid_id').eq('side', side);
+      if (delError) throw new Error(`Failed to remove document: ${delError.message}`);
+    }
     setValidId(prev => ({
       ...prev,
       [side]: { uri: null, uploadedUrl: null, state: 'idle', error: null },
@@ -482,12 +487,14 @@ export default function ProviderOnboardingScreen() {
     setPermits(prev => prev.map(p => p.key === docKey ? { ...p, uri, state: 'uploading', error: null } : p));
     try {
       const url = await uploadWithRetry(uri, path, mimeType);
-      await supabase.from('provider_documents').delete()
+      const { error: delError } = await supabase.from('provider_documents').delete()
         .eq('provider_id', user!.id).eq('document_type', docKey);
-      await supabase.from('provider_documents').insert({
+      if (delError) throw new Error(`Failed to replace existing document: ${delError.message}`);
+      const { error: insError } = await supabase.from('provider_documents').insert({
         provider_id: user!.id, document_type: docKey, category_type: 'permit_certificate',
         file_url: url, status: 'pending',
       });
+      if (insError) throw new Error(`Failed to save document record: ${insError.message}`);
       setPermits(prev => prev.map(p => p.key === docKey ? { ...p, uploadedUrl: url, state: 'success', error: null } : p));
     } catch (err) {
       const msg = err instanceof Error && err.message
@@ -514,8 +521,11 @@ export default function ProviderOnboardingScreen() {
       {
         text: 'Remove', style: 'destructive',
         onPress: async () => {
-          if (user) await supabase.from('provider_documents').delete()
-            .eq('provider_id', user.id).eq('document_type', docKey);
+          if (user) {
+            const { error: delError } = await supabase.from('provider_documents').delete()
+              .eq('provider_id', user.id).eq('document_type', docKey);
+            if (delError) throw new Error(`Failed to remove document: ${delError.message}`);
+          }
           setPermits(prev => prev.map(p => p.key === docKey
             ? { ...p, uri: null, uploadedUrl: null, state: 'idle', error: null }
             : p));
