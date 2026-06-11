@@ -119,11 +119,17 @@ export default function ManageServicesScreen() {
 
     console.log('[SERVICE] Provider categories raw', pcData);
 
-    const leafCategoryIds = (pcData ?? []).map((c: any) => c.category_id).filter(Boolean);
-    const parentCategoryIds = (pcData ?? [])
-      .map((c: any) => c.categories?.parent_id)
-      .filter((id: string | null) => !!id);
-    const allCategoryIds = [...new Set([...leafCategoryIds, ...parentCategoryIds])];
+    // Fetch canonical parent categories to resolve old/demoted category rows
+    const { data: catData } = await supabase.from('categories').select('id, name').eq('is_parent', true);
+    const parentNameToId: Record<string, string> = {};
+    (catData ?? []).forEach((c: any) => { parentNameToId[c.name] = c.id; });
+
+    const allCategoryIds = [...new Set((pcData ?? []).map((c: any) => {
+      const name = c.categories?.name;
+      if (name && parentNameToId[name]) return parentNameToId[name];
+      if (!c.categories?.is_parent && c.categories?.parent_id) return c.categories.parent_id;
+      return c.category_id;
+    }).filter(Boolean))];
     const categoryNames = (pcData ?? []).map((c: any) => c.categories?.name).filter(Boolean);
 
     console.log('[SERVICE] Category names', categoryNames);
@@ -150,8 +156,6 @@ export default function ManageServicesScreen() {
 
     console.log('[SERVICE] catalogData', catalogData?.length);
 
-    // Fetch parent category names for grouping
-    const { data: catData } = await supabase.from('categories').select('id, name').eq('is_parent', true);
     const map: Record<string, string> = {};
     (catData ?? []).forEach((c: any) => { map[c.id] = c.name; });
     setCategoryMap(map);
