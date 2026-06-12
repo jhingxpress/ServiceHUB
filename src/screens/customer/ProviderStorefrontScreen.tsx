@@ -439,7 +439,15 @@ export default function ProviderStorefrontScreen() {
         <TouchableOpacity style={styles.reportBtn} onPress={() => navigation.navigate('ReportScreen', { reportedUserId: provider.id, reportedUserName: providerName })}>
           <Ionicons name="flag-outline" size={18} color={COLORS.textLight} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.chatBtn} onPress={() => Alert.alert('Chat', 'Chat feature coming soon')}>
+        <TouchableOpacity
+          style={styles.chatBtn}
+          onPress={() =>
+            Alert.alert(
+              'Message Provider',
+              'Please book a service first to start chatting with the provider.\n\nMessaging becomes available after a booking is created.'
+            )
+          }
+        >
           <Ionicons name="chatbubble-outline" size={20} color={COLORS.primary} />
           <Text style={styles.chatBtnText}>Chat</Text>
         </TouchableOpacity>
