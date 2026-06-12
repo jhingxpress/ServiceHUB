@@ -153,6 +153,7 @@ export default function SearchScreen() {
         .from('providers')
         .select('*, business_name, categories(name, icon, color), provider_stats(*), profile_photo_url, business_logo')
         .eq('status', 'approved')
+        .eq('marketplace_status', 'live')
         .eq('is_available', true)
         .is('deleted_at', null);
 
