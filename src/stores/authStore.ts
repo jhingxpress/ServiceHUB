@@ -38,6 +38,58 @@ function resetModerationAlert() {
   _moderationAlertShown = false;
 }
 
+function unsubscribeFromModerationRealtime(
+  getState: () => AuthState,
+  setState: (partial: Partial<AuthState>) => void,
+) {
+  const unsub = getState().realtimeModerationUnsubscribe;
+  if (unsub) {
+    unsub();
+    setState({ realtimeModerationUnsubscribe: null });
+  }
+}
+
+function subscribeToModerationRealtime(
+  userId: string,
+  getState: () => AuthState,
+  setState: (partial: Partial<AuthState>) => void,
+) {
+  unsubscribeFromModerationRealtime(getState, setState);
+  console.log('[REALTIME MODERATION] subscribed', { userId });
+  const channel = supabase
+    .channel(`moderation-${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'users',
+        filter: `id=eq.${userId}`,
+      },
+      (payload) => {
+        const newStatus = (payload.new as { status?: string })?.status;
+        console.log('[REALTIME MODERATION] status changed', { userId, newStatus });
+        if (newStatus === 'suspended' || newStatus === 'banned') {
+          console.log('[REALTIME MODERATION] signing out', { userId, newStatus });
+          showModerationAlert(
+            newStatus === 'banned'
+              ? 'Your account has been banned.'
+              : 'Your account is suspended. Contact support.',
+          );
+          getState().signOut().catch((e) =>
+            console.error('[REALTIME MODERATION] signOut error:', e),
+          );
+        }
+      },
+    )
+    .subscribe();
+  setState({
+    realtimeModerationUnsubscribe: () => {
+      supabase.removeChannel(channel);
+    },
+  });
+}
+
 interface SignUpData {
   email: string;
   password: string;
@@ -61,6 +113,7 @@ interface AuthState {
   isAuthenticating: boolean;
   sessionExpiresAt: number | null;
   authListenerUnsubscribe: (() => void) | null;
+  realtimeModerationUnsubscribe: (() => void) | null;
   emailJustVerified: boolean;
   setEmailJustVerified: (val: boolean) => void;
   passwordResetMode: boolean;
@@ -179,6 +232,7 @@ async function syncUserProfile(sessionUser: { id: string; email?: string; user_m
 async function bootstrapAuthenticatedUser(
   sessionUser: { id: string; email?: string; user_metadata?: Record<string, unknown>; email_confirmed_at?: string | null },
   sessionExpiresAt: number | null,
+  get: () => AuthState,
   set: (partial: Partial<AuthState>) => void,
 ): Promise<void> {
   const _tb0 = Date.now();
@@ -192,6 +246,7 @@ async function bootstrapAuthenticatedUser(
       console.log('[BOOTSTRAP] status check failed — signing out');
       showModerationAlert(statusCheck.error);
       console.log('[MODERATION SIGNOUT]', { reason: statusCheck.error });
+      unsubscribeFromModerationRealtime(get, set);
       await supabase.auth.signOut();
       set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false });
       useNotificationStore.getState().unsubscribeFromNotifications();
@@ -202,6 +257,7 @@ async function bootstrapAuthenticatedUser(
     resetModerationAlert();
     set({ user: profile, providerProfile, sessionExpiresAt: sessionExpiresAt });
     if (profile) {
+      subscribeToModerationRealtime(profile.id, get, set);
       registerPushToken(profile.id)
         .then(() => debugLogger.log('bootstrapAuthenticatedUser_registerPushToken_done', { ms: Date.now() - _tb0 }))
         .catch((e) => console.error('[AUTH] registerPushToken error:', e instanceof Error ? e.message : String(e)));
@@ -229,6 +285,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   passwordResetMode: false,
   setPasswordResetMode: (val: boolean) => set({ passwordResetMode: val }),
   authListenerUnsubscribe: null,
+  realtimeModerationUnsubscribe: null,
 
   initialize: async () => {
     const _ti0 = Date.now();
@@ -296,7 +353,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Supabase auth lock is guaranteed to be released before we touch the DB.
         debugLogger.log('SIGNED_IN_handler_end', { reason: 'bootstrap_deferred', userId: sessionUser.id, totalMs: Date.now() - _t0 });
         setTimeout(() => {
-          bootstrapAuthenticatedUser(sessionUser, expiresAt, set).catch((err) => {
+          bootstrapAuthenticatedUser(sessionUser, expiresAt, get, set).catch((err) => {
             console.error('[SIGNED_IN] bootstrapAuthenticatedUser uncaught:', err);
             set({ isAuthenticating: false });
           });
@@ -359,6 +416,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               console.log('[GOOGLE-LISTENER] USER_UPDATED: status check failed — signing out');
               showModerationAlert(statusCheck.error);
               console.log('[MODERATION SIGNOUT]', { reason: statusCheck.error });
+              unsubscribeFromModerationRealtime(get, set);
               await supabase.auth.signOut();
               set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false });
               useNotificationStore.getState().unsubscribeFromNotifications();
@@ -370,6 +428,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             debugLogger.log('USER_UPDATED_after_syncUserProfile', { hasProfile: !!profile, role: profile?.role, ms: Date.now() - _td0 });
             resetModerationAlert();
             set({ user: profile, providerProfile, sessionExpiresAt: updatedExpiresAt });
+            if (profile) {
+              subscribeToModerationRealtime(profile.id, get, set);
+            }
             console.log('[GOOGLE-LISTENER] USER_UPDATED: user state set', { role: profile?.role });
             debugLogger.log('USER_UPDATED_deferred_end', { totalMs: Date.now() - _td0 });
           } catch (err) {
@@ -461,6 +522,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         console.log('[AUTH] initialize: status check failed');
         showModerationAlert(statusCheck.error);
         console.log('[MODERATION SIGNOUT]', { reason: statusCheck.error });
+        unsubscribeFromModerationRealtime(get, set);
         await supabase.auth.signOut();
         debugLogger.log('initialize_end', { reason: 'signOut_status_check_failed', totalMs: Date.now() - _ti0 });
         set({ isInitialized: true });
@@ -478,6 +540,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isInitialized: true,
         sessionExpiresAt: expiresAt,
       });
+      if (profile) {
+        subscribeToModerationRealtime(profile.id, get, set);
+      }
       debugLogger.log('initialize_end', { reason: 'success', userId: profile?.id, role: profile?.role, totalMs: Date.now() - _ti0 });
       if (profile) {
         registerPushToken(profile.id).catch((e) => console.error('[AUTH] registerPushToken error:', e instanceof Error ? e.message : String(e)));
@@ -558,6 +623,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         resetModerationAlert();
         set({ user: profile, providerProfile });
         if (profile) {
+          subscribeToModerationRealtime(profile.id, get, set);
           registerPushToken(profile.id).catch((e) => console.error('[AUTH] registerPushToken error:', e instanceof Error ? e.message : String(e)));
           useNotificationStore.getState().subscribeToNotifications(profile.id);
         }
@@ -619,6 +685,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         console.log('[TRACE][signIn] sync result', { profilePresent: !!profile, providerPresent: !!providerProfile, expiresAt });
         resetModerationAlert();
         set({ user: profile, providerProfile, sessionExpiresAt: expiresAt });
+        if (profile) {
+          subscribeToModerationRealtime(profile.id, get, set);
+        }
       }
     } finally {
       set({ isLoading: false });
@@ -893,6 +962,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     useNotificationStore.getState().unsubscribeFromNotifications();
     await supabase.auth.signOut();
     resetModerationAlert();
+    unsubscribeFromModerationRealtime(get, set);
     set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false });
     console.log('[TRACE][signOut] state cleared');
   },
