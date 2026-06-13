@@ -14,6 +14,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { format } from 'date-fns';
 import { AdminStackParamList } from '../../navigation/types';
 import { supabase } from '../../lib/supabase';
+import { adminSuspendProvider, adminBanUser } from '../../services/moderationService';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 
@@ -80,12 +81,11 @@ export default function UserDetailScreen({ route, navigation }: Props) {
           style: 'destructive',
           onPress: async () => {
             const reason = 'Temporary suspension by admin';
-            const { error } = await supabase.from('users').update({ status: 'suspended' }).eq('id', userId);
-            if (error) {
-              Alert.alert('Failed', error.message);
+            const result = await adminSuspendProvider(userId, reason);
+            if (!result.success) {
+              Alert.alert('Failed', result.error ?? 'Suspend failed');
               return;
             }
-            await logModerationAction('suspend_user', reason);
             await supabase.from('notifications').insert({
               user_id: userId,
               type: 'system',
@@ -111,12 +111,11 @@ export default function UserDetailScreen({ route, navigation }: Props) {
           text: 'Ban',
           style: 'destructive',
           onPress: async () => {
-            const { error } = await supabase.from('users').update({ status: 'banned' }).eq('id', userId);
-            if (error) {
-              Alert.alert('Failed', error.message);
+            const result = await adminBanUser(userId, 'Permanent ban issued by admin');
+            if (!result.success) {
+              Alert.alert('Failed', result.error ?? 'Ban failed');
               return;
             }
-            await logModerationAction('ban_user', 'Permanent ban issued by admin');
             await supabase.from('notifications').insert({
               user_id: userId,
               type: 'system',
