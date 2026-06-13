@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { Alert } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import { supabase } from '../lib/supabase';
@@ -8,6 +9,24 @@ import { checkLoginAllowed, logLoginAttempt, checkUserStatus } from '../services
 import { useNotificationStore } from './notificationStore';
 import { BETA_MODE } from '../config/featureFlags';
 import { debugLogger } from '../services/debugLogger';
+
+let _moderationAlertShown = false;
+
+function showModerationAlert(error?: string) {
+  if (_moderationAlertShown) return;
+  _moderationAlertShown = true;
+  const isBanned = error?.toLowerCase().includes('banned');
+  Alert.alert(
+    isBanned ? 'Account Banned' : 'Account Suspended',
+    isBanned
+      ? 'Your account has been permanently banned due to violations of ServiceHub policies.\n\nIf you believe this is a mistake, please contact ServiceHub support.'
+      : 'Your account has been temporarily suspended.\n\nPlease contact ServiceHub support for assistance.'
+  );
+}
+
+function resetModerationAlert() {
+  _moderationAlertShown = false;
+}
 
 interface SignUpData {
   email: string;
@@ -160,6 +179,7 @@ async function bootstrapAuthenticatedUser(
     debugLogger.log('bootstrapAuthenticatedUser_after_checkUserStatus', { allowed: statusCheck.allowed, error: statusCheck.error, ms: Date.now() - _tb0 });
     if (!statusCheck.allowed) {
       console.log('[BOOTSTRAP] status check failed — signing out');
+      showModerationAlert(statusCheck.error);
       await supabase.auth.signOut();
       set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false });
       useNotificationStore.getState().unsubscribeFromNotifications();
@@ -167,6 +187,7 @@ async function bootstrapAuthenticatedUser(
     }
     const { profile, providerProfile } = await syncUserProfile(sessionUser);
     debugLogger.log('bootstrapAuthenticatedUser_after_syncUserProfile', { hasProfile: !!profile, role: profile?.role, ms: Date.now() - _tb0 });
+    resetModerationAlert();
     set({ user: profile, providerProfile, sessionExpiresAt: sessionExpiresAt });
     if (profile) {
       registerPushToken(profile.id)
@@ -323,6 +344,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             debugLogger.log('USER_UPDATED_after_checkUserStatus', { allowed: statusCheck.allowed, error: statusCheck.error, ms: Date.now() - _td0 });
             if (!statusCheck.allowed) {
               console.log('[GOOGLE-LISTENER] USER_UPDATED: status check failed — signing out');
+              showModerationAlert(statusCheck.error);
               await supabase.auth.signOut();
               set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false });
               useNotificationStore.getState().unsubscribeFromNotifications();
@@ -332,6 +354,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             debugLogger.log('USER_UPDATED_before_syncUserProfile', { ms: Date.now() - _td0 });
             const { profile, providerProfile } = await syncUserProfile(updatedUser);
             debugLogger.log('USER_UPDATED_after_syncUserProfile', { hasProfile: !!profile, role: profile?.role, ms: Date.now() - _td0 });
+            resetModerationAlert();
             set({ user: profile, providerProfile, sessionExpiresAt: updatedExpiresAt });
             console.log('[GOOGLE-LISTENER] USER_UPDATED: user state set', { role: profile?.role });
             debugLogger.log('USER_UPDATED_deferred_end', { totalMs: Date.now() - _td0 });
@@ -421,6 +444,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       debugLogger.log('initialize_after_checkUserStatus', { allowed: statusCheck.allowed, error: statusCheck.error, ms: Date.now() - _ti0 });
       if (!statusCheck.allowed) {
         console.log('[AUTH] initialize: status check failed');
+        showModerationAlert(statusCheck.error);
         await supabase.auth.signOut();
         debugLogger.log('initialize_end', { reason: 'signOut_status_check_failed', totalMs: Date.now() - _ti0 });
         set({ isInitialized: true });
@@ -431,6 +455,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { profile, providerProfile } = await syncUserProfile(session.user);
       const expiresAt = session.expires_at ? session.expires_at * 1000 : null;
       debugLogger.log('initialize_after_syncUserProfile', { hasProfile: !!profile, role: profile?.role, ms: Date.now() - _ti0 });
+      resetModerationAlert();
       set({
         user: profile,
         providerProfile,
@@ -501,6 +526,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         debugLogger.log('validateSession_after_checkUserStatus', { allowed: statusCheck.allowed, t: Date.now() });
         if (!statusCheck.allowed) {
           console.log('[TRACE][validateSession] status check failed, signing out');
+          showModerationAlert(statusCheck.error);
           await get().signOut();
           return;
         }
@@ -511,6 +537,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           profilePresent: !!profile,
           providerPresent: !!providerProfile,
         });
+        resetModerationAlert();
         set({ user: profile, providerProfile });
         if (profile) {
           registerPushToken(profile.id).catch((e) => console.error('[AUTH] registerPushToken error:', e instanceof Error ? e.message : String(e)));
@@ -569,6 +596,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const expiresAt = data.session?.expires_at ? data.session.expires_at * 1000 : null;
         const { profile, providerProfile } = await syncUserProfile(data.user);
         console.log('[TRACE][signIn] sync result', { profilePresent: !!profile, providerPresent: !!providerProfile, expiresAt });
+        resetModerationAlert();
         set({ user: profile, providerProfile, sessionExpiresAt: expiresAt });
       }
     } finally {

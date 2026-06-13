@@ -26,6 +26,7 @@ interface UserRow {
   full_name: string | null;
   email: string;
   role: string;
+  status: string;
   avatar_url: string | null;
   created_at: string;
 }
@@ -46,7 +47,7 @@ export default function ManageUsersScreen() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, full_name, email, role, avatar_url, created_at')
+        .select('id, full_name, email, role, status, avatar_url, created_at')
         .order('created_at', { ascending: false });
       
       console.log('[ManageUsersScreen] Users data:', data);
@@ -101,6 +102,12 @@ export default function ManageUsersScreen() {
     customer: COLORS.primary,
     provider: '#8B5CF6',
     admin: COLORS.error,
+  };
+
+  const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+    active: { bg: '#D1FAE5', text: '#065F46' },
+    suspended: { bg: '#FFEDD5', text: '#9A3412' },
+    banned: { bg: '#FEE2E2', text: '#991B1B' },
   };
 
   return (
@@ -168,6 +175,11 @@ export default function ManageUsersScreen() {
                   <View style={[styles.rolePill, { backgroundColor: (ROLE_COLORS[item.role] ?? COLORS.textLight) + '20' }]}>
                     <Text style={[styles.roleText, { color: ROLE_COLORS[item.role] ?? COLORS.textLight }]}>
                       {item.role}
+                    </Text>
+                  </View>
+                  <View style={[styles.rolePill, { backgroundColor: STATUS_COLORS[item.status]?.bg ?? '#E5E7EB' }]}>
+                    <Text style={[styles.roleText, { color: STATUS_COLORS[item.status]?.text ?? COLORS.textLight }]}>
+                      {item.status}
                     </Text>
                   </View>
                   <Text style={styles.joinDate}>
