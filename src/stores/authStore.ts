@@ -13,16 +13,25 @@ import { debugLogger } from '../services/debugLogger';
 let _moderationAlertShown = false;
 
 function showModerationAlert(error?: string) {
-  console.log('[MODERATION ALERT]', { error, isBanned: error?.toLowerCase().includes('banned') });
+  console.log('[MODERATION ALERT]', error);
   if (_moderationAlertShown) return;
-  _moderationAlertShown = true;
-  const isBanned = error?.toLowerCase().includes('banned');
-  Alert.alert(
-    isBanned ? 'Account Banned' : 'Account Suspended',
-    isBanned
-      ? 'Your account has been permanently banned due to violations of ServiceHub policies.\n\nIf you believe this is a mistake, please contact ServiceHub support.'
-      : 'Your account has been temporarily suspended.\n\nPlease contact ServiceHub support for assistance.'
-  );
+  const lower = error?.toLowerCase() ?? '';
+  if (lower.includes('suspended')) {
+    _moderationAlertShown = true;
+    Alert.alert(
+      'Account Suspended',
+      'Your account has been temporarily suspended.\n\nPlease contact ServiceHub support for assistance.'
+    );
+    return;
+  }
+  if (lower.includes('banned')) {
+    _moderationAlertShown = true;
+    Alert.alert(
+      'Account Banned',
+      'Your account has been permanently banned due to violations of ServiceHub policies.\n\nIf you believe this is a mistake, please contact ServiceHub support.'
+    );
+    return;
+  }
 }
 
 function resetModerationAlert() {
@@ -883,6 +892,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     useNotificationStore.getState().unsubscribeFromNotifications();
     await supabase.auth.signOut();
+    resetModerationAlert();
     set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false });
     console.log('[TRACE][signOut] state cleared');
   },
