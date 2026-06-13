@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { AdminStackParamList } from '../../navigation/types';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
+import { adminSuspendProvider } from '../../services/moderationService';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 
@@ -258,17 +259,23 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
         updates.rejected_by = user?.id;
         updates.rejection_reason = actionNotes.trim();
       } else if (actionMode === 'suspend') {
-        updates.status = 'suspended'; updates.is_verified = false;
-        updates.rejected_by = user?.id;
-        updates.rejection_reason = actionNotes.trim();
+        const result = await adminSuspendProvider(providerId, actionNotes.trim());
+        if (!result.success) throw new Error(result.error ?? 'Suspend failed');
+        // Best-effort: preserve UI-facing rejection_reason field
+        await supabase
+          .from('providers')
+          .update({ rejection_reason: actionNotes.trim() })
+          .eq('id', providerId);
       }
 
-      const { error: updateError } = await supabase
-        .from('providers')
-        .update(updates)
-        .eq('id', providerId);
+      if (actionMode !== 'suspend') {
+        const { error: updateError } = await supabase
+          .from('providers')
+          .update(updates)
+          .eq('id', providerId);
 
-      if (updateError) throw updateError;
+        if (updateError) throw updateError;
+      }
 
       await supabase.from('provider_verification_logs').insert({
         provider_id: providerId, action: actionMode,
