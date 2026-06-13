@@ -244,6 +244,35 @@ export default function BookingScreen() {
         return;
       }
 
+      // Validate provider is available for bookings
+      const { data: providerCheck, error: providerCheckError } = await supabase
+        .from('providers')
+        .select('status, is_available, marketplace_status')
+        .eq('id', providerId)
+        .single();
+
+      if (providerCheckError || !providerCheck) {
+        Alert.alert(
+          'Provider Unavailable',
+          'This service provider is currently unavailable and cannot accept new bookings.'
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      if (
+        providerCheck.status !== 'approved' ||
+        !providerCheck.is_available ||
+        providerCheck.marketplace_status !== 'live'
+      ) {
+        Alert.alert(
+          'Provider Unavailable',
+          'This service provider is currently unavailable and cannot accept new bookings.'
+        );
+        setSubmitting(false);
+        return;
+      }
+
       // Upload photos to storage
       const photoUrls = await uploadPhotos();
 
