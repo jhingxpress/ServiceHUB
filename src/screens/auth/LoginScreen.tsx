@@ -22,7 +22,6 @@ import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { validators, validateForm } from '../../utils/validation';
 import { useErrorHandler } from '../../utils/errorHandler';
-import DebugAuthScreen from '../debug/DebugAuthScreen';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
@@ -31,23 +30,9 @@ export default function LoginScreen({ navigation, route }: Props) {
   const [email, setEmail] = useState(prefillEmail);
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-  const [debugVisible, setDebugVisible] = useState(false);
-  const [tapCount, setTapCount] = useState(0);
   const { signIn, signInWithGoogle, isLoading } = useAuthStore();
   const { execute } = useRecaptcha();
   const { showError } = useErrorHandler();
-
-  const handleLogoTap = () => {
-    setTapCount((prev) => {
-      const newCount = prev + 1;
-      if (newCount >= 5) {
-        setDebugVisible(true);
-        return 0;
-      }
-      setTimeout(() => setTapCount(0), 2000);
-      return newCount;
-    });
-  };
 
   const handleLogin = async () => {
     const validation = validateForm(
@@ -91,13 +76,13 @@ export default function LoginScreen({ navigation, route }: Props) {
         >
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity onPress={handleLogoTap} activeOpacity={0.9}>
+            <View>
               <Image
                 source={require('../../../assets/icon.png')}
                 style={styles.logoMiniImage}
                 resizeMode="contain"
               />
-            </TouchableOpacity>
+            </View>
             <Text style={styles.title}>Welcome back</Text>
             <Text style={styles.subtitle}>Sign in to your ServiceHub account</Text>
           </View>
@@ -183,13 +168,6 @@ export default function LoginScreen({ navigation, route }: Props) {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <Modal
-        visible={debugVisible}
-        animationType="slide"
-        onRequestClose={() => setDebugVisible(false)}
-      >
-        <DebugAuthScreen onClose={() => setDebugVisible(false)} />
-      </Modal>
     </SafeAreaView>
   );
 }

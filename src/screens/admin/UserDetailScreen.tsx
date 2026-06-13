@@ -75,7 +75,11 @@ export default function UserDetailScreen({ route, navigation }: Props) {
       'Enter reason for suspension (visible in audit log):',
       async (reason) => {
         if (!reason?.trim()) return;
-        await supabase.from('users').update({ status: 'suspended' }).eq('id', userId);
+        const { error } = await supabase.from('users').update({ status: 'suspended' }).eq('id', userId);
+        if (error) {
+          Alert.alert('Failed', error.message);
+          return;
+        }
         await logModerationAction('suspend_user', reason);
         await supabase.from('notifications').insert({
           user_id: userId,
@@ -101,7 +105,11 @@ export default function UserDetailScreen({ route, navigation }: Props) {
           text: 'Ban',
           style: 'destructive',
           onPress: async () => {
-            await supabase.from('users').update({ status: 'banned' }).eq('id', userId);
+            const { error } = await supabase.from('users').update({ status: 'banned' }).eq('id', userId);
+            if (error) {
+              Alert.alert('Failed', error.message);
+              return;
+            }
             await logModerationAction('ban_user', 'Permanent ban issued by admin');
             await supabase.from('notifications').insert({
               user_id: userId,
@@ -128,7 +136,11 @@ export default function UserDetailScreen({ route, navigation }: Props) {
         style: isActive ? 'destructive' : 'default',
         onPress: async () => {
           const newStatus = isActive ? 'suspended' : 'active';
-          await supabase.from('users').update({ status: newStatus }).eq('id', userId);
+          const { error } = await supabase.from('users').update({ status: newStatus }).eq('id', userId);
+          if (error) {
+            Alert.alert('Failed', error.message);
+            return;
+          }
           setUserData((p) => p ? { ...p, status: newStatus } : p);
         },
       },
