@@ -13,6 +13,7 @@ import { debugLogger } from '../services/debugLogger';
 let _moderationAlertShown = false;
 
 function showModerationAlert(error?: string) {
+  console.log('[MODERATION ALERT]', { error, isBanned: error?.toLowerCase().includes('banned') });
   if (_moderationAlertShown) return;
   _moderationAlertShown = true;
   const isBanned = error?.toLowerCase().includes('banned');
@@ -180,6 +181,7 @@ async function bootstrapAuthenticatedUser(
     if (!statusCheck.allowed) {
       console.log('[BOOTSTRAP] status check failed — signing out');
       showModerationAlert(statusCheck.error);
+      console.log('[MODERATION SIGNOUT]', { reason: statusCheck.error });
       await supabase.auth.signOut();
       set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false });
       useNotificationStore.getState().unsubscribeFromNotifications();
@@ -345,6 +347,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             if (!statusCheck.allowed) {
               console.log('[GOOGLE-LISTENER] USER_UPDATED: status check failed — signing out');
               showModerationAlert(statusCheck.error);
+              console.log('[MODERATION SIGNOUT]', { reason: statusCheck.error });
               await supabase.auth.signOut();
               set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false });
               useNotificationStore.getState().unsubscribeFromNotifications();
@@ -445,6 +448,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (!statusCheck.allowed) {
         console.log('[AUTH] initialize: status check failed');
         showModerationAlert(statusCheck.error);
+        console.log('[MODERATION SIGNOUT]', { reason: statusCheck.error });
         await supabase.auth.signOut();
         debugLogger.log('initialize_end', { reason: 'signOut_status_check_failed', totalMs: Date.now() - _ti0 });
         set({ isInitialized: true });
@@ -527,6 +531,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (!statusCheck.allowed) {
           console.log('[TRACE][validateSession] status check failed, signing out');
           showModerationAlert(statusCheck.error);
+          console.log('[MODERATION SIGNOUT]', { reason: statusCheck.error });
           await get().signOut();
           return;
         }
@@ -590,6 +595,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
         const statusCheck = await checkUserStatus(data.user.id, 'signIn');
         if (!statusCheck.allowed) {
+          console.log('[MODERATION SIGNOUT]', { reason: statusCheck.error, path: 'signIn' });
           await supabase.auth.signOut();
           throw new Error(statusCheck.error || 'Account access denied.');
         }

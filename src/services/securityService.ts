@@ -181,6 +181,7 @@ export async function checkUserStatus(userId: string, caller?: string): Promise<
     debugLogger.log('checkUserStatus_suspended', { userId, allowed: false });
     return { allowed: false, error: 'Your account is suspended. Contact support.' };
   }
+  console.log('[MODERATION]', { userId, status: data.status, path: 'checkUserStatus' });
   if (data.status === 'banned') {
     debugLogger.log('checkUserStatus_banned', { userId, allowed: false });
     return { allowed: false, error: 'Your account has been banned.' };
