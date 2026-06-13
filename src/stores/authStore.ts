@@ -179,6 +179,7 @@ async function bootstrapAuthenticatedUser(
     const statusCheck = await checkUserStatus(sessionUser.id, 'SIGNED_IN');
     debugLogger.log('bootstrapAuthenticatedUser_after_checkUserStatus', { allowed: statusCheck.allowed, error: statusCheck.error, ms: Date.now() - _tb0 });
     if (!statusCheck.allowed) {
+      console.log('Moderation status:', statusCheck.error);
       console.log('[BOOTSTRAP] status check failed — signing out');
       showModerationAlert(statusCheck.error);
       console.log('[MODERATION SIGNOUT]', { reason: statusCheck.error });
@@ -345,6 +346,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             const statusCheck = await checkUserStatus(updatedUser.id, 'USER_UPDATED');
             debugLogger.log('USER_UPDATED_after_checkUserStatus', { allowed: statusCheck.allowed, error: statusCheck.error, ms: Date.now() - _td0 });
             if (!statusCheck.allowed) {
+              console.log('Moderation status:', statusCheck.error);
               console.log('[GOOGLE-LISTENER] USER_UPDATED: status check failed — signing out');
               showModerationAlert(statusCheck.error);
               console.log('[MODERATION SIGNOUT]', { reason: statusCheck.error });
@@ -446,6 +448,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const statusCheck = await checkUserStatus(session.user.id, 'initialize');
       debugLogger.log('initialize_after_checkUserStatus', { allowed: statusCheck.allowed, error: statusCheck.error, ms: Date.now() - _ti0 });
       if (!statusCheck.allowed) {
+        console.log('Moderation status:', statusCheck.error);
         console.log('[AUTH] initialize: status check failed');
         showModerationAlert(statusCheck.error);
         console.log('[MODERATION SIGNOUT]', { reason: statusCheck.error });
@@ -529,6 +532,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const statusCheck = await checkUserStatus(session.user.id, 'validateSession');
         debugLogger.log('validateSession_after_checkUserStatus', { allowed: statusCheck.allowed, t: Date.now() });
         if (!statusCheck.allowed) {
+          console.log('Moderation status:', statusCheck.error);
           console.log('[TRACE][validateSession] status check failed, signing out');
           showModerationAlert(statusCheck.error);
           console.log('[MODERATION SIGNOUT]', { reason: statusCheck.error });
@@ -594,7 +598,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           console.log('[AUTH] BETA_MODE: bypassing email verification for login');
         }
         const statusCheck = await checkUserStatus(data.user.id, 'signIn');
+        console.log('Moderation status:', statusCheck.error);
         if (!statusCheck.allowed) {
+          showModerationAlert(statusCheck.error);
           console.log('[MODERATION SIGNOUT]', { reason: statusCheck.error, path: 'signIn' });
           await supabase.auth.signOut();
           throw new Error(statusCheck.error || 'Account access denied.');
