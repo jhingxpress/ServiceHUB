@@ -70,28 +70,34 @@ export default function UserDetailScreen({ route, navigation }: Props) {
   };
 
   const handleSuspend = () => {
-    Alert.prompt(
+    Alert.alert(
       'Suspend User',
-      'Enter reason for suspension (visible in audit log):',
-      async (reason) => {
-        if (!reason?.trim()) return;
-        const { error } = await supabase.from('users').update({ status: 'suspended' }).eq('id', userId);
-        if (error) {
-          Alert.alert('Failed', error.message);
-          return;
-        }
-        await logModerationAction('suspend_user', reason);
-        await supabase.from('notifications').insert({
-          user_id: userId,
-          type: 'system',
-          title: 'Account Suspended',
-          body: 'Your account has been temporarily suspended. Contact support for assistance.',
-          data: {},
-        });
-        setUserData((p) => p ? { ...p, status: 'suspended' } : p);
-        Alert.alert('Done', 'User has been suspended.');
-      },
-      'plain-text'
+      'Are you sure you want to suspend this user?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Suspend',
+          style: 'destructive',
+          onPress: async () => {
+            const reason = 'Temporary suspension by admin';
+            const { error } = await supabase.from('users').update({ status: 'suspended' }).eq('id', userId);
+            if (error) {
+              Alert.alert('Failed', error.message);
+              return;
+            }
+            await logModerationAction('suspend_user', reason);
+            await supabase.from('notifications').insert({
+              user_id: userId,
+              type: 'system',
+              title: 'Account Suspended',
+              body: 'Your account has been temporarily suspended. Contact support for assistance.',
+              data: {},
+            });
+            setUserData((p) => p ? { ...p, status: 'suspended' } : p);
+            Alert.alert('Done', 'User has been suspended.');
+          },
+        },
+      ]
     );
   };
 
