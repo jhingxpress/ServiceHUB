@@ -166,6 +166,13 @@ export default function ProviderStorefrontScreen() {
 
   const handleBook = (service?: Service) => {
     if (!user) { Alert.alert('Sign In', 'Please sign in to book a service.'); return; }
+    if (!provider?.is_available) {
+      Alert.alert(
+        'Provider Unavailable',
+        'This service provider is currently unavailable and cannot accept new bookings.'
+      );
+      return;
+    }
     if (service) {
       navigation.navigate('ServiceDetail', { serviceId: service.id });
     } else {
@@ -301,6 +308,19 @@ export default function ProviderStorefrontScreen() {
           )}
         </View>
 
+        {/* Unavailable notice */}
+        {!provider.is_available && (
+          <View style={styles.unavailableNotice}>
+            <Ionicons name="warning-outline" size={20} color={COLORS.error} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.unavailableNoticeTitle}>Provider Currently Unavailable</Text>
+              <Text style={styles.unavailableNoticeText}>
+                This provider is temporarily unavailable and cannot accept new bookings at this time.
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* About */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
@@ -356,8 +376,14 @@ export default function ProviderStorefrontScreen() {
                     }
                     return <Text style={[styles.servicePrice, { color: COLORS.textSecondary }]}>Request Quote</Text>;
                   })()}
-                  <TouchableOpacity style={styles.bookBtn} onPress={() => handleBook(s)}>
-                    <Text style={styles.bookBtnText}>Book</Text>
+                  <TouchableOpacity
+                    style={[styles.bookBtn, !provider.is_available && styles.bookBtnDisabled]}
+                    onPress={() => handleBook(s)}
+                    disabled={!provider.is_available}
+                  >
+                    <Text style={[styles.bookBtnText, !provider.is_available && styles.bookBtnTextDisabled]}>
+                      {provider.is_available ? 'Book' : 'Unavailable'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </TouchableOpacity>
@@ -451,8 +477,14 @@ export default function ProviderStorefrontScreen() {
           <Ionicons name="chatbubble-outline" size={20} color={COLORS.primary} />
           <Text style={styles.chatBtnText}>Chat</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.mainBookBtn} onPress={() => handleBook()}>
-          <Text style={styles.mainBookBtnText}>Book Service</Text>
+        <TouchableOpacity
+          style={[styles.mainBookBtn, !provider.is_available && styles.mainBookBtnDisabled]}
+          onPress={() => handleBook()}
+          disabled={!provider.is_available}
+        >
+          <Text style={[styles.mainBookBtnText, !provider.is_available && styles.mainBookBtnTextDisabled]}>
+            {provider.is_available ? 'Book Service' : 'Provider Unavailable'}
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -542,6 +574,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 6,
   },
   bookBtnText: { fontFamily: FONTS.semiBold, color: COLORS.white, fontSize: FONTS.sizes.sm },
+  bookBtnDisabled: { backgroundColor: COLORS.border },
+  bookBtnTextDisabled: { color: COLORS.textLight },
   galleryRow: { gap: SPACING.sm },
   galleryItem: { position: 'relative' },
   galleryImage: { width: 140, height: 140, borderRadius: BORDER_RADIUS.lg },
@@ -586,6 +620,16 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center',
   },
   mainBookBtnText: { fontFamily: FONTS.bold, color: COLORS.white, fontSize: FONTS.sizes.base },
+  mainBookBtnDisabled: { backgroundColor: COLORS.border },
+  mainBookBtnTextDisabled: { color: COLORS.textLight },
+  unavailableNotice: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm,
+    backgroundColor: '#FEE2E2', borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md, marginHorizontal: SPACING.md, marginTop: SPACING.md,
+    borderWidth: 1, borderColor: '#FECACA',
+  },
+  unavailableNoticeTitle: { fontFamily: FONTS.semiBold, fontSize: FONTS.sizes.base, color: '#991B1B', marginBottom: 2 },
+  unavailableNoticeText: { fontFamily: FONTS.regular, fontSize: FONTS.sizes.sm, color: '#991B1B' },
   reviewTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text, marginTop: SPACING.sm },
   reviewPhotos: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm, flexWrap: 'wrap' },
   reviewPhotoThumb: { width: 80, height: 80, borderRadius: BORDER_RADIUS.md },
