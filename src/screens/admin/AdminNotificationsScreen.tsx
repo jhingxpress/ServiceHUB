@@ -153,7 +153,7 @@ export default function AdminNotificationsScreen() {
         navigation.navigate('AdminReviews');
         break;
       case 'featured_request':
-        navigation.navigate('AllProviders');
+        navigation.navigate('ProviderDetail', { providerId: item.entityId });
         break;
     }
   };

@@ -161,6 +161,8 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
   const [actionNotes, setActionNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [featuredLoading, setFeaturedLoading] = useState(false);
+  const [hasPendingRequest, setHasPendingRequest] = useState(false);
+  const [rejectingRequest, setRejectingRequest] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [processingDoc, setProcessingDoc] = useState<string | null>(null);
@@ -169,7 +171,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const [provRes, docsRes, logsRes] = await Promise.all([
+      const [provRes, docsRes, logsRes, featReqRes] = await Promise.all([
         supabase.from('providers').select(`
           id, business_name, business_address, city, province, business_email, business_phone,
           service_description, service_area, years_of_experience, status, is_verified, is_featured, featured_until,
@@ -184,6 +186,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           id, action, notes, created_at,
           performer:users!provider_verification_logs_performed_by_fkey(full_name)
         `).eq('provider_id', providerId).order('created_at', { ascending: false }),
+        supabase.from('featured_requests').select('id').eq('provider_id', providerId).eq('status', 'pending').maybeSingle(),
       ]);
       if (provRes.error) throw provRes.error;
 
@@ -195,6 +198,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
       setProvider(provRes.data as unknown as ProviderDetailData);
       setDocuments(allDocs);
       setLogs((logsRes.data ?? []) as unknown as LogEntry[]);
+      setHasPendingRequest(!!featReqRes.data);
 
       // Generate signed URLs for private bucket images
       const urlMap: Record<string, string> = {};
@@ -217,6 +221,24 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
       setError(err?.message ?? 'Failed to load provider details');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const rejectFeaturedRequest = async () => {
+    setRejectingRequest(true);
+    try {
+      const { error } = await supabase
+        .from('featured_requests')
+        .update({ status: 'rejected', updated_at: new Date().toISOString() })
+        .eq('provider_id', providerId)
+        .eq('status', 'pending');
+      if (error) throw error;
+      setHasPendingRequest(false);
+      Alert.alert('Done', 'Featured request rejected.');
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Failed to reject request.');
+    } finally {
+      setRejectingRequest(false);
     }
   };
 
@@ -319,6 +341,14 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
         performed_by: user?.id ?? null,
         notes: newValue ? `Featured until ${(updates.featured_until as string).slice(0, 10)}` : 'Featured status removed',
       });
+      if (newValue) {
+        await supabase
+          .from('featured_requests')
+          .update({ status: 'approved', updated_at: new Date().toISOString() })
+          .eq('provider_id', providerId)
+          .eq('status', 'pending');
+        setHasPendingRequest(false);
+      }
       setProvider((p) => p ? { ...p, is_featured: newValue, featured_until: (updates.featured_until as string | null) } : p);
     } catch (err: any) {
       Alert.alert('Error', err?.message ?? 'Failed to update featured status');
@@ -579,6 +609,22 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
                 )}
               </TouchableOpacity>
             </View>
+            {hasPendingRequest && (
+              <TouchableOpacity
+                style={[styles.rejectBtn, { marginTop: SPACING.sm }]}
+                onPress={rejectFeaturedRequest}
+                disabled={rejectingRequest}
+              >
+                {rejectingRequest ? (
+                  <ActivityIndicator size="small" color={COLORS.error} />
+                ) : (
+                  <>
+                    <Ionicons name="close-circle-outline" size={18} color={COLORS.error} />
+                    <Text style={styles.rejectBtnText}>Reject Featured Request</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
