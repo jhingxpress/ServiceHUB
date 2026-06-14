@@ -40,7 +40,7 @@ export default function AdminKYCScreen() {
   const navigation = useNavigation<NavProp>();
   const [providers, setProviders] = useState<ProviderApp[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'pending' | 'all'>('pending');
+  const [filter, setFilter] = useState<'pending' | 'all'>('all');
 
   const fetchData = useCallback(async () => {
     setLoading(true);

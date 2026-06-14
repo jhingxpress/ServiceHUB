@@ -101,6 +101,7 @@ export type ProviderTabParamList = {
 export type AdminStackParamList = {
   AdminTabs: NavigatorScreenParams<AdminTabParamList>;
   PendingProviders: undefined;
+  AllProviders: undefined;
   ManageUsers: undefined;
   ProviderDetail: { providerId: string };
   UserDetail: { userId: string };

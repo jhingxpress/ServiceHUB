@@ -19,7 +19,7 @@ import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/
 
 type NavProp = NativeStackNavigationProp<AdminStackParamList>;
 
-type AlertType = 'pending_provider' | 'open_dispute' | 'open_report' | 'flagged_review';
+type AlertType = 'pending_provider' | 'open_dispute' | 'open_report' | 'flagged_review' | 'featured_request';
 
 interface AdminAlert {
   id: string;
@@ -36,6 +36,7 @@ const TYPE_CFG: Record<AlertType, { icon: string; color: string; bg: string }> =
   open_dispute:     { icon: 'alert-circle-outline',   color: COLORS.error,    bg: COLORS.errorLight },
   open_report:      { icon: 'flag-outline',            color: '#EA580C',       bg: '#FFEDD5' },
   flagged_review:   { icon: 'star-half-outline',       color: '#7C3AED',       bg: '#EDE9FE' },
+  featured_request: { icon: 'sparkles-outline',         color: COLORS.warning,  bg: '#FEF3C7' },
 };
 
 export default function AdminNotificationsScreen() {
@@ -46,7 +47,7 @@ export default function AdminNotificationsScreen() {
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
 
   const loadAlerts = useCallback(async () => {
-    const [provRes, dispRes, repRes, revRes] = await Promise.all([
+    const [provRes, dispRes, repRes, revRes, featRes] = await Promise.all([
       supabase
         .from('providers')
         .select('id, business_name, created_at')
@@ -69,6 +70,12 @@ export default function AdminNotificationsScreen() {
         .from('reviews')
         .select('id, created_at, booking_id')
         .eq('is_hidden', true)
+        .order('created_at', { ascending: false })
+        .limit(20),
+      supabase
+        .from('featured_requests')
+        .select('id, created_at, providers!provider_id(id, business_name)')
+        .eq('status', 'pending')
         .order('created_at', { ascending: false })
         .limit(20),
     ]);
@@ -110,6 +117,15 @@ export default function AdminNotificationsScreen() {
         createdAt: rv.created_at,
         isRead: false,
       })),
+      ...(featRes.data ?? []).map((fr: any) => ({
+        id: `feat-${fr.id}`,
+        type: 'featured_request' as AlertType,
+        title: 'Featured Provider Request',
+        body: `${fr.providers?.business_name ?? 'A provider'} has requested Featured Provider status.`,
+        entityId: fr.providers?.id ?? fr.id,
+        createdAt: fr.created_at,
+        isRead: false,
+      })),
     ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     setAlerts(built);
@@ -135,6 +151,9 @@ export default function AdminNotificationsScreen() {
         break;
       case 'flagged_review':
         navigation.navigate('AdminReviews');
+        break;
+      case 'featured_request':
+        navigation.navigate('AllProviders');
         break;
     }
   };

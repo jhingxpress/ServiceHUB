@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { format } from 'date-fns';
 import { REVIEWS_LAST_SEEN_KEY } from './ProviderReviewsScreen';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
@@ -58,12 +59,14 @@ export default function ProviderDashboard() {
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [showHealthModal, setShowHealthModal] = useState(false);
   const [newReviewCount, setNewReviewCount] = useState(0);
+  const [hasPendingRequest, setHasPendingRequest] = useState(false);
+  const [featuredReqLoading, setFeaturedReqLoading] = useState(false);
   const ONBOARDING_KEY = 'provider_onboarding_seen';
 
   const loadData = useCallback(async () => {
     if (!user) return;
 
-    const [bookingsRes, providerRes, checklistRes, perfRes, scoreRes] = await Promise.all([
+    const [bookingsRes, providerRes, checklistRes, perfRes, scoreRes, featReqRes] = await Promise.all([
       supabase
         .from('bookings')
         .select('*, service:services(name)')
@@ -74,6 +77,7 @@ export default function ProviderDashboard() {
       supabase.from('provider_checklist').select('*').eq('provider_id', user.id).single(),
       supabase.from('provider_performance').select('*').eq('provider_id', user.id).single(),
       supabase.from('provider_score').select('*').eq('provider_id', user.id).single(),
+      supabase.from('featured_requests').select('id').eq('provider_id', user.id).eq('status', 'pending').maybeSingle(),
     ]);
 
     const bookings: Booking[] = bookingsRes.data ?? [];
@@ -90,6 +94,7 @@ export default function ProviderDashboard() {
     setChecklist(checklistRes.data ?? null);
     setPerformance(perfRes.data ?? null);
     setScore(scoreRes.data ?? null);
+    setHasPendingRequest(!!featReqRes.data);
 
     // Load new-review badge count
     const lastSeen = await AsyncStorage.getItem(REVIEWS_LAST_SEEN_KEY);
@@ -135,6 +140,22 @@ export default function ProviderDashboard() {
     if (!user) return;
     setProvider((prev) => (prev ? { ...prev, business_status: status } : prev));
     await supabase.from('providers').update({ business_status: status }).eq('id', user.id);
+  };
+
+  const submitFeaturedRequest = async () => {
+    if (!user) return;
+    setFeaturedReqLoading(true);
+    try {
+      const { error } = await supabase
+        .from('featured_requests')
+        .insert({ provider_id: user.id, status: 'pending' });
+      if (error) throw error;
+      setHasPendingRequest(true);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Failed to submit request. Please try again.');
+    } finally {
+      setFeaturedReqLoading(false);
+    }
   };
 
   if (loading) {
@@ -274,6 +295,62 @@ export default function ProviderDashboard() {
             </View>
           ))}
         </View>
+
+        {/* Featured Provider */}
+        {provider && provider.status === 'approved' && (
+          <View style={styles.featuredCard}>
+            <View style={styles.featuredCardHeader}>
+              <View style={styles.featuredCardIcon}>
+                <Ionicons name="sparkles" size={22} color={COLORS.warning} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.featuredCardTitle}>⭐ Featured Provider</Text>
+                <Text style={styles.featuredCardSubtitle}>
+                  Get higher visibility in search results and appear in the Featured Providers section.
+                </Text>
+              </View>
+            </View>
+            {provider.is_featured ? (
+              <View>
+                <View style={styles.featuredActiveRow}>
+                  <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
+                  <Text style={styles.featuredActiveText}>Featured Provider Active</Text>
+                </View>
+                {provider.featured_until && (
+                  <Text style={styles.featuredUntilText}>
+                    Featured until: {format(new Date(provider.featured_until), 'MMM d, yyyy')}
+                  </Text>
+                )}
+              </View>
+            ) : (
+              <>
+                <View style={styles.featuredBenefits}>
+                  {['Priority search placement', 'Featured badge on profile', 'Home screen exposure'].map((b) => (
+                    <View key={b} style={styles.featuredBenefitRow}>
+                      <Ionicons name="checkmark" size={13} color={COLORS.warning} />
+                      <Text style={styles.featuredBenefitText}>{b}</Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.featuredPrice}>₱99/month</Text>
+                <TouchableOpacity
+                  style={[styles.featuredBtn, hasPendingRequest && styles.featuredBtnPending]}
+                  onPress={submitFeaturedRequest}
+                  disabled={hasPendingRequest || featuredReqLoading}
+                  activeOpacity={0.8}
+                >
+                  {featuredReqLoading ? (
+                    <ActivityIndicator size="small" color={COLORS.white} />
+                  ) : (
+                    <Text style={[styles.featuredBtnText, hasPendingRequest && styles.featuredBtnTextPending]}>
+                      {hasPendingRequest ? 'Request Pending' : 'Request Featured Badge'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        )}
 
         {/* Provider Health — compact summary */}
         {score && (
@@ -592,4 +669,33 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   reviewsNewBadgeText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.bold, color: COLORS.white },
+  featuredCard: {
+    marginHorizontal: SPACING.md, marginBottom: SPACING.md,
+    backgroundColor: '#FFFBEB', borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md, borderWidth: 1, borderColor: '#FDE68A', ...SHADOWS.small,
+  },
+  featuredCardHeader: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm, marginBottom: SPACING.sm,
+  },
+  featuredCardIcon: {
+    width: 44, height: 44, borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center',
+  },
+  featuredCardTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.bold, color: COLORS.text },
+  featuredCardSubtitle: {
+    fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2, lineHeight: 16,
+  },
+  featuredBenefits: { gap: SPACING.xs, marginBottom: SPACING.sm },
+  featuredBenefitRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
+  featuredBenefitText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontFamily: FONTS.medium },
+  featuredPrice: {
+    fontSize: FONTS.sizes.lg, fontFamily: FONTS.bold, color: COLORS.warning, marginBottom: SPACING.sm,
+  },
+  featuredBtn: { borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.sm, alignItems: 'center' as const, backgroundColor: COLORS.warning },
+  featuredBtnPending: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: '#FDE68A' },
+  featuredBtnText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.white },
+  featuredBtnTextPending: { color: COLORS.warning },
+  featuredActiveRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginBottom: 4 },
+  featuredActiveText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.success },
+  featuredUntilText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
 });

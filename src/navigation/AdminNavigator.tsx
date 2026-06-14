@@ -22,6 +22,7 @@ import AdminBookingDetailScreen from '../screens/admin/AdminBookingDetailScreen'
 import AdminNotificationsScreen from '../screens/admin/AdminNotificationsScreen';
 import AdminRevenueScreen from '../screens/admin/AdminRevenueScreen';
 import AdminBroadcastScreen from '../screens/admin/AdminBroadcastScreen';
+import AdminKYCScreen from '../screens/admin/AdminKYCScreen';
 
 const Stack = createNativeStackNavigator<AdminStackParamList>();
 const Tab = createBottomTabNavigator<AdminTabParamList>();
@@ -129,6 +130,7 @@ export default function AdminNavigator() {
     >
       <Stack.Screen name="AdminTabs" component={AdminTabs} />
       <Stack.Screen name="PendingProviders" component={PendingProvidersScreen} />
+      <Stack.Screen name="AllProviders" component={AdminKYCScreen} />
       <Stack.Screen name="ManageUsers" component={UsersScreen} />
       <Stack.Screen name="ProviderDetail" component={ProviderDetailScreen} />
       <Stack.Screen name="UserDetail" component={UserDetailScreen} />

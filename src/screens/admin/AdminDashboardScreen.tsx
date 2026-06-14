@@ -96,6 +96,7 @@ export default function AdminDashboardScreen() {
   const QUICK_LINKS = [
     { label: 'Admin Alerts', icon: 'notifications-outline', screen: 'AdminNotifications' as const, badge: stats.pendingProviders, isTab: false as const },
     { label: 'Pending Providers', icon: 'shield-checkmark-outline', screen: 'PendingProviders' as const, isTab: false as const },
+    { label: 'All Providers', icon: 'briefcase-outline', screen: 'AllProviders' as const, isTab: false as const },
     { label: 'Reports', icon: 'flag-outline', screen: 'AdminReports' as const, isTab: false as const },
     { label: 'Review Moderation', icon: 'star-outline', screen: 'AdminReviews' as const, isTab: false as const },
     { label: 'Revenue', icon: 'cash-outline', screen: 'AdminRevenue' as const, isTab: false as const },
