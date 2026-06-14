@@ -43,6 +43,7 @@ export default function HomeScreen() {
   const { user } = useAuthStore();
   const [categories, setCategories] = useState<Category[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [featuredProviders, setFeaturedProviders] = useState<Provider[]>([]);
   const [featuredServices, setFeaturedServices] = useState<Array<{
     id: string;
     name: string;
@@ -59,7 +60,7 @@ export default function HomeScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const [catsRes, provsRes, srvsRes, booksRes] = await Promise.all([
+      const [catsRes, provsRes, featProvRes, srvsRes, booksRes] = await Promise.all([
         supabase.from('categories').select('*').eq('is_parent', true).order('name'),
         supabase
           .from('providers')
@@ -71,6 +72,16 @@ export default function HomeScreen() {
           .is('deleted_at', null)
           .order('rating', { ascending: false })
           .limit(8),
+        supabase
+          .from('providers')
+          .select('*, categories(name, icon, color), profile_photo_url, business_logo')
+          .eq('is_featured', true)
+          .eq('is_available', true)
+          .eq('status', 'approved')
+          .eq('marketplace_status', 'live')
+          .is('deleted_at', null)
+          .order('rating', { ascending: false })
+          .limit(10),
         supabase
           .from('services')
           .select(`
@@ -127,6 +138,12 @@ export default function HomeScreen() {
 
       setCategories(catsRes.data ?? []);
       setProviders(provsRes.data ?? []);
+      const now = new Date().toISOString();
+      setFeaturedProviders(
+        (featProvRes.data ?? []).filter(
+          (p: any) => !p.featured_until || p.featured_until > now
+        ) as Provider[]
+      );
       setFeaturedServices(
         rawServices.map((s) => ({
           id: s.id,
@@ -226,6 +243,55 @@ export default function HomeScreen() {
             <Ionicons name="construct" size={52} color="rgba(255,255,255,0.25)" />
           </View>
         </View>
+
+        {/* Featured Providers */}
+        {featuredProviders.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Featured Providers</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('ProviderList', {})}>
+                <Text style={styles.sectionLink}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={featuredProviders}
+              keyExtractor={(item) => item.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.hscroll}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.featuredProviderCard}
+                  onPress={() => navigation.navigate('ProviderStorefront', { providerId: item.id })}
+                  activeOpacity={0.8}
+                >
+                  <Avatar
+                    uri={item.profile_photo_url ?? item.business_logo}
+                    name={item.business_name}
+                    size={52}
+                  />
+                  <View style={styles.featuredBadge}>
+                    <Ionicons name="sparkles" size={10} color={COLORS.warning} />
+                    <Text style={styles.featuredBadgeText}>Featured</Text>
+                  </View>
+                  <Text style={styles.providerName} numberOfLines={1}>
+                    {item.business_name ?? 'Provider'}
+                  </Text>
+                  <Text style={styles.providerCategory} numberOfLines={1}>
+                    {toTitleCase(item.categories?.name) ?? 'Services'}
+                  </Text>
+                  <View style={styles.providerRating}>
+                    <Ionicons name="star" size={12} color="#F59E0B" />
+                    <Text style={styles.ratingText}>{Number(item.rating).toFixed(1)}</Text>
+                  </View>
+                  {item.hourly_rate && (
+                    <Text style={styles.providerRate}>₱{item.hourly_rate}/hr</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        )}
 
         {/* Featured Services */}
         {featuredServices.length > 0 && (
@@ -525,6 +591,31 @@ const styles = StyleSheet.create({
   providerRating: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: SPACING.xs },
   ratingText: { fontFamily: FONTS.semiBold, fontSize: FONTS.sizes.xs, color: COLORS.text },
   providerRate: { fontFamily: FONTS.medium, fontSize: FONTS.sizes.xs, color: COLORS.primary, marginTop: 2 },
+  featuredProviderCard: {
+    width: 140,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+    ...SHADOWS.small,
+  },
+  featuredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: COLORS.warningLight,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: SPACING.xs,
+  },
+  featuredBadgeText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 9,
+    color: '#92400E',
+  },
   bookingCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',

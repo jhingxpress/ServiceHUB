@@ -50,6 +50,8 @@ interface ProviderDetailData {
   years_of_experience: number | null;
   status: string;
   is_verified: boolean;
+  is_featured: boolean;
+  featured_until: string | null;
   rejection_reason: string | null;
   created_at: string;
   updated_at: string;
@@ -158,6 +160,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
   const [actionMode, setActionMode] = useState<'approve' | 'reject' | 'suspend' | null>(null);
   const [actionNotes, setActionNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [featuredLoading, setFeaturedLoading] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [processingDoc, setProcessingDoc] = useState<string | null>(null);
@@ -169,7 +172,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
       const [provRes, docsRes, logsRes] = await Promise.all([
         supabase.from('providers').select(`
           id, business_name, business_address, city, province, business_email, business_phone,
-          service_description, service_area, years_of_experience, status, is_verified,
+          service_description, service_area, years_of_experience, status, is_verified, is_featured, featured_until,
           rejection_reason, created_at, updated_at,
           users!providers_id_fkey(full_name, email, phone, avatar_url),
           category:categories(name, icon),
@@ -294,6 +297,36 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
     finally { setSaving(false); }
   };
 
+  const toggleFeatured = async () => {
+    if (!provider) return;
+    setFeaturedLoading(true);
+    const newValue = !provider.is_featured;
+    const updates: Record<string, unknown> = { is_featured: newValue };
+    if (newValue) {
+      // Default 30-day feature period
+      const until = new Date();
+      until.setDate(until.getDate() + 30);
+      updates.featured_until = until.toISOString();
+    } else {
+      updates.featured_until = null;
+    }
+    try {
+      const { error } = await supabase.from('providers').update(updates).eq('id', providerId);
+      if (error) throw error;
+      await supabase.from('provider_verification_logs').insert({
+        provider_id: providerId,
+        action: newValue ? 'featured_enabled' : 'featured_disabled',
+        performed_by: user?.id ?? null,
+        notes: newValue ? `Featured until ${(updates.featured_until as string).slice(0, 10)}` : 'Featured status removed',
+      });
+      setProvider((p) => p ? { ...p, is_featured: newValue, featured_until: (updates.featured_until as string | null) } : p);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Failed to update featured status');
+    } finally {
+      setFeaturedLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
@@ -347,6 +380,14 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
             <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
               <Text style={[styles.statusBadgeText, { color: statusCfg.color }]}>{statusCfg.label}</Text>
             </View>
+            {provider.is_featured && (
+              <View style={[styles.statusBadge, { backgroundColor: COLORS.warningLight, marginTop: 4 }]}>
+                <Ionicons name="sparkles" size={12} color={COLORS.warning} />
+                <Text style={[styles.statusBadgeText, { color: '#92400E', marginLeft: 4 }]}>
+                  Featured{provider.featured_until ? ` · Until ${format(new Date(provider.featured_until), 'MMM d, yyyy')}` : ''}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -521,6 +562,22 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
                   <Text style={styles.rejectBtnText}>Suspend</Text>
                 </TouchableOpacity>
               )}
+              <TouchableOpacity
+                style={[styles.featuredBtn, provider.is_featured && styles.featuredBtnActive]}
+                onPress={toggleFeatured}
+                disabled={featuredLoading}
+              >
+                {featuredLoading ? (
+                  <ActivityIndicator size="small" color={provider.is_featured ? COLORS.warning : COLORS.primary} />
+                ) : (
+                  <>
+                    <Ionicons name={provider.is_featured ? 'sparkles' : 'sparkles-outline'} size={18} color={provider.is_featured ? COLORS.warning : COLORS.primary} />
+                    <Text style={[styles.featuredBtnText, provider.is_featured && styles.featuredBtnTextActive]}>
+                      {provider.is_featured ? 'Featured On' : 'Feature Provider'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -733,6 +790,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.errorLight, borderWidth: 1, borderColor: '#FECACA',
   },
   rejectBtnText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.error },
+  featuredBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: SPACING.sm, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.xl,
+    backgroundColor: COLORS.warningLight, borderWidth: 1, borderColor: '#FEF3C7',
+  },
+  featuredBtnActive: { backgroundColor: COLORS.warningLight, borderColor: COLORS.warning },
+  featuredBtnText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.warning },
+  featuredBtnTextActive: { color: '#92400E' },
   docCard: {
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.md,
     padding: SPACING.md, marginBottom: SPACING.sm,

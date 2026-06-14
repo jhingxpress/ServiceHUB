@@ -296,8 +296,14 @@ export default function ProviderStorefrontScreen() {
           </View>
 
           {/* Badges */}
-          {badges.length > 0 && (
+          {(badges.length > 0 || provider.is_featured) && (
             <View style={styles.badgesRow}>
+              {provider.is_featured && (
+                <View style={[styles.badgeChip, styles.featuredBadgeChip]}>
+                  <Ionicons name="sparkles" size={12} color={COLORS.warning} />
+                  <Text style={[styles.badgeChipText, styles.featuredBadgeText]}>Featured</Text>
+                </View>
+              )}
               {badges.map((b) => (
                 <View key={b.id} style={styles.badgeChip}>
                   <Ionicons name={BADGE_ICONS[b.badge_type] ?? 'ribbon'} size={12} color={COLORS.primary} />
@@ -550,6 +556,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 4,
   },
   badgeChipText: { fontFamily: FONTS.medium, fontSize: FONTS.sizes.xs, color: COLORS.primary },
+  featuredBadgeChip: { backgroundColor: COLORS.warningLight },
+  featuredBadgeText: { color: '#92400E' },
   section: { paddingHorizontal: SPACING.md, marginTop: SPACING.lg },
   sectionTitle: { fontFamily: FONTS.semiBold, fontSize: FONTS.sizes.lg, color: COLORS.text, marginBottom: SPACING.sm },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm },

@@ -151,7 +151,7 @@ export default function SearchScreen() {
       // Phase 2: Search providers
       let q = supabase
         .from('providers')
-        .select('*, business_name, categories(name, icon, color), provider_stats(*), profile_photo_url, business_logo')
+        .select('*, business_name, categories(name, icon, color), provider_stats(*), profile_photo_url, business_logo, is_featured, featured_until')
         .eq('status', 'approved')
         .eq('marketplace_status', 'live')
         .eq('is_available', true)
@@ -166,7 +166,18 @@ export default function SearchScreen() {
       }
 
       const { data } = await q.order('rating', { ascending: false }).limit(50);
-      let results = (data ?? []) as Provider[];
+      const now = new Date().toISOString();
+      let results = ((data ?? []) as Provider[]).filter(
+        (p) => !p.featured_until || p.featured_until > now
+      );
+
+      // Featured provider ranking boost: sort featured first, then by rating
+      results.sort((a, b) => {
+        const aFeatured = a.is_featured ? 1 : 0;
+        const bFeatured = b.is_featured ? 1 : 0;
+        if (aFeatured !== bFeatured) return bFeatured - aFeatured;
+        return (b.rating ?? 0) - (a.rating ?? 0);
+      });
 
       if (nearbyMode && userLocation) {
         results = results

@@ -157,6 +157,9 @@ export interface Provider {
   // Marketplace
   marketplace_status: MarketplaceStatus;
   business_status: BusinessStatus;
+  // Featured
+  is_featured: boolean;
+  featured_until: string | null;
   // Stats
   rating: number;
   total_reviews: number;

@@ -150,6 +150,12 @@ export default function ProviderProfileScreen() {
               <View style={styles.nameRow}>
                 <Text style={styles.providerName}>{provider.business_name || 'Provider'}</Text>
                 {provider.is_verified && <Ionicons name="checkmark-circle" size={18} color={COLORS.primary} />}
+                {provider.is_featured && (
+                  <View style={styles.featuredBadge}>
+                    <Ionicons name="sparkles" size={10} color={COLORS.warning} />
+                    <Text style={styles.featuredBadgeText}>Featured</Text>
+                  </View>
+                )}
               </View>
               <Text style={styles.categoryText}>{(provider as any).categories?.name ?? 'Services'}</Text>
               <View style={styles.ratingRow}>
@@ -394,6 +400,12 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   providerName: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.bold, color: COLORS.text, flexShrink: 1 },
   categoryText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
+  featuredBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: COLORS.warningLight, borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  featuredBadgeText: { fontFamily: FONTS.semiBold, fontSize: 9, color: '#92400E' },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   ratingNum: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
   reviewCount: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
