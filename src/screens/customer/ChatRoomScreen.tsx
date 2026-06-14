@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { format } from 'date-fns';
+import { format, isToday, isYesterday, parseISO } from 'date-fns';
 import * as ImagePicker from 'expo-image-picker';
 import ImageView from 'react-native-image-viewing';
 import { supabase } from '../../lib/supabase';
@@ -42,6 +42,12 @@ interface Message {
 
 type NavProp = NativeStackNavigationProp<CustomerStackParamList>;
 type RouteType = RouteProp<CustomerStackParamList, 'ChatRoom'>;
+
+function formatChatDate(date: Date): string {
+  if (isToday(date)) return 'Today';
+  if (isYesterday(date)) return 'Yesterday';
+  return format(date, 'MMMM dd, yyyy');
+}
 
 export default function ChatRoomScreen() {
   const navigation = useNavigation<NavProp>();
@@ -379,7 +385,7 @@ export default function ChatRoomScreen() {
     );
   };
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
     const isOwn = item.sender_id === user?.id;
     const isImage = item.message_type === 'image';
     const resolvedImageUrl = item.image_url
@@ -389,8 +395,21 @@ export default function ChatRoomScreen() {
       .filter((m) => m.message_type === 'image' && m.image_url)
       .map((m) => signedImageUrls[m.id] ?? m.image_url!);
 
+    const currDate = parseISO(item.created_at);
+    const prevDate = index > 0 ? parseISO(messages[index - 1].created_at) : null;
+    const showSeparator =
+      !prevDate || format(currDate, 'yyyy-MM-dd') !== format(prevDate, 'yyyy-MM-dd');
+
     return (
-      <View style={[styles.msgRow, isOwn && styles.msgRowOwn]}>
+      <>
+        {showSeparator && (
+          <View style={styles.dateSeparator}>
+            <View style={styles.dateSeparatorLine} />
+            <Text style={styles.dateSeparatorText}>{formatChatDate(currDate)}</Text>
+            <View style={styles.dateSeparatorLine} />
+          </View>
+        )}
+        <View style={[styles.msgRow, isOwn && styles.msgRowOwn]}>
         {!isOwn && (
           <Avatar
             uri={otherUserAvatar ?? null}
@@ -425,6 +444,7 @@ export default function ChatRoomScreen() {
           </View>
         </View>
       </View>
+    </>
     );
   };
 
@@ -558,6 +578,25 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   uploadText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
+  dateSeparator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    marginVertical: SPACING.sm,
+  },
+  dateSeparatorLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
+    maxWidth: 60,
+  },
+  dateSeparatorText: {
+    fontSize: FONTS.sizes.xs,
+    color: COLORS.textLight,
+    fontFamily: FONTS.medium,
+    textAlign: 'center',
+  },
   imageViewerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
