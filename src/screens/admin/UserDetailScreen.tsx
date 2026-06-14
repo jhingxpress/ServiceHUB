@@ -141,8 +141,11 @@ export default function UserDetailScreen({ route, navigation }: Props) {
         style: isActive ? 'destructive' : 'default',
         onPress: async () => {
           if (!isActive) {
+            console.log('[ACTIVATE] Starting activation:', userId);
             const result = await adminActivateUser(userId);
+            console.log('[ACTIVATE] RPC Result:', result);
             if (!result.success) {
+              console.error('[ACTIVATE] Activation failed:', result.error);
               Alert.alert('Failed', result.error ?? 'Activation failed');
               return;
             }
@@ -153,7 +156,9 @@ export default function UserDetailScreen({ route, navigation }: Props) {
               body: 'Your ServiceHub account has been reactivated and is now active again.',
               data: {},
             });
+            console.log('[ACTIVATE] Notification inserted');
             setUserData((p) => p ? { ...p, status: 'active' } : p);
+            console.log('[ACTIVATE] UI updated');
           } else {
             const newStatus = 'suspended';
             const { error } = await supabase.from('users').update({ status: newStatus }).eq('id', userId);

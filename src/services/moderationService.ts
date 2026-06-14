@@ -106,9 +106,11 @@ export async function adminRemoveChatImage(
 export async function adminActivateUser(
   userId: string
 ): Promise<ModerationActionResult> {
+  console.log('[RPC] Calling admin_activate_user:', userId);
   const { error } = await supabase.rpc('admin_activate_user', {
     p_user_id: userId,
   });
+  console.log('[RPC] RPC error:', error);
 
   if (error) {
     console.error('adminActivateUser error:', error);
