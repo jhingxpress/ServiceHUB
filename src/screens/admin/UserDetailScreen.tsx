@@ -14,7 +14,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { format } from 'date-fns';
 import { AdminStackParamList } from '../../navigation/types';
 import { supabase } from '../../lib/supabase';
-import { adminSuspendProvider, adminBanUser } from '../../services/moderationService';
+import { adminSuspendProvider, adminBanUser, adminActivateUser } from '../../services/moderationService';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 
@@ -140,13 +140,29 @@ export default function UserDetailScreen({ route, navigation }: Props) {
         text: action.charAt(0).toUpperCase() + action.slice(1),
         style: isActive ? 'destructive' : 'default',
         onPress: async () => {
-          const newStatus = isActive ? 'suspended' : 'active';
-          const { error } = await supabase.from('users').update({ status: newStatus }).eq('id', userId);
-          if (error) {
-            Alert.alert('Failed', error.message);
-            return;
+          if (!isActive) {
+            const result = await adminActivateUser(userId);
+            if (!result.success) {
+              Alert.alert('Failed', result.error ?? 'Activation failed');
+              return;
+            }
+            await supabase.from('notifications').insert({
+              user_id: userId,
+              type: 'system',
+              title: 'Account Reactivated',
+              body: 'Your ServiceHub account has been reactivated and is now active again.',
+              data: {},
+            });
+            setUserData((p) => p ? { ...p, status: 'active' } : p);
+          } else {
+            const newStatus = 'suspended';
+            const { error } = await supabase.from('users').update({ status: newStatus }).eq('id', userId);
+            if (error) {
+              Alert.alert('Failed', error.message);
+              return;
+            }
+            setUserData((p) => p ? { ...p, status: newStatus } : p);
           }
-          setUserData((p) => p ? { ...p, status: newStatus } : p);
         },
       },
     ]);

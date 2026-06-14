@@ -481,7 +481,7 @@ CREATE OR REPLACE FUNCTION public.admin_suspend_provider(
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
   IF NOT public.is_admin() THEN RAISE EXCEPTION 'Unauthorized'; END IF;
-  UPDATE public.providers SET status='suspended', is_available=false, updated_at=now() WHERE id=p_provider_id;
+  UPDATE public.providers SET is_available=false, updated_at=now() WHERE id=p_provider_id;
   UPDATE public.users SET status='suspended', updated_at=now() WHERE id=p_provider_id;
   INSERT INTO public.moderation_log (admin_id, target_type, target_id, action, reason, metadata)
   VALUES (p_admin_id, 'provider', p_provider_id, 'suspend_provider', p_reason, jsonb_build_object('type','provider'));
@@ -496,7 +496,7 @@ RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
   IF NOT public.is_admin() THEN RAISE EXCEPTION 'Unauthorized'; END IF;
   UPDATE public.users SET status='banned', updated_at=now() WHERE id=p_user_id;
-  UPDATE public.providers SET status='banned', is_available=false, updated_at=now() WHERE id=p_user_id;
+  UPDATE public.providers SET is_available=false, updated_at=now() WHERE id=p_user_id;
   INSERT INTO public.moderation_log (admin_id, target_type, target_id, action, reason, metadata)
   VALUES (p_admin_id, 'user', p_user_id, 'ban_user', p_reason, jsonb_build_object('type','user'));
 END;
@@ -546,5 +546,19 @@ BEGIN
   INSERT INTO public.moderation_log (admin_id, target_type, target_id, action, reason, metadata)
   VALUES (p_admin_id, 'message', p_message_id, 'remove_chat_image', p_reason,
     jsonb_build_object('image_url',v_image_url,'booking_id',v_booking_id));
+END;
+$$;
+
+-- Admin moderation function: activate user (reactivation)
+CREATE OR REPLACE FUNCTION public.admin_activate_user(
+  p_user_id UUID, p_admin_id UUID DEFAULT auth.uid()
+)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF NOT public.is_admin() THEN RAISE EXCEPTION 'Unauthorized'; END IF;
+  UPDATE public.users SET status='active', updated_at=now() WHERE id=p_user_id;
+  UPDATE public.providers SET is_available=true, updated_at=now() WHERE id=p_user_id;
+  INSERT INTO public.moderation_log (admin_id, target_type, target_id, action, metadata)
+  VALUES (p_admin_id, 'user', p_user_id, 'activate_user', jsonb_build_object('type','user'));
 END;
 $$;

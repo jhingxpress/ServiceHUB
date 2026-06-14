@@ -101,6 +101,23 @@ export async function adminRemoveChatImage(
 }
 
 /**
+ * Activate a previously suspended or banned user account
+ */
+export async function adminActivateUser(
+  userId: string
+): Promise<ModerationActionResult> {
+  const { error } = await supabase.rpc('admin_activate_user', {
+    p_user_id: userId,
+  });
+
+  if (error) {
+    console.error('adminActivateUser error:', error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}
+
+/**
  * Fetch moderation log with pagination
  */
 export async function fetchModerationLog(
