@@ -1634,14 +1634,14 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   sampleThumb: {
-    width: 150, aspectRatio: 1.5, alignSelf: 'center',
-    borderRadius: BORDER_RADIUS.md, borderWidth: 1, borderColor: COLORS.border,
+    width: 100, height: 65, alignSelf: 'center',
+    borderRadius: 8, borderWidth: 1, borderColor: COLORS.border,
     marginVertical: SPACING.xs,
   },
   sampleCaption: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, textAlign: 'center', marginBottom: 2 },
   sampleReq: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginBottom: 1 },
   idFieldSection: { paddingTop: SPACING.sm, marginTop: SPACING.xs, borderTopWidth: 1, borderTopColor: COLORS.border },
-  sampleTapHint: { fontSize: 9, color: COLORS.primary, textAlign: 'center', marginBottom: SPACING.xs },
+  sampleTapHint: { fontSize: 10, color: COLORS.primary, textAlign: 'center', marginTop: 2, marginBottom: SPACING.xs },
   viewerOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.93)',
     justifyContent: 'center', alignItems: 'center',
