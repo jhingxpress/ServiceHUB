@@ -21,7 +21,6 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { hmac } from 'https://deno.land/x/hmac@v2.0.1/mod.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -84,7 +83,7 @@ serve(async (req: Request) => {
   }
 
   const message  = `${timestamp}.${rawBody}`;
-  const expected = hmac('sha256', webhookSecret, message, 'utf8', 'hex') as string;
+  const expected = await generateHmacSHA256(webhookSecret, message);
 
   if (expected !== testSig) {
     console.error('[webhook] Signature mismatch');
@@ -282,6 +281,21 @@ async function processPayment(
     payment_id: paymentId,
     status:     'paid',
   });
+}
+
+async function generateHmacSHA256(secret: string, message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
+  return Array.from(new Uint8Array(signature))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 function json(body: unknown, status = 200): Response {
