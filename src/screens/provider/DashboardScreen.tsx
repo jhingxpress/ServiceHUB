@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,6 +42,15 @@ interface Stats {
   earnings: number;
 }
 
+interface FeaturedPaymentData {
+  id: string;
+  status: 'pending' | 'paid' | 'failed' | 'refunded';
+  amount: number;
+  checkout_url: string | null;
+  paid_at: string | null;
+  created_at: string;
+}
+
 export default function ProviderDashboard() {
   const navigation = useNavigation<NavProp>();
   const { user, providerProfile } = useAuthStore();
@@ -61,12 +71,14 @@ export default function ProviderDashboard() {
   const [newReviewCount, setNewReviewCount] = useState(0);
   const [hasPendingRequest, setHasPendingRequest] = useState(false);
   const [featuredReqLoading, setFeaturedReqLoading] = useState(false);
+  const [featuredPayment, setFeaturedPayment] = useState<FeaturedPaymentData | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const ONBOARDING_KEY = 'provider_onboarding_seen';
 
   const loadData = useCallback(async () => {
     if (!user) return;
 
-    const [bookingsRes, providerRes, checklistRes, perfRes, scoreRes, featReqRes] = await Promise.all([
+    const [bookingsRes, providerRes, checklistRes, perfRes, scoreRes, featReqRes, paymentRes] = await Promise.all([
       supabase
         .from('bookings')
         .select('*, service:services(name)')
@@ -78,6 +90,13 @@ export default function ProviderDashboard() {
       supabase.from('provider_performance').select('*').eq('provider_id', user.id).single(),
       supabase.from('provider_score').select('*').eq('provider_id', user.id).single(),
       supabase.from('featured_requests').select('id').eq('provider_id', user.id).eq('status', 'pending').maybeSingle(),
+      supabase
+        .from('featured_payments')
+        .select('id, status, amount, checkout_url, paid_at, created_at')
+        .eq('provider_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     const bookings: Booking[] = bookingsRes.data ?? [];
@@ -95,6 +114,7 @@ export default function ProviderDashboard() {
     setPerformance(perfRes.data ?? null);
     setScore(scoreRes.data ?? null);
     setHasPendingRequest(!!featReqRes.data);
+    setFeaturedPayment((paymentRes as { data: FeaturedPaymentData | null }).data ?? null);
 
     // Load new-review badge count
     const lastSeen = await AsyncStorage.getItem(REVIEWS_LAST_SEEN_KEY);
@@ -142,19 +162,39 @@ export default function ProviderDashboard() {
     await supabase.from('providers').update({ business_status: status }).eq('id', user.id);
   };
 
-  const submitFeaturedRequest = async () => {
+  const handleFeaturedRequest = async () => {
     if (!user) return;
-    setFeaturedReqLoading(true);
+
+    // Re-open existing pending checkout if one already exists
+    if (featuredPayment?.status === 'pending' && featuredPayment.checkout_url) {
+      await Linking.openURL(featuredPayment.checkout_url);
+      return;
+    }
+
+    setCheckoutLoading(true);
     try {
-      const { error } = await supabase
-        .from('featured_requests')
-        .insert({ provider_id: user.id, status: 'pending' });
+      const { data: sessionData } = await supabase.auth.getSession();
+      const jwt = sessionData?.session?.access_token;
+      if (!jwt) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase.functions.invoke('create-featured-checkout', {
+        body: {},
+      });
+
       if (error) throw error;
-      setHasPendingRequest(true);
+      if (!data?.checkout_url) throw new Error('No checkout URL returned');
+
+      // Refresh local state before opening browser
+      await loadData();
+
+      await Linking.openURL(data.checkout_url);
     } catch (err: any) {
-      Alert.alert('Error', err?.message ?? 'Failed to submit request. Please try again.');
+      Alert.alert(
+        'Payment Error',
+        err?.message ?? 'Failed to create checkout session. Please try again.',
+      );
     } finally {
-      setFeaturedReqLoading(false);
+      setCheckoutLoading(false);
     }
   };
 
@@ -322,6 +362,52 @@ export default function ProviderDashboard() {
                   </Text>
                 )}
               </View>
+            ) : featuredPayment?.status === 'paid' ? (
+              <View style={styles.featuredPayStatusBox}>
+                <View style={styles.featuredPayStatusRow}>
+                  <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
+                  <Text style={[styles.featuredPayStatusText, { color: COLORS.success }]}>
+                    Payment Received
+                  </Text>
+                </View>
+                <View style={[styles.featuredPayStatusRow, { marginTop: 4 }]}>
+                  <Ionicons name="time-outline" size={14} color={COLORS.textSecondary} />
+                  <Text style={styles.featuredPayStatusSubtext}>
+                    Awaiting admin approval. You'll be notified once approved.
+                  </Text>
+                </View>
+                {featuredPayment.paid_at && (
+                  <Text style={styles.featuredPayMeta}>
+                    Paid {format(new Date(featuredPayment.paid_at), 'MMM d, yyyy h:mm a')}
+                  </Text>
+                )}
+              </View>
+            ) : featuredPayment?.status === 'pending' ? (
+              <View>
+                <View style={styles.featuredPayStatusBox}>
+                  <View style={styles.featuredPayStatusRow}>
+                    <Ionicons name="time-outline" size={14} color={COLORS.warning} />
+                    <Text style={[styles.featuredPayStatusText, { color: COLORS.warning }]}>
+                      Payment Pending
+                    </Text>
+                  </View>
+                  <Text style={styles.featuredPayStatusSubtext}>
+                    Complete payment in the browser to activate your request.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.featuredBtn}
+                  onPress={handleFeaturedRequest}
+                  disabled={checkoutLoading}
+                  activeOpacity={0.8}
+                >
+                  {checkoutLoading ? (
+                    <ActivityIndicator size="small" color={COLORS.white} />
+                  ) : (
+                    <Text style={styles.featuredBtnText}>Open Checkout</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             ) : (
               <>
                 <View style={styles.featuredBenefits}>
@@ -334,17 +420,15 @@ export default function ProviderDashboard() {
                 </View>
                 <Text style={styles.featuredPrice}>₱99/month</Text>
                 <TouchableOpacity
-                  style={[styles.featuredBtn, hasPendingRequest && styles.featuredBtnPending]}
-                  onPress={submitFeaturedRequest}
-                  disabled={hasPendingRequest || featuredReqLoading}
+                  style={styles.featuredBtn}
+                  onPress={handleFeaturedRequest}
+                  disabled={checkoutLoading}
                   activeOpacity={0.8}
                 >
-                  {featuredReqLoading ? (
+                  {checkoutLoading ? (
                     <ActivityIndicator size="small" color={COLORS.white} />
                   ) : (
-                    <Text style={[styles.featuredBtnText, hasPendingRequest && styles.featuredBtnTextPending]}>
-                      {hasPendingRequest ? 'Request Pending' : 'Request Featured Badge'}
-                    </Text>
+                    <Text style={styles.featuredBtnText}>Request Featured Badge</Text>
                   )}
                 </TouchableOpacity>
               </>
@@ -698,4 +782,13 @@ const styles = StyleSheet.create({
   featuredActiveRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginBottom: 4 },
   featuredActiveText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.success },
   featuredUntilText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
+  featuredPayStatusBox: {
+    backgroundColor: COLORS.background, borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.sm, marginBottom: SPACING.sm,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  featuredPayStatusRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
+  featuredPayStatusText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold },
+  featuredPayStatusSubtext: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, flex: 1, lineHeight: 16 },
+  featuredPayMeta: { fontSize: FONTS.sizes.xs, color: COLORS.textLight, marginTop: 4 },
 });

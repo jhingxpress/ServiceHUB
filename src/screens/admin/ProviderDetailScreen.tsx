@@ -72,6 +72,18 @@ interface DocRecord {
   uploaded_at: string;
 }
 
+interface FeaturedPaymentRecord {
+  id: string;
+  amount: number;
+  currency: string;
+  status: 'pending' | 'paid' | 'failed' | 'refunded';
+  paymongo_checkout_id: string | null;
+  paymongo_payment_id: string | null;
+  checkout_url: string | null;
+  paid_at: string | null;
+  created_at: string;
+}
+
 interface LogEntry {
   id: string;
   action: string;
@@ -163,6 +175,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
   const [featuredLoading, setFeaturedLoading] = useState(false);
   const [hasPendingRequest, setHasPendingRequest] = useState(false);
   const [rejectingRequest, setRejectingRequest] = useState(false);
+  const [featuredPayment, setFeaturedPayment] = useState<FeaturedPaymentRecord | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [processingDoc, setProcessingDoc] = useState<string | null>(null);
@@ -171,7 +184,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const [provRes, docsRes, logsRes, featReqRes] = await Promise.all([
+      const [provRes, docsRes, logsRes, featReqRes, featPayRes] = await Promise.all([
         supabase.from('providers').select(`
           id, business_name, business_address, city, province, business_email, business_phone,
           service_description, service_area, years_of_experience, status, is_verified, is_featured, featured_until,
@@ -187,6 +200,13 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           performer:users!provider_verification_logs_performed_by_fkey(full_name)
         `).eq('provider_id', providerId).order('created_at', { ascending: false }),
         supabase.from('featured_requests').select('id').eq('provider_id', providerId).eq('status', 'pending').maybeSingle(),
+        supabase
+          .from('featured_payments')
+          .select('id, amount, currency, status, paymongo_checkout_id, paymongo_payment_id, checkout_url, paid_at, created_at')
+          .eq('provider_id', providerId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
       if (provRes.error) throw provRes.error;
 
@@ -199,6 +219,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
       setDocuments(allDocs);
       setLogs((logsRes.data ?? []) as unknown as LogEntry[]);
       setHasPendingRequest(!!featReqRes.data);
+      setFeaturedPayment((featPayRes as { data: FeaturedPaymentRecord | null }).data ?? null);
 
       // Generate signed URLs for private bucket images
       const urlMap: Record<string, string> = {};
@@ -468,6 +489,93 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
             ) : null}
           </View>
         </View>
+
+        {/* Featured Payment Details */}
+        {featuredPayment && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Featured Payment</Text>
+            <View style={styles.infoCard}>
+              {[
+                {
+                  icon: 'cash-outline',
+                  label: 'Amount',
+                  value: `${featuredPayment.currency} ${Number(featuredPayment.amount).toFixed(2)}`,
+                },
+                {
+                  icon: 'ellipse-outline',
+                  label: 'Payment Status',
+                  value: featuredPayment.status.toUpperCase(),
+                },
+                {
+                  icon: 'calendar-outline',
+                  label: 'Initiated',
+                  value: format(new Date(featuredPayment.created_at), 'MMM d, yyyy h:mm a'),
+                },
+                featuredPayment.paid_at
+                  ? {
+                      icon: 'checkmark-circle-outline',
+                      label: 'Paid At',
+                      value: format(new Date(featuredPayment.paid_at), 'MMM d, yyyy h:mm a'),
+                    }
+                  : null,
+                featuredPayment.paymongo_checkout_id
+                  ? {
+                      icon: 'receipt-outline',
+                      label: 'Checkout Ref',
+                      value: featuredPayment.paymongo_checkout_id,
+                    }
+                  : null,
+                featuredPayment.paymongo_payment_id
+                  ? {
+                      icon: 'card-outline',
+                      label: 'Payment Ref',
+                      value: featuredPayment.paymongo_payment_id,
+                    }
+                  : null,
+              ]
+                .filter(Boolean)
+                .map((row: any, i, arr) => (
+                  <React.Fragment key={row.label}>
+                    <View style={styles.infoRow}>
+                      <Ionicons
+                        name={row.icon as React.ComponentProps<typeof Ionicons>['name']}
+                        size={15}
+                        color={
+                          row.label === 'Payment Status'
+                            ? featuredPayment.status === 'paid'
+                              ? COLORS.success
+                              : featuredPayment.status === 'failed' || featuredPayment.status === 'refunded'
+                              ? COLORS.error
+                              : COLORS.warning
+                            : COLORS.primary
+                        }
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.infoLabel}>{row.label}</Text>
+                        <Text
+                          style={[
+                            styles.infoValue,
+                            row.label === 'Payment Status' && {
+                              color:
+                                featuredPayment.status === 'paid'
+                                  ? COLORS.success
+                                  : featuredPayment.status === 'failed' || featuredPayment.status === 'refunded'
+                                  ? COLORS.error
+                                  : COLORS.warning,
+                              fontFamily: FONTS.semiBold,
+                            },
+                          ]}
+                        >
+                          {row.value}
+                        </Text>
+                      </View>
+                    </View>
+                    {i < arr.length - 1 && <View style={styles.divider} />}
+                  </React.Fragment>
+                ))}
+            </View>
+          </View>
+        )}
 
         {/* Verification Checklist */}
         <View style={styles.verifyChecklst}>
