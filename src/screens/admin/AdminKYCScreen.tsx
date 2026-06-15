@@ -24,6 +24,8 @@ interface ProviderApp {
   id: string;
   status: string;
   created_at: string;
+  is_featured: boolean;
+  featured_until: string | null;
   users: { full_name: string | null; email: string; avatar_url: string | null };
   categories: { name: string; icon: string } | null;
 }
@@ -46,7 +48,7 @@ export default function AdminKYCScreen() {
     setLoading(true);
     let q = supabase
       .from('providers')
-      .select('id, status, created_at, users!providers_id_fkey(full_name, email, avatar_url), categories(name, icon)')
+      .select('id, status, created_at, is_featured, featured_until, users!providers_id_fkey(full_name, email, avatar_url), categories(name, icon)')
       .order('created_at', { ascending: false });
 
     if (filter === 'pending') {
@@ -74,6 +76,14 @@ export default function AdminKYCScreen() {
         <Text style={styles.cardEmail}>{item.users?.email}</Text>
         {item.categories && (
           <Text style={styles.cardDate}>{item.categories.name}</Text>
+        )}
+        {item.is_featured && (
+          <View style={styles.featuredBadge}>
+            <Ionicons name="sparkles" size={10} color={COLORS.warning} />
+            <Text style={styles.featuredBadgeText}>
+              Featured{item.featured_until ? ` · Until ${format(new Date(item.featured_until), 'MMM d, yyyy')}` : ''}
+            </Text>
+          </View>
         )}
       </View>
       <View style={[styles.statusDot, { backgroundColor: STATUS_COLORS[item.status] ?? COLORS.textLight }]}>
@@ -135,4 +145,6 @@ const styles = StyleSheet.create({
   cardDate: { fontSize: FONTS.sizes.xs, color: COLORS.textLight, marginTop: 2 },
   statusDot: { paddingHorizontal: SPACING.sm, paddingVertical: 4, borderRadius: BORDER_RADIUS.full },
   statusText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: COLORS.white, textTransform: 'capitalize' },
+  featuredBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 },
+  featuredBadgeText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: '#92400E' },
 });
