@@ -35,13 +35,18 @@ const PH_ID_TYPES = [
 ];
 
 const PERMIT_TYPES = [
-  { key: 'barangay_clearance', label: 'Barangay Clearance' },
-  { key: 'business_permit', label: 'Business Permit' },
-  { key: 'dti_registration', label: 'DTI Registration' },
-  { key: 'bir_registration', label: 'BIR Certificate' },
-  { key: 'tesda_certificate', label: 'TESDA Certificate' },
-  { key: 'professional_cert', label: 'Professional License / Certificate' },
-  { key: 'other_supporting', label: 'Other Supporting Documents' },
+  { key: 'barangay_clearance',      label: 'Barangay Clearance' },
+  { key: 'police_clearance',        label: 'Police Clearance' },
+  { key: 'nbi_clearance',           label: 'NBI Clearance' },
+  { key: 'tesda_certificate',       label: 'TESDA Certificate' },
+  { key: 'nc_certificate',          label: 'NC II / NC III Certificate' },
+  { key: 'prc_license',             label: 'PRC License' },
+  { key: 'business_permit',         label: 'Business Permit' },
+  { key: 'dti_registration',        label: 'DTI Registration' },
+  { key: 'sec_registration',        label: 'SEC Registration' },
+  { key: 'bir_registration',        label: 'BIR Certificate' },
+  { key: 'employment_certificate',  label: 'Employment Certificate' },
+  { key: 'professional_cert',       label: 'Other Professional Certificate' },
 ];
 
 const CITY_SUGGESTIONS = [
@@ -176,6 +181,7 @@ export default function ProviderOnboardingScreen() {
 
   // Step 3 — documents
   const [validId, setValidId] = useState<ValidIdDoc>(INITIAL_VALID_ID);
+  const [selfie, setSelfie] = useState<ValidIdSide>({ uri: null, uploadedUrl: null, state: 'idle', error: null });
   const [permits, setPermits] = useState<PermitDoc[]>(
     PERMIT_TYPES.map(p => ({ ...p, checked: false, uri: null, uploadedUrl: null, state: 'idle' as UploadState, error: null }))
   );
@@ -327,6 +333,10 @@ export default function ProviderOnboardingScreen() {
           back: { uri: null, uploadedUrl: back?.file_url ?? null, state: back ? 'success' : 'idle', error: null },
         }));
       }
+      const selfieDoc = docs.find((d) => d.document_type === 'selfie_with_id');
+      if (selfieDoc?.file_url) {
+        setSelfie({ uri: null, uploadedUrl: selfieDoc.file_url, state: 'success', error: null });
+      }
       setPermits(prev => prev.map(p => {
         const ex = docs.find((d) => d.document_type === p.key);
         if (ex) return { ...p, checked: true, uploadedUrl: ex.file_url ?? null, state: 'success' as UploadState };
@@ -379,14 +389,16 @@ export default function ProviderOnboardingScreen() {
 
   const validateStep3 = (): string | null => {
     if (!validId.idType) return 'Please select your Valid ID type.';
-    if (!validId.front.uploadedUrl) return 'Please upload the front of your Valid ID.';
-    if (!validId.back.uploadedUrl) return 'Please upload the back of your Valid ID.';
-    if (validId.front.state === 'uploading' || validId.back.state === 'uploading') return 'Please wait for your Valid ID uploads to finish.';
+    if (!validId.front.uploadedUrl) return 'Please capture the front of your Government ID.';
+    if (!validId.back.uploadedUrl) return 'Please capture the back of your Government ID.';
+    if (validId.front.state === 'uploading' || validId.back.state === 'uploading') return 'Please wait for your ID uploads to finish.';
+    if (!selfie.uploadedUrl) return 'Please take a selfie holding your Government ID.';
+    if (selfie.state === 'uploading') return 'Please wait for your selfie upload to finish.';
     const uploading = permits.find(p => p.checked && p.state === 'uploading');
     if (uploading) return 'Please wait for all uploads to finish.';
     const checkedNoFile = permits.find(p => p.checked && !p.uploadedUrl);
     if (checkedNoFile) return `Please upload your ${checkedNoFile.label} or uncheck it.`;
-    if (!permits.some(p => p.uploadedUrl)) return 'Please upload at least one Permit, Certificate, or Clearance.';
+    if (!permits.some(p => p.uploadedUrl)) return 'Please upload at least one supporting document.';
     return null;
   };
 
@@ -412,6 +424,27 @@ export default function ProviderOnboardingScreen() {
       return null;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.[0]) return null;
+    const asset = result.assets[0];
+    const validation = validateImagePickerAsset(asset, 'provider-documents');
+    if (!validation.valid) {
+      Alert.alert('Invalid Document', validation.error);
+      return null;
+    }
+    return { uri: asset.uri, mimeType: getMimeType(asset.uri, asset.mimeType) };
+  };
+
+  const pickCamera = async (): Promise<{ uri: string; mimeType: string } | null> => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Camera Required', 'Please allow camera access. Government ID and selfie photos must be captured live for verification purposes.');
+      return null;
+    }
+    const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
       quality: 0.85,
@@ -459,9 +492,47 @@ export default function ProviderOnboardingScreen() {
 
   const pickAndUploadValidIdSide = async (side: 'front' | 'back') => {
     if (!validId.idType) { Alert.alert('Select ID Type', 'Please select your Valid ID type first.'); return; }
-    const file = await pickFile();
+    const file = await pickCamera();
     if (!file) return;
     await doValidIdSideUpload(side, file.uri, file.mimeType);
+  };
+
+  const doSelfieUpload = async (uri: string, mimeType: string) => {
+    const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
+    const path = `${user!.id}/selfie_with_id_${Date.now()}.${ext}`;
+    setSelfie(prev => ({ ...prev, uri, state: 'uploading', error: null }));
+    try {
+      const url = await uploadWithRetry(uri, path, mimeType);
+      await supabase.from('provider_documents').delete()
+        .eq('provider_id', user!.id).eq('document_type', 'selfie_with_id');
+      const { error: insError } = await supabase.from('provider_documents').insert({
+        provider_id: user!.id, document_type: 'selfie_with_id', category_type: 'valid_id',
+        file_url: url, status: 'pending',
+      });
+      if (insError) throw new Error(`Failed to save document record: ${insError.message}`);
+      setSelfie(prev => ({ ...prev, uploadedUrl: url, state: 'success', error: null }));
+    } catch (err) {
+      const msg = err instanceof Error && err.message ? err.message : 'Network error. Please check your connection and try again.';
+      setSelfie(prev => ({ ...prev, state: 'failed', error: msg }));
+    }
+  };
+
+  const pickAndUploadSelfie = async () => {
+    const file = await pickCamera();
+    if (!file) return;
+    await doSelfieUpload(file.uri, file.mimeType);
+  };
+
+  const retrySelfie = () => {
+    if (selfie.uri) doSelfieUpload(selfie.uri, getMimeType(selfie.uri));
+  };
+
+  const removeSelfie = async () => {
+    if (user) {
+      await supabase.from('provider_documents').delete()
+        .eq('provider_id', user.id).eq('document_type', 'selfie_with_id');
+    }
+    setSelfie({ uri: null, uploadedUrl: null, state: 'idle', error: null });
   };
 
   const retryValidIdSide = (side: 'front' | 'back') => {
@@ -851,6 +922,7 @@ export default function ProviderOnboardingScreen() {
     onPick: () => void,
     onRetry: () => void,
     onRemove: () => void,
+    buttonLabel = 'Upload File',
   ) => {
     if (state === 'uploading') {
       return (
@@ -905,9 +977,9 @@ export default function ProviderOnboardingScreen() {
     }
     return (
       <TouchableOpacity style={styles.uploadBtn} onPress={onPick}>
-        <Ionicons name="cloud-upload-outline" size={16} color={COLORS.primary} />
-        <Text style={styles.uploadBtnText}>Upload File</Text>
-        <Text style={styles.uploadHint}>(JPG/PNG · max 1GB)</Text>
+        <Ionicons name={buttonLabel !== 'Upload File' ? 'camera-outline' : 'cloud-upload-outline'} size={16} color={COLORS.primary} />
+        <Text style={styles.uploadBtnText}>{buttonLabel}</Text>
+        <Text style={styles.uploadHint}>{buttonLabel !== 'Upload File' ? '(Camera only · JPG/PNG)' : '(JPG/PNG · max 1GB)'}</Text>
       </TouchableOpacity>
     );
   };
@@ -917,15 +989,30 @@ export default function ProviderOnboardingScreen() {
     return (
       <View>
         <Text style={styles.stepHeading}>Verification Documents</Text>
-        <Text style={styles.stepSubheading}>Upload clear photos or scans. Files are stored securely.</Text>
+        <Text style={styles.stepSubheading}>All identity documents must be captured live with your camera. Supporting documents may use camera or gallery.</Text>
 
-        {/* --- Section 1: Valid ID --- */}
+        {/* --- Verification Guide --- */}
+        <View style={styles.verifyGuideCard}>
+          <Image source={require('../../../assets/sample-photo.png')} style={styles.verifyGuideImage} resizeMode="contain" />
+          <View style={styles.verifyGuideBody}>
+            <Text style={styles.verifyGuideTitle}>Verification Requirements</Text>
+            {['Government ID Front ✓', 'Government ID Back ✓', 'Selfie with ID ✓', 'At least 1 supporting document ✓'].map(r => (
+              <Text key={r} style={styles.verifyGuideItem}>{r}</Text>
+            ))}
+            <Text style={styles.verifyGuideDivider}>Do NOT upload:</Text>
+            {['Screenshots', 'Edited images', 'Memes / Anime images', 'Facebook photos', 'Random pictures'].map(r => (
+              <Text key={r} style={styles.verifyGuideReject}>✗ {r}</Text>
+            ))}
+          </View>
+        </View>
+
+        {/* --- Section 1: Identity Verification --- */}
         <View style={styles.docSection}>
           <View style={styles.docSectionHeader}>
             <View style={styles.docSectionIcon}><Ionicons name="card-outline" size={16} color={COLORS.primary} /></View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.docSectionTitle}>Valid ID <Text style={styles.reqBadge}>Required</Text></Text>
-              <Text style={styles.docSectionNote}>Select one Philippine government-issued ID and upload a clear photo.</Text>
+              <Text style={styles.docSectionTitle}>Identity Verification <Text style={styles.reqBadge}>Required</Text></Text>
+              <Text style={styles.docSectionNote}>Select one Philippine government-issued ID. Front, back, and selfie must be captured with your camera.</Text>
             </View>
           </View>
 
@@ -961,41 +1048,68 @@ export default function ProviderOnboardingScreen() {
 
           <View style={styles.idSidesRow}>
             <View style={styles.idSideCol}>
-              <Text style={styles.idSideLabel}>Front</Text>
+              <View style={styles.idSideLabelRow}>
+                <Text style={styles.idSideLabel}>Front</Text>
+                <View style={styles.cameraBadge}><Ionicons name="camera" size={10} color={COLORS.white} /><Text style={styles.cameraBadgeText}>Camera</Text></View>
+              </View>
               {renderUploadWidget(
                 validId.front.state,
                 validId.front.uploadedUrl,
                 () => pickAndUploadValidIdSide('front'),
                 () => retryValidIdSide('front'),
                 () => removeValidIdSide('front'),
+                'Take Photo',
               )}
               {validId.front.state === 'failed' && validId.front.error
                 ? <Text style={styles.errorMsg}>{validId.front.error}</Text> : null}
             </View>
             <View style={styles.idSideCol}>
-              <Text style={styles.idSideLabel}>Back</Text>
+              <View style={styles.idSideLabelRow}>
+                <Text style={styles.idSideLabel}>Back</Text>
+                <View style={styles.cameraBadge}><Ionicons name="camera" size={10} color={COLORS.white} /><Text style={styles.cameraBadgeText}>Camera</Text></View>
+              </View>
               {renderUploadWidget(
                 validId.back.state,
                 validId.back.uploadedUrl,
                 () => pickAndUploadValidIdSide('back'),
                 () => retryValidIdSide('back'),
                 () => removeValidIdSide('back'),
+                'Take Photo',
               )}
               {validId.back.state === 'failed' && validId.back.error
                 ? <Text style={styles.errorMsg}>{validId.back.error}</Text> : null}
             </View>
           </View>
+
+          {/* Selfie with ID */}
+          <View style={styles.selfieSection}>
+            <View style={styles.idSideLabelRow}>
+              <Text style={styles.idSideLabel}>Selfie Holding Your ID</Text>
+              <View style={styles.cameraBadge}><Ionicons name="camera" size={10} color={COLORS.white} /><Text style={styles.cameraBadgeText}>Camera Required</Text></View>
+            </View>
+            <Text style={styles.selfieHint}>Hold your open ID next to your face. Ensure both your face and ID are clearly visible.</Text>
+            {renderUploadWidget(
+              selfie.state,
+              selfie.uploadedUrl,
+              pickAndUploadSelfie,
+              retrySelfie,
+              removeSelfie,
+              'Take Selfie',
+            )}
+            {selfie.state === 'failed' && selfie.error
+              ? <Text style={styles.errorMsg}>{selfie.error}</Text> : null}
+          </View>
         </View>
 
-        {/* --- Section 2: Permits / Certificates / Clearances --- */}
+        {/* --- Section 2: Professional Verification --- */}
         <View style={styles.docSection}>
           <View style={styles.docSectionHeader}>
             <View style={styles.docSectionIcon}><Ionicons name="document-text-outline" size={16} color={COLORS.primary} /></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.docSectionTitle}>
-                Permits, Certificates & Clearances <Text style={styles.reqBadge}>At least 1</Text>
+                Professional Verification <Text style={styles.reqBadge}>At least 1</Text>
               </Text>
-              <Text style={styles.docSectionNote}>Check all documents you have and upload each file.</Text>
+              <Text style={styles.docSectionNote}>Upload at least one supporting document. Camera or gallery accepted.</Text>
             </View>
           </View>
 
@@ -1080,6 +1194,12 @@ export default function ProviderOnboardingScreen() {
             <View style={styles.docCheck}>
               <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
               <Text style={styles.docCheckText}>Valid ID (Back){selectedIdLabel ? ` — ${selectedIdLabel}` : ''}</Text>
+            </View>
+          )}
+          {selfie.uploadedUrl && (
+            <View style={styles.docCheck}>
+              <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
+              <Text style={styles.docCheckText}>Selfie with ID</Text>
             </View>
           )}
           {uploadedPermits.map(p => (
@@ -1457,4 +1577,20 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontStyle: 'italic',
   },
+  verifyGuideCard: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm,
+    backgroundColor: '#EFF6FF', borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1, borderColor: '#BFDBFE', padding: SPACING.sm, marginBottom: SPACING.md,
+  },
+  verifyGuideImage: { width: 80, height: 80, borderRadius: BORDER_RADIUS.md },
+  verifyGuideBody: { flex: 1 },
+  verifyGuideTitle: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.bold, color: COLORS.text, marginBottom: 4 },
+  verifyGuideItem: { fontSize: FONTS.sizes.xs, color: COLORS.success, fontFamily: FONTS.medium },
+  verifyGuideDivider: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: COLORS.error, marginTop: 4, marginBottom: 2 },
+  verifyGuideReject: { fontSize: FONTS.sizes.xs, color: COLORS.error },
+  idSideLabelRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginBottom: 4 },
+  cameraBadge: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: COLORS.primary, borderRadius: BORDER_RADIUS.full, paddingHorizontal: 5, paddingVertical: 2 },
+  cameraBadgeText: { fontSize: 9, fontFamily: FONTS.bold, color: COLORS.white },
+  selfieSection: { marginTop: SPACING.sm, paddingTop: SPACING.sm, borderTopWidth: 1, borderTopColor: COLORS.border },
+  selfieHint: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginBottom: SPACING.xs },
 });

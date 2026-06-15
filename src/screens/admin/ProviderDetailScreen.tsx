@@ -469,6 +469,25 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           </View>
         </View>
 
+        {/* Verification Checklist */}
+        <View style={styles.verifyChecklst}>
+          <Text style={styles.verifyChecklstTitle}>Verification Checklist</Text>
+          <View style={styles.verifyChecklstRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.verifyChecklstSub}>Required</Text>
+              {['Government ID Front', 'Government ID Back', 'Selfie with ID', 'At least 1 supporting document'].map(r => (
+                <Text key={r} style={styles.verifyChecklstPass}>✓ {r}</Text>
+              ))}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.verifyChecklstSub}>Reject if</Text>
+              {['Screenshots / Memes', 'Anime / Facebook photos', 'Random pictures', 'Unreadable / blurry', 'Missing ID info'].map(r => (
+                <Text key={r} style={styles.verifyChecklstFail}>✗ {r}</Text>
+              ))}
+            </View>
+          </View>
+        </View>
+
         {/* Documents */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Documents ({documents.length})</Text>
@@ -934,4 +953,14 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.semiBold,
     color: COLORS.text,
   },
+  verifyChecklst: {
+    marginHorizontal: SPACING.md, marginBottom: SPACING.md,
+    backgroundColor: '#FFF7ED', borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1, borderColor: '#FED7AA', padding: SPACING.sm,
+  },
+  verifyChecklstTitle: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.bold, color: '#92400E', marginBottom: SPACING.xs },
+  verifyChecklstRow: { flexDirection: 'row', gap: SPACING.sm },
+  verifyChecklstSub: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: 3 },
+  verifyChecklstPass: { fontSize: FONTS.sizes.xs, color: COLORS.success },
+  verifyChecklstFail: { fontSize: FONTS.sizes.xs, color: COLORS.error },
 });

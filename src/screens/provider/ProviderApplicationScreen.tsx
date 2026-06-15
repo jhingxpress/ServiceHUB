@@ -42,12 +42,14 @@ const STATUS_CONFIG: Record<KYCStatus, { label: string; color: string; icon: Rea
   rejected: { label: 'Rejected', color: COLORS.error, icon: 'close-circle' },
 };
 
+const CAMERA_REQUIRED_FIELDS: (keyof ProviderDocs)[] = ['gov_id_front', 'gov_id_back', 'selfie_with_id'];
+
 const REQUIRED_DOCS: { field: keyof ProviderDocs; label: string; description: string; icon: React.ComponentProps<typeof Ionicons>['name']; required: boolean }[] = [
-  { field: 'gov_id_front', label: 'Government ID (Front)', description: 'Front side of any valid government-issued ID', icon: 'card-outline', required: true },
-  { field: 'gov_id_back', label: 'Government ID (Back)', description: 'Back side of your government-issued ID', icon: 'card-outline', required: true },
-  { field: 'selfie_with_id', label: 'Selfie with ID', description: 'Hold your ID next to your face in a clear photo', icon: 'camera-outline', required: true },
-  { field: 'business_permit', label: 'Business Permit', description: "Business/Mayor's permit (optional but recommended)", icon: 'briefcase-outline', required: false },
-  { field: 'certifications', label: 'Certifications / Licenses', description: 'Trade certifications or licenses (optional)', icon: 'ribbon-outline', required: false },
+  { field: 'gov_id_front',   label: 'Government ID Front (Camera Required)',  description: 'Live camera capture of the front of your government-issued ID', icon: 'camera-outline', required: true },
+  { field: 'gov_id_back',    label: 'Government ID Back (Camera Required)',   description: 'Live camera capture of the back of your government-issued ID', icon: 'camera-outline', required: true },
+  { field: 'selfie_with_id', label: 'Selfie Holding ID (Camera Required)',    description: 'Hold your open ID next to your face — captured live with camera', icon: 'camera-outline', required: true },
+  { field: 'business_permit',label: 'Business Permit',                        description: "Business/Mayor's permit (optional but recommended)", icon: 'briefcase-outline', required: false },
+  { field: 'certifications', label: 'Certifications / Licenses',              description: 'TESDA, PRC, NBI Clearance, or other professional document (optional)', icon: 'ribbon-outline', required: false },
 ];
 
 export default function ProviderApplicationScreen() {
@@ -108,7 +110,18 @@ export default function ProviderApplicationScreen() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const pickImage = async (field: keyof ProviderDocs) => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.8 });
+    const cameraOnly = CAMERA_REQUIRED_FIELDS.includes(field);
+    let result;
+    if (cameraOnly) {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Camera Required', 'Please allow camera access. Government ID and selfie photos must be captured live for verification.');
+        return;
+      }
+      result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.85 });
+    } else {
+      result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.8 });
+    }
     if (result.canceled || !result.assets[0]) return;
     const validation = validateImagePickerAsset(result.assets[0], 'kyc-documents');
     if (!validation.valid) {
