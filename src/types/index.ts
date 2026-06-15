@@ -7,11 +7,18 @@ export type DocumentType =
   | 'valid_id'
   | 'government_id'
   | 'barangay_clearance'
+  | 'police_clearance'
+  | 'nbi_clearance'
   | 'business_permit'
   | 'dti_registration'
   | 'bir_registration'
+  | 'sec_registration'
   | 'tesda_certificate'
+  | 'nc_certificate'
+  | 'prc_license'
+  | 'employment_certificate'
   | 'professional_cert'
+  | 'selfie_with_id'
   | 'other_supporting';
 export type ProviderType = 'individual' | 'business';
 export type MarketplaceStatus = 'live' | 'hidden';

@@ -286,6 +286,19 @@ export default function ProviderOnboardingScreen() {
       }
       setProviderLat(data.latitude ?? null);
       setProviderLng(data.longitude ?? null);
+    } else {
+      // First-time provider: create stub row so provider_documents FK is satisfied
+      // before any document upload on Step 3 fires. ignoreDuplicates ensures this is
+      // safe for returning providers and never overwrites existing data.
+      console.log('[Onboarding] No providers row found — creating stub for', user.id);
+      const { error: stubError } = await supabase
+        .from('providers')
+        .upsert({ id: user.id }, { onConflict: 'id', ignoreDuplicates: true });
+      if (stubError) {
+        console.error('[Onboarding] Stub upsert failed:', stubError.message);
+      } else {
+        console.log('[Onboarding] Stub providers row ensured for', user.id);
+      }
     }
     // Load existing provider category — convert leaf to parent for new onboarding UX
     const { data: pcData } = await supabase
