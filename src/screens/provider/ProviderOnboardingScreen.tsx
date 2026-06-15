@@ -472,6 +472,16 @@ export default function ProviderOnboardingScreen() {
     return { uri: asset.uri, mimeType: getMimeType(asset.uri, asset.mimeType) };
   };
 
+  const ensureProviderRow = async () => {
+    if (!user) return;
+    console.log('[UPLOAD] auth uid:', user.id);
+    const { error } = await supabase
+      .from('providers')
+      .upsert({ id: user.id }, { onConflict: 'id', ignoreDuplicates: true });
+    if (error) console.error('[UPLOAD] providers stub error:', error.message);
+    else console.log('[UPLOAD] providers row ensured:', user.id);
+  };
+
   const doValidIdSideUpload = async (side: 'front' | 'back', uri: string, mimeType: string) => {
     const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
     const path = `${user!.id}/valid_id_${side}_${Date.now()}.${ext}`;
@@ -480,6 +490,8 @@ export default function ProviderOnboardingScreen() {
       [side]: { ...prev[side], uri, state: 'uploading', error: null },
     }));
     try {
+      await ensureProviderRow();
+      console.log('[UPLOAD] provider_id being inserted:', user!.id, 'side:', side);
       const url = await uploadWithRetry(uri, path, mimeType);
       const { error: delError } = await supabase.from('provider_documents').delete()
         .eq('provider_id', user!.id).eq('document_type', 'valid_id').eq('side', side);
@@ -515,6 +527,8 @@ export default function ProviderOnboardingScreen() {
     const path = `${user!.id}/selfie_with_id_${Date.now()}.${ext}`;
     setSelfie(prev => ({ ...prev, uri, state: 'uploading', error: null }));
     try {
+      await ensureProviderRow();
+      console.log('[UPLOAD] provider_id being inserted (selfie):', user!.id);
       const url = await uploadWithRetry(uri, path, mimeType);
       await supabase.from('provider_documents').delete()
         .eq('provider_id', user!.id).eq('document_type', 'selfie_with_id');
@@ -570,6 +584,8 @@ export default function ProviderOnboardingScreen() {
     const path = `${user!.id}/${docKey}_${Date.now()}.${ext}`;
     setPermits(prev => prev.map(p => p.key === docKey ? { ...p, uri, state: 'uploading', error: null } : p));
     try {
+      await ensureProviderRow();
+      console.log('[UPLOAD] provider_id being inserted (permit):', user!.id, 'docKey:', docKey);
       const url = await uploadWithRetry(uri, path, mimeType);
       const { error: delError } = await supabase.from('provider_documents').delete()
         .eq('provider_id', user!.id).eq('document_type', docKey);
@@ -1004,20 +1020,6 @@ export default function ProviderOnboardingScreen() {
         <Text style={styles.stepHeading}>Verification Documents</Text>
         <Text style={styles.stepSubheading}>All identity documents must be captured live with your camera. Supporting documents may use camera or gallery.</Text>
 
-        {/* --- Verification Guide --- */}
-        <View style={styles.verifyGuideCard}>
-          <Image source={require('../../../assets/sample-photo.png')} style={styles.verifyGuideImage} resizeMode="contain" />
-          <View style={styles.verifyGuideBody}>
-            <Text style={styles.verifyGuideTitle}>Verification Requirements</Text>
-            {['Government ID Front ✓', 'Government ID Back ✓', 'Selfie with ID ✓', 'At least 1 supporting document ✓'].map(r => (
-              <Text key={r} style={styles.verifyGuideItem}>{r}</Text>
-            ))}
-            <Text style={styles.verifyGuideDivider}>Do NOT upload:</Text>
-            {['Screenshots', 'Edited images', 'Memes / Anime images', 'Facebook photos', 'Random pictures'].map(r => (
-              <Text key={r} style={styles.verifyGuideReject}>✗ {r}</Text>
-            ))}
-          </View>
-        </View>
 
         {/* --- Section 1: Identity Verification --- */}
         <View style={styles.docSection}>
@@ -1065,6 +1067,8 @@ export default function ProviderOnboardingScreen() {
                 <Text style={styles.idSideLabel}>Front</Text>
                 <View style={styles.cameraBadge}><Ionicons name="camera" size={10} color={COLORS.white} /><Text style={styles.cameraBadgeText}>Camera</Text></View>
               </View>
+              <Image source={require('../../../assets/sample-id-front.png')} style={styles.sampleThumb} resizeMode="contain" />
+              <Text style={styles.sampleCaption}>Full ID visible, text readable</Text>
               {renderUploadWidget(
                 validId.front.state,
                 validId.front.uploadedUrl,
@@ -1081,6 +1085,8 @@ export default function ProviderOnboardingScreen() {
                 <Text style={styles.idSideLabel}>Back</Text>
                 <View style={styles.cameraBadge}><Ionicons name="camera" size={10} color={COLORS.white} /><Text style={styles.cameraBadgeText}>Camera</Text></View>
               </View>
+              <Image source={require('../../../assets/sample-id-back.png')} style={styles.sampleThumb} resizeMode="contain" />
+              <Text style={styles.sampleCaption}>Back side visible, info readable</Text>
               {renderUploadWidget(
                 validId.back.state,
                 validId.back.uploadedUrl,
@@ -1100,7 +1106,15 @@ export default function ProviderOnboardingScreen() {
               <Text style={styles.idSideLabel}>Selfie Holding Your ID</Text>
               <View style={styles.cameraBadge}><Ionicons name="camera" size={10} color={COLORS.white} /><Text style={styles.cameraBadgeText}>Camera Required</Text></View>
             </View>
-            <Text style={styles.selfieHint}>Hold your open ID next to your face. Ensure both your face and ID are clearly visible.</Text>
+            <View style={styles.selfieGuideRow}>
+              <Image source={require('../../../assets/sample-selfie-id.png')} style={styles.sampleThumbSelfie} resizeMode="contain" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.selfieHint}>Hold your open ID beside your face.</Text>
+                {['• Face clearly visible', '• ID visible and readable', '• No sunglasses', '• Camera capture only'].map(r => (
+                  <Text key={r} style={styles.sampleCaption}>{r}</Text>
+                ))}
+              </View>
+            </View>
             {renderUploadWidget(
               selfie.state,
               selfie.uploadedUrl,
@@ -1590,17 +1604,18 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontStyle: 'italic',
   },
-  verifyGuideCard: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm,
-    backgroundColor: '#EFF6FF', borderRadius: BORDER_RADIUS.lg,
-    borderWidth: 1, borderColor: '#BFDBFE', padding: SPACING.sm, marginBottom: SPACING.md,
+  sampleThumb: {
+    width: '100%', aspectRatio: 1.5,
+    borderRadius: BORDER_RADIUS.md, borderWidth: 1, borderColor: COLORS.border,
+    marginBottom: 3,
   },
-  verifyGuideImage: { width: 80, height: 80, borderRadius: BORDER_RADIUS.md },
-  verifyGuideBody: { flex: 1 },
-  verifyGuideTitle: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.bold, color: COLORS.text, marginBottom: 4 },
-  verifyGuideItem: { fontSize: FONTS.sizes.xs, color: COLORS.success, fontFamily: FONTS.medium },
-  verifyGuideDivider: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: COLORS.error, marginTop: 4, marginBottom: 2 },
-  verifyGuideReject: { fontSize: FONTS.sizes.xs, color: COLORS.error },
+  sampleCaption: { fontSize: 9, color: COLORS.textSecondary, marginBottom: 1 },
+  selfieGuideRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: SPACING.xs },
+  sampleThumbSelfie: {
+    width: 120, height: 80,
+    borderRadius: BORDER_RADIUS.md, borderWidth: 1, borderColor: COLORS.border,
+    marginRight: SPACING.xs,
+  },
   idSideLabelRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginBottom: 4 },
   cameraBadge: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: COLORS.primary, borderRadius: BORDER_RADIUS.full, paddingHorizontal: 5, paddingVertical: 2 },
   cameraBadgeText: { fontSize: 9, fontFamily: FONTS.bold, color: COLORS.white },
