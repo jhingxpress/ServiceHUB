@@ -189,7 +189,7 @@ serve(async (req: Request) => {
                 quantity: 1,
               },
             ],
-            payment_method_types: ['card', 'gcash', 'maya', 'grab_pay'],
+            payment_method_types: ['card', 'gcash'],
             success_url: 'https://servicehub.app/featured/success',
             cancel_url:  'https://servicehub.app/featured/cancel',
             statement_descriptor: 'ServiceHub Featured',
