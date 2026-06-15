@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Image, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
+  Modal, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -151,6 +152,7 @@ export default function ProviderOnboardingScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const [sampleViewer, setSampleViewer] = useState<number | null>(null);
 
   // Step 1 fields
   const [businessName, setBusinessName] = useState('');
@@ -1061,60 +1063,72 @@ export default function ProviderOnboardingScreen() {
             )}
           </View>
 
-          <View style={styles.idSidesRow}>
-            <View style={styles.idSideCol}>
-              <View style={styles.idSideLabelRow}>
-                <Text style={styles.idSideLabel}>Front</Text>
-                <View style={styles.cameraBadge}><Ionicons name="camera" size={10} color={COLORS.white} /><Text style={styles.cameraBadgeText}>Camera</Text></View>
-              </View>
+          {/* Front ID */}
+          <View style={styles.idFieldSection}>
+            <View style={styles.idSideLabelRow}>
+              <Text style={styles.idSideLabel}>Upload Front Valid ID</Text>
+              <View style={styles.cameraBadge}><Ionicons name="camera" size={10} color={COLORS.white} /><Text style={styles.cameraBadgeText}>Camera</Text></View>
+            </View>
+            <TouchableOpacity onPress={() => setSampleViewer(require('../../../assets/sample-id-front.png'))} activeOpacity={0.8}>
               <Image source={require('../../../assets/sample-id-front.png')} style={styles.sampleThumb} resizeMode="contain" />
-              <Text style={styles.sampleCaption}>Full ID visible, text readable</Text>
-              {renderUploadWidget(
-                validId.front.state,
-                validId.front.uploadedUrl,
-                () => pickAndUploadValidIdSide('front'),
-                () => retryValidIdSide('front'),
-                () => removeValidIdSide('front'),
-                'Take Photo',
-              )}
-              {validId.front.state === 'failed' && validId.front.error
-                ? <Text style={styles.errorMsg}>{validId.front.error}</Text> : null}
+            </TouchableOpacity>
+            <Text style={styles.sampleCaption}>Example of acceptable front ID photo.</Text>
+            <Text style={styles.sampleTapHint}>Tap image to preview</Text>
+            {['\u2022 Entire ID visible', '\u2022 Text readable', '\u2022 No blur', '\u2022 Camera capture only'].map(r => (
+              <Text key={r} style={styles.sampleReq}>{r}</Text>
+            ))}
+            {renderUploadWidget(
+              validId.front.state,
+              validId.front.uploadedUrl,
+              () => pickAndUploadValidIdSide('front'),
+              () => retryValidIdSide('front'),
+              () => removeValidIdSide('front'),
+              'Take Photo',
+            )}
+            {validId.front.state === 'failed' && validId.front.error
+              ? <Text style={styles.errorMsg}>{validId.front.error}</Text> : null}
+          </View>
+
+          {/* Back ID */}
+          <View style={styles.idFieldSection}>
+            <View style={styles.idSideLabelRow}>
+              <Text style={styles.idSideLabel}>Upload Back Valid ID</Text>
+              <View style={styles.cameraBadge}><Ionicons name="camera" size={10} color={COLORS.white} /><Text style={styles.cameraBadgeText}>Camera</Text></View>
             </View>
-            <View style={styles.idSideCol}>
-              <View style={styles.idSideLabelRow}>
-                <Text style={styles.idSideLabel}>Back</Text>
-                <View style={styles.cameraBadge}><Ionicons name="camera" size={10} color={COLORS.white} /><Text style={styles.cameraBadgeText}>Camera</Text></View>
-              </View>
+            <TouchableOpacity onPress={() => setSampleViewer(require('../../../assets/sample-id-back.png'))} activeOpacity={0.8}>
               <Image source={require('../../../assets/sample-id-back.png')} style={styles.sampleThumb} resizeMode="contain" />
-              <Text style={styles.sampleCaption}>Back side visible, info readable</Text>
-              {renderUploadWidget(
-                validId.back.state,
-                validId.back.uploadedUrl,
-                () => pickAndUploadValidIdSide('back'),
-                () => retryValidIdSide('back'),
-                () => removeValidIdSide('back'),
-                'Take Photo',
-              )}
-              {validId.back.state === 'failed' && validId.back.error
-                ? <Text style={styles.errorMsg}>{validId.back.error}</Text> : null}
-            </View>
+            </TouchableOpacity>
+            <Text style={styles.sampleCaption}>Example of acceptable back ID photo.</Text>
+            <Text style={styles.sampleTapHint}>Tap image to preview</Text>
+            {['\u2022 Entire back side visible', '\u2022 Information readable', '\u2022 Camera capture only'].map(r => (
+              <Text key={r} style={styles.sampleReq}>{r}</Text>
+            ))}
+            {renderUploadWidget(
+              validId.back.state,
+              validId.back.uploadedUrl,
+              () => pickAndUploadValidIdSide('back'),
+              () => retryValidIdSide('back'),
+              () => removeValidIdSide('back'),
+              'Take Photo',
+            )}
+            {validId.back.state === 'failed' && validId.back.error
+              ? <Text style={styles.errorMsg}>{validId.back.error}</Text> : null}
           </View>
 
           {/* Selfie with ID */}
-          <View style={styles.selfieSection}>
+          <View style={styles.idFieldSection}>
             <View style={styles.idSideLabelRow}>
-              <Text style={styles.idSideLabel}>Selfie Holding Your ID</Text>
+              <Text style={styles.idSideLabel}>Upload Selfie With Valid ID</Text>
               <View style={styles.cameraBadge}><Ionicons name="camera" size={10} color={COLORS.white} /><Text style={styles.cameraBadgeText}>Camera Required</Text></View>
             </View>
-            <View style={styles.selfieGuideRow}>
-              <Image source={require('../../../assets/sample-selfie-id.png')} style={styles.sampleThumbSelfie} resizeMode="contain" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.selfieHint}>Hold your open ID beside your face.</Text>
-                {['• Face clearly visible', '• ID visible and readable', '• No sunglasses', '• Camera capture only'].map(r => (
-                  <Text key={r} style={styles.sampleCaption}>{r}</Text>
-                ))}
-              </View>
-            </View>
+            <TouchableOpacity onPress={() => setSampleViewer(require('../../../assets/sample-selfie-id.png'))} activeOpacity={0.8}>
+              <Image source={require('../../../assets/sample-selfie-id.png')} style={styles.sampleThumb} resizeMode="contain" />
+            </TouchableOpacity>
+            <Text style={styles.sampleCaption}>Hold your ID beside your face.</Text>
+            <Text style={styles.sampleTapHint}>Tap image to preview</Text>
+            {['\u2022 Face visible', '\u2022 ID visible', '\u2022 No sunglasses', '\u2022 Camera capture only'].map(r => (
+              <Text key={r} style={styles.sampleReq}>{r}</Text>
+            ))}
             {renderUploadWidget(
               selfie.state,
               selfie.uploadedUrl,
@@ -1348,6 +1362,24 @@ export default function ProviderOnboardingScreen() {
       <ProviderVerificationPolicyModal visible={showVerificationPolicy} onClose={() => setShowVerificationPolicy(false)} />
       <TermsOfServiceModal visible={showTerms} onClose={() => setShowTerms(false)} />
       <PrivacyPolicyModal visible={showPrivacy} onClose={() => setShowPrivacy(false)} />
+      <Modal
+        visible={sampleViewer !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setSampleViewer(null)}
+      >
+        <TouchableOpacity style={styles.viewerOverlay} activeOpacity={1} onPress={() => setSampleViewer(null)}>
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+            {sampleViewer !== null && (
+              <Image source={sampleViewer} style={styles.viewerImage} resizeMode="contain" />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.viewerCloseBtn} onPress={() => setSampleViewer(null)}>
+            <Ionicons name="close-circle" size={36} color={COLORS.white} />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1448,9 +1480,6 @@ const styles = StyleSheet.create({
   dropdownItemSelected: { backgroundColor: COLORS.primaryLight },
   dropdownItemText: { fontSize: FONTS.sizes.sm, color: COLORS.text, flex: 1 },
   dropdownItemTextSel: { color: COLORS.primary, fontFamily: FONTS.semiBold },
-  // ID sides (front/back)
-  idSidesRow: { flexDirection: 'row', gap: SPACING.sm },
-  idSideCol: { flex: 1 },
   idSideLabel: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: 6 },
   // Upload widgets
   uploadBtn: {
@@ -1605,17 +1634,24 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   sampleThumb: {
-    width: '100%', aspectRatio: 1.5,
+    width: 150, aspectRatio: 1.5, alignSelf: 'center',
     borderRadius: BORDER_RADIUS.md, borderWidth: 1, borderColor: COLORS.border,
-    marginBottom: 3,
+    marginVertical: SPACING.xs,
   },
-  sampleCaption: { fontSize: 9, color: COLORS.textSecondary, marginBottom: 1 },
-  selfieGuideRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: SPACING.xs },
-  sampleThumbSelfie: {
-    width: 120, height: 80,
-    borderRadius: BORDER_RADIUS.md, borderWidth: 1, borderColor: COLORS.border,
-    marginRight: SPACING.xs,
+  sampleCaption: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, textAlign: 'center', marginBottom: 2 },
+  sampleReq: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginBottom: 1 },
+  idFieldSection: { paddingTop: SPACING.sm, marginTop: SPACING.xs, borderTopWidth: 1, borderTopColor: COLORS.border },
+  sampleTapHint: { fontSize: 9, color: COLORS.primary, textAlign: 'center', marginBottom: SPACING.xs },
+  viewerOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.93)',
+    justifyContent: 'center', alignItems: 'center',
   },
+  viewerImage: {
+    width: Dimensions.get('window').width - 32,
+    height: (Dimensions.get('window').width - 32) / 1.4,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  viewerCloseBtn: { position: 'absolute', top: 52, right: 16 },
   idSideLabelRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginBottom: 4 },
   cameraBadge: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: COLORS.primary, borderRadius: BORDER_RADIUS.full, paddingHorizontal: 5, paddingVertical: 2 },
   cameraBadgeText: { fontSize: 9, fontFamily: FONTS.bold, color: COLORS.white },
