@@ -29,6 +29,11 @@ interface PlatformStats {
   totalRevenue: number;
 }
 
+interface FeaturedRequestItem {
+  provider_id: string;
+  displayName: string;
+}
+
 export default function AdminDashboardScreen() {
   const navigation = useNavigation<NavProp>();
   const { user, signOut } = useAuthStore();
@@ -42,6 +47,7 @@ export default function AdminDashboardScreen() {
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [featuredRequests, setFeaturedRequests] = useState<FeaturedRequestItem[]>([]);
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -55,7 +61,7 @@ export default function AdminDashboardScreen() {
   };
 
   const loadStats = async () => {
-    const [usersRes, provRes, pendingRes, bookingsRes, completedRes, revenueRes] =
+    const [usersRes, provRes, pendingRes, bookingsRes, completedRes, revenueRes, featPayRes] =
       await Promise.all([
         supabase.from('users').select('id', { count: 'exact', head: true }),
         supabase.from('providers').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
@@ -63,12 +69,36 @@ export default function AdminDashboardScreen() {
         supabase.from('bookings').select('id', { count: 'exact', head: true }),
         supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'completed'),
         supabase.from('payments').select('amount').eq('status', 'completed'),
+        // Paid featured payments where provider not yet approved
+        supabase
+          .from('featured_payments')
+          .select('provider_id, paid_at, providers!inner(id, business_name, is_featured, users(full_name))')
+          .eq('status', 'paid')
+          .eq('providers.is_featured', false)
+          .order('paid_at', { ascending: false }),
       ]);
 
     const revenue = (revenueRes.data ?? []).reduce(
       (s: number, p: { amount: number }) => s + p.amount,
       0
     );
+
+    // Deduplicate by provider_id — keep only the most recent paid payment per provider
+    const seen = new Set<string>();
+    const deduped: FeaturedRequestItem[] = [];
+    for (const row of (featPayRes.data ?? []) as any[]) {
+      if (seen.has(row.provider_id)) continue;
+      if (row.providers?.is_featured !== false) continue;
+      seen.add(row.provider_id);
+      deduped.push({
+        provider_id: row.provider_id,
+        displayName:
+          row.providers?.business_name ??
+          row.providers?.users?.full_name ??
+          'Unknown Provider',
+      });
+    }
+    setFeaturedRequests(deduped);
 
     setStats({
       totalUsers: usersRes.count ?? 0,
@@ -163,6 +193,52 @@ export default function AdminDashboardScreen() {
           ))}
         </View>
 
+        {/* Featured Requests card */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>⭐ Featured Requests</Text>
+          <View style={styles.featuredCard}>
+            {featuredRequests.length === 0 ? (
+              <Text style={styles.featuredEmpty}>No pending featured requests.</Text>
+            ) : (
+              <>
+                <View style={styles.featuredHeader}>
+                  <View style={styles.featuredIconWrap}>
+                    <Ionicons name="sparkles" size={20} color={COLORS.warning} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.featuredCountText}>
+                      {featuredRequests.length} pending approval{featuredRequests.length !== 1 ? 's' : ''}
+                    </Text>
+                    <Text style={styles.featuredCountSub}>Providers awaiting featured activation</Text>
+                  </View>
+                  <View style={styles.featuredBadge}>
+                    <Text style={styles.featuredBadgeText}>{featuredRequests.length}</Text>
+                  </View>
+                </View>
+                <View style={styles.featuredList}>
+                  {featuredRequests.slice(0, 5).map((item) => (
+                    <View key={item.provider_id} style={styles.featuredListRow}>
+                      <View style={styles.featuredDot} />
+                      <Text style={styles.featuredListName} numberOfLines={1}>{item.displayName}</Text>
+                    </View>
+                  ))}
+                  {featuredRequests.length > 5 && (
+                    <Text style={styles.featuredMoreText}>+{featuredRequests.length - 5} more</Text>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={styles.featuredReviewBtn}
+                  onPress={() => navigation.navigate('AllProviders')}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="checkmark-done-outline" size={16} color={COLORS.white} />
+                  <Text style={styles.featuredReviewBtnText}>Review Requests</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+
         {/* Quick links */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Admin Actions</Text>
@@ -248,4 +324,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 2, minWidth: 24, alignItems: 'center',
   },
   badgeText: { fontSize: FONTS.sizes.xs, color: COLORS.white, fontFamily: FONTS.semiBold },
+  featuredCard: {
+    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md, borderWidth: 1, borderColor: '#FDE68A', ...SHADOWS.small,
+  },
+  featuredEmpty: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
+  featuredHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm },
+  featuredIconWrap: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center',
+  },
+  featuredCountText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
+  featuredCountSub: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 1 },
+  featuredBadge: {
+    backgroundColor: COLORS.warning, borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: 8, paddingVertical: 2, minWidth: 26, alignItems: 'center',
+  },
+  featuredBadgeText: { fontSize: FONTS.sizes.xs, color: COLORS.white, fontFamily: FONTS.bold },
+  featuredList: { gap: SPACING.xs, marginBottom: SPACING.sm },
+  featuredListRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingVertical: 2 },
+  featuredDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.warning },
+  featuredListName: { flex: 1, fontSize: FONTS.sizes.sm, color: COLORS.text, fontFamily: FONTS.medium },
+  featuredMoreText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontFamily: FONTS.medium, marginTop: 2 },
+  featuredReviewBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: SPACING.xs, backgroundColor: COLORS.warning,
+    borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.sm,
+  },
+  featuredReviewBtnText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.white },
 });
