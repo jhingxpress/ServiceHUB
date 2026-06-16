@@ -181,7 +181,19 @@ export default function ProviderDashboard() {
         body: {},
       });
 
-      if (error) throw error;
+      if (error) {
+        // Parse the actual error body from the Edge Function response
+        let friendlyMessage = 'Failed to create checkout session. Please try again.';
+        try {
+          const body = await (error as any).context?.json?.();
+          if (body?.error) friendlyMessage = body.error;
+        } catch {
+          // context not parseable — fall through to generic message
+        }
+        Alert.alert('Cannot Renew', friendlyMessage);
+        return;
+      }
+
       if (!data?.checkout_url) throw new Error('No checkout URL returned');
 
       // Refresh local state before opening browser
@@ -415,16 +427,21 @@ export default function ProviderDashboard() {
                         <Text style={styles.featuredDaysText}>
                           {_daysLeft} day{_daysLeft !== 1 ? 's' : ''} remaining
                         </Text>
-                        <TouchableOpacity
-                          style={[styles.featuredBtn, styles.featuredBtnPending, { marginTop: SPACING.sm }]}
-                          onPress={handleFeaturedRequest}
-                          disabled={checkoutLoading}
-                          activeOpacity={0.8}
-                        >
-                          {checkoutLoading ? <ActivityIndicator size="small" color={COLORS.warning} /> : <Text style={styles.featuredBtnTextPending}>Renew Featured</Text>}
-                        </TouchableOpacity>
                       </>
                     )}
+                    <View style={styles.featuredRenewLocked}>
+                      <Ionicons name="lock-closed-outline" size={14} color={COLORS.textSecondary} />
+                      <Text style={styles.featuredRenewLockedText}>
+                        Renewal becomes available 7 days before expiration.
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.featuredBtn, styles.featuredBtnDisabled, { marginTop: SPACING.sm }]}
+                      disabled
+                      activeOpacity={1}
+                    >
+                      <Text style={styles.featuredBtnTextDisabled}>Renew Featured</Text>
+                    </TouchableOpacity>
                   </View>
                 );
               }
@@ -831,8 +848,12 @@ const styles = StyleSheet.create({
   },
   featuredBtn: { borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.sm, alignItems: 'center' as const, backgroundColor: COLORS.warning },
   featuredBtnPending: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: '#FDE68A' },
+  featuredBtnDisabled: { backgroundColor: COLORS.border },
   featuredBtnText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.white },
   featuredBtnTextPending: { color: COLORS.warning },
+  featuredBtnTextDisabled: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.textLight },
+  featuredRenewLocked: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.xs, marginTop: SPACING.sm, paddingHorizontal: 2 },
+  featuredRenewLockedText: { flex: 1, fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, lineHeight: 16 },
   featuredActiveRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginBottom: 4 },
   featuredActiveText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.success },
   featuredUntilText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },

@@ -91,14 +91,18 @@ serve(async (req: Request) => {
   if (provider.status !== 'approved') {
     return json({ error: 'Provider must be approved to request featured status' }, 403);
   }
-  // Block only if featured status is ACTIVELY running (not yet expired).
-  // Expired providers (featured_until < now) may purchase a renewal.
+  // Block renewal only if featured_until is MORE than 7 days away.
+  // Providers within 7 days of expiry (or already expired) may purchase a renewal.
+  const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const activelyFeatured =
     provider.is_featured &&
     provider.featured_until &&
-    new Date(provider.featured_until) > new Date();
+    new Date(provider.featured_until) > sevenDaysFromNow;
   if (activelyFeatured) {
-    return json({ error: 'Provider is already actively featured' }, 409);
+    return json(
+      { error: 'Your Featured Provider status is still active. Renewal becomes available 7 days before expiration.' },
+      409
+    );
   }
 
   // ── Idempotency: return existing pending checkout ─────────
