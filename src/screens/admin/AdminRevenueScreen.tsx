@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { format } from 'date-fns';
+import { format, startOfDay, startOfMonth } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { AdminStackParamList } from '../../navigation/types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
@@ -58,6 +58,20 @@ interface Summary {
   failedCount: number;
 }
 
+interface TipRow {
+  id: string;
+  amount: number;
+  paid_at: string | null;
+  created_at: string;
+}
+
+interface TipStats {
+  today: number;
+  thisMonth: number;
+  lifetime: number;
+  recent: TipRow[];
+}
+
 function getPeriodStart(period: PeriodFilter): string | null {
   if (period === 'all') return null;
   const days = period === '7d' ? 7 : period === '30d' ? 30 : 90;
@@ -71,6 +85,7 @@ export default function AdminRevenueScreen() {
   const [period, setPeriod] = useState<PeriodFilter>('30d');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [tipStats, setTipStats] = useState<TipStats>({ today: 0, thisMonth: 0, lifetime: 0, recent: [] });
 
   const loadData = useCallback(async () => {
     const since = getPeriodStart(period);
@@ -89,14 +104,33 @@ export default function AdminRevenueScreen() {
 
     if (since) q = q.gte('created_at', since);
 
-    const { data, error } = await q;
-    if (error) {
+    const todayStart     = startOfDay(new Date()).toISOString();
+    const monthStart     = startOfMonth(new Date()).toISOString();
+
+    const [paymentsRes, tipsAllRes, tipsRecentRes] = await Promise.all([
+      q,
+      // All paid tips (for today/month/lifetime aggregates)
+      supabase
+        .from('servicehub_tips')
+        .select('id, amount, paid_at, created_at')
+        .eq('status', 'paid')
+        .order('paid_at', { ascending: false }),
+      // Most recent 5 paid tips for display
+      supabase
+        .from('servicehub_tips')
+        .select('id, amount, paid_at, created_at')
+        .eq('status', 'paid')
+        .order('paid_at', { ascending: false })
+        .limit(5),
+    ]);
+
+    if (paymentsRes.error) {
       setLoading(false);
       setRefreshing(false);
       return;
     }
 
-    const rows = (data ?? []) as unknown as Payment[];
+    const rows = (paymentsRes.data ?? []) as unknown as Payment[];
     setPayments(rows);
 
     const s: Summary = { totalRevenue: 0, paidCount: 0, pendingAmount: 0, refundedAmount: 0, failedCount: 0 };
@@ -108,6 +142,19 @@ export default function AdminRevenueScreen() {
       if (p.status === 'failed')   { s.failedCount++; }
     });
     setSummary(s);
+
+    // Aggregate tip stats
+    const allTips = (tipsAllRes.data ?? []) as TipRow[];
+    const ts: TipStats = { today: 0, thisMonth: 0, lifetime: 0, recent: (tipsRecentRes.data ?? []) as TipRow[] };
+    allTips.forEach((t) => {
+      const paidDate = t.paid_at ?? t.created_at;
+      const centavos = Number(t.amount) || 0;
+      ts.lifetime += centavos;
+      if (paidDate >= monthStart) ts.thisMonth += centavos;
+      if (paidDate >= todayStart) ts.today     += centavos;
+    });
+    setTipStats(ts);
+
     setLoading(false);
     setRefreshing(false);
   }, [period]);
@@ -215,6 +262,45 @@ export default function AdminRevenueScreen() {
               <Text style={styles.emptyText}>No transactions in this period</Text>
             </View>
           }
+          ListFooterComponent={
+            <View style={styles.tipsSection}>
+              <View style={styles.tipsSectionHeader}>
+                <Ionicons name="heart" size={18} color='#E11D48' />
+                <Text style={styles.tipsSectionTitle}>Support ServiceHub Tips</Text>
+              </View>
+              <View style={styles.tipsSummaryRow}>
+                {[
+                  { label: 'Today',      value: `₱${(tipStats.today / 100).toLocaleString()}` },
+                  { label: 'This Month', value: `₱${(tipStats.thisMonth / 100).toLocaleString()}` },
+                  { label: 'Lifetime',   value: `₱${(tipStats.lifetime / 100).toLocaleString()}` },
+                ].map((s) => (
+                  <View key={s.label} style={styles.tipsSummaryCard}>
+                    <Text style={styles.tipsSummaryValue}>{s.value}</Text>
+                    <Text style={styles.tipsSummaryLabel}>{s.label}</Text>
+                  </View>
+                ))}
+              </View>
+              {tipStats.recent.length > 0 && (
+                <View style={styles.tipsRecentSection}>
+                  <Text style={styles.tipsRecentLabel}>Recent Contributions</Text>
+                  {tipStats.recent.map((t) => (
+                    <View key={t.id} style={styles.tipsRecentRow}>
+                      <View style={styles.tipsRecentIcon}>
+                        <Ionicons name="heart" size={14} color='#E11D48' />
+                      </View>
+                      <Text style={styles.tipsRecentAmount}>₱{(Number(t.amount) / 100).toLocaleString()}</Text>
+                      <Text style={styles.tipsRecentDate}>
+                        {format(new Date(t.paid_at ?? t.created_at), 'MMM d, yyyy · h:mm a')}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {tipStats.recent.length === 0 && (
+                <Text style={styles.tipsEmptyText}>No tips received yet.</Text>
+              )}
+            </View>
+          }
         />
       )}
     </SafeAreaView>
@@ -272,4 +358,29 @@ const styles = StyleSheet.create({
   payStatusText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, textTransform: 'capitalize' },
   empty: { alignItems: 'center', paddingTop: SPACING.xxxl, gap: SPACING.md },
   emptyText: { fontSize: FONTS.sizes.base, color: COLORS.textSecondary },
+  tipsSection: {
+    marginHorizontal: SPACING.md, marginTop: SPACING.md, marginBottom: SPACING.xl,
+    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.md, borderWidth: 1, borderColor: '#FECDD3', ...SHADOWS.small,
+  },
+  tipsSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md },
+  tipsSectionTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
+  tipsSummaryRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.md },
+  tipsSummaryCard: {
+    flex: 1, backgroundColor: '#FFF1F2', borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.sm, alignItems: 'center', gap: 2,
+    borderWidth: 1, borderColor: '#FECDD3',
+  },
+  tipsSummaryValue: { fontSize: FONTS.sizes.base, fontFamily: FONTS.bold, color: '#E11D48' },
+  tipsSummaryLabel: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
+  tipsRecentSection: { gap: SPACING.sm },
+  tipsRecentLabel: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: 4 },
+  tipsRecentRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  tipsRecentIcon: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#FFF1F2', alignItems: 'center', justifyContent: 'center',
+  },
+  tipsRecentAmount: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
+  tipsRecentDate: { flex: 1, fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
+  tipsEmptyText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
 });

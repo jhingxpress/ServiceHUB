@@ -3,8 +3,10 @@
 // Deploy: supabase functions deploy paymongo-webhook
 //
 // Purpose:
-//   Receives PayMongo TEST webhook events and updates featured_payments.
-//   Creates an admin push notification on confirmed payment.
+//   Receives PayMongo TEST webhook events.
+//   Routes by metadata.payment_type:
+//     featured_payment (default) → updates featured_payments, notifies admins.
+//     servicehub_tip             → updates servicehub_tips, notifies user.
 //   Does NOT auto-grant featured status. Admin approval required.
 //
 // Required Supabase secrets:
@@ -132,7 +134,15 @@ serve(async (req: Request) => {
     auth: { persistSession: false },
   });
 
-  // ── Find matching featured_payment ────────────────────────
+  // ── Route by payment_type ────────────────────────────────
+  const paymentType = metadata?.payment_type ?? 'featured_payment';
+  console.log('[webhook] payment_type:', paymentType);
+
+  if (paymentType === 'servicehub_tip') {
+    return await processTipPayment(db, checkoutId, metadata, payments, pushSecret, supabaseUrl);
+  }
+
+  // ── Default path: find matching featured_payment ─────────
   const { data: payment, error: findErr } = await db
     .from('featured_payments')
     .select('id, provider_id, featured_request_id, amount, status')
@@ -283,6 +293,102 @@ async function processPayment(
     payment_id: paymentId,
     status:     'paid',
   });
+}
+
+// ── Tip payment processor ─────────────────────────────────────────────────────
+async function processTipPayment(
+  db: any,
+  checkoutId: string,
+  metadata: any,
+  payments: any[],
+  pushSecret: string,
+  supabaseUrl: string
+): Promise<Response> {
+  const tipId  = metadata?.tip_id;
+  const userId = metadata?.user_id;
+  const expectedCentavos = Number(metadata?.amount ?? 0);
+
+  if (!tipId) {
+    console.error('[webhook/tip] No tip_id in metadata');
+    return json({ error: 'Missing tip_id in metadata' }, 400);
+  }
+
+  // ── Lookup tip record ───────────────────────────────────
+  const { data: tip, error: findErr } = await db
+    .from('servicehub_tips')
+    .select('id, user_id, amount, status')
+    .eq('paymongo_checkout_id', checkoutId)
+    .maybeSingle();
+
+  const record = tip ?? (tipId ? await db
+    .from('servicehub_tips')
+    .select('id, user_id, amount, status')
+    .eq('id', tipId)
+    .maybeSingle()
+    .then((r: any) => r.data) : null);
+
+  if (!record) {
+    console.error('[webhook/tip] No tip record found for checkout:', checkoutId, 'tip_id:', tipId);
+    return json({ error: 'Tip record not found' }, 404);
+  }
+
+  if (record.status === 'paid') {
+    console.log('[webhook/tip] Tip already processed, ignoring duplicate');
+    return json({ received: true, handled: false, reason: 'already_paid' });
+  }
+
+  // ── Validate amount (server-side) ───────────────────────
+  const paidCentavos = payments[0]?.attributes?.amount ?? 0;
+  const MIN_TIP = 2000;  // ₱20
+  const MAX_TIP = 1000000; // ₱10,000
+
+  if (paidCentavos < MIN_TIP || paidCentavos > MAX_TIP) {
+    console.error(`[webhook/tip] Invalid tip amount: ${paidCentavos} centavos`);
+    await db.from('servicehub_tips').update({ status: 'failed' }).eq('id', record.id);
+    return json({ error: 'Tip amount out of valid range' }, 400);
+  }
+
+  const pmPaymentId = payments[0]?.id ?? null;
+  const paidAt      = new Date().toISOString();
+
+  // ── Update tip record ───────────────────────────────────
+  const { error: updateErr } = await db
+    .from('servicehub_tips')
+    .update({
+      status:               'paid',
+      paymongo_payment_id:  pmPaymentId,
+      paid_at:              paidAt,
+      amount:               paidCentavos, // store actual paid amount
+    })
+    .eq('id', record.id);
+
+  if (updateErr) {
+    console.error('[webhook/tip] Update error:', updateErr);
+    return json({ error: 'Failed to update tip record' }, 500);
+  }
+
+  console.log(`[webhook/tip] Tip ${record.id} marked paid — ₱${(paidCentavos / 100).toFixed(2)}`);
+
+  // ── Thank-you push notification to user (non-fatal) ────
+  const notifyUserId = record.user_id ?? userId;
+  if (notifyUserId && pushSecret) {
+    try {
+      await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-push-secret': pushSecret },
+        body: JSON.stringify({
+          user_id: notifyUserId,
+          title:   '❤️ Thank You for Supporting ServiceHub',
+          body:    'Your contribution has been received. Thank you for helping us improve the platform!',
+          data:    { type: 'servicehub_tip', channelId: 'general' },
+        }),
+      });
+    } catch (err) {
+      console.warn('[webhook/tip] Push notification failed (non-fatal):', err);
+    }
+  }
+
+  return json({ received: true, handled: true, tip_id: record.id, status: 'paid' });
 }
 
 async function generateHmacSHA256(secret: string, message: string): Promise<string> {

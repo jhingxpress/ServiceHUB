@@ -26,6 +26,7 @@ import Button from '../../components/ui/Button';
 import Avatar from '../../components/ui/Avatar';
 import { CustomerStackParamList } from '../../navigation/types';
 import { useErrorHandler } from '../../utils/errorHandler';
+import TipModal from '../../components/ui/TipModal';
 
 type NavProp = NativeStackNavigationProp<CustomerStackParamList>;
 type RouteType = RouteProp<CustomerStackParamList, 'ReviewService'>;
@@ -43,7 +44,9 @@ export default function ReviewScreen() {
   const [comment, setComment] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const { showError, showSuccess, showWarning } = useErrorHandler();
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const [showTipModal, setShowTipModal] = useState(false);
+  const { showError, showWarning } = useErrorHandler();
 
   const ASPECTS = [
     { id: 'punctuality', label: 'Punctuality' },
@@ -192,8 +195,7 @@ export default function ReviewScreen() {
         setSubmitting(false);
         return;
       }
-      showSuccess('Review submitted! Thank you for your feedback.');
-      navigation.goBack();
+      setReviewSubmitted(true);
     } catch (err) {
       showError(err, 'Failed to submit review. Please try again.');
     } finally {
@@ -202,6 +204,50 @@ export default function ReviewScreen() {
   };
 
   const ratingLabels = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent!'];
+
+  if (reviewSubmitted) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <TipModal
+          visible={showTipModal}
+          onDismiss={() => {
+            setShowTipModal(false);
+            navigation.goBack();
+          }}
+        />
+        <View style={styles.successContainer}>
+          <View style={styles.successIconWrap}>
+            <Ionicons name="checkmark-circle" size={72} color={COLORS.success} />
+          </View>
+          <Text style={styles.successHeading}>Review Submitted!</Text>
+          <Text style={styles.successSub}>
+            Thank you for sharing your experience with {providerName}. Your feedback helps the community.
+          </Text>
+
+          <TouchableOpacity
+            style={styles.tipCta}
+            onPress={() => setShowTipModal(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.tipCtaEmoji}>❤️</Text>
+            <View style={styles.tipCtaText}>
+              <Text style={styles.tipCtaTitle}>Support ServiceHub</Text>
+              <Text style={styles.tipCtaSub}>Leave an optional tip to help us keep the platform running</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#E11D48" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.doneBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.doneBtnText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -382,6 +428,35 @@ const styles = StyleSheet.create({
   },
   addPhotoText: { fontSize: FONTS.sizes.xs, color: COLORS.primary, fontFamily: FONTS.semiBold },
   submitBtn: { marginBottom: SPACING.xl },
+  successContainer: {
+    flex: 1, paddingHorizontal: SPACING.lg,
+    justifyContent: 'center', alignItems: 'center', gap: SPACING.md,
+  },
+  successIconWrap: { marginBottom: SPACING.sm },
+  successHeading: {
+    fontSize: FONTS.sizes.xxl ?? FONTS.sizes.xl, fontFamily: FONTS.bold,
+    color: COLORS.text, textAlign: 'center',
+  },
+  successSub: {
+    fontSize: FONTS.sizes.base, color: COLORS.textSecondary,
+    textAlign: 'center', lineHeight: 22, marginBottom: SPACING.sm,
+  },
+  tipCta: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
+    backgroundColor: '#FFF1F2', borderRadius: BORDER_RADIUS.xl,
+    borderWidth: 1.5, borderColor: '#FECDD3',
+    padding: SPACING.md, width: '100%',
+  },
+  tipCtaEmoji: { fontSize: 28 },
+  tipCtaText: { flex: 1, gap: 2 },
+  tipCtaTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: '#E11D48' },
+  tipCtaSub: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, lineHeight: 16 },
+  doneBtn: {
+    backgroundColor: COLORS.primary, borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: SPACING.md, paddingHorizontal: SPACING.xxl ?? SPACING.xl,
+    alignItems: 'center', width: '100%',
+  },
+  doneBtnText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.white },
   disclosureBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
