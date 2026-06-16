@@ -329,6 +329,40 @@ export default function App() {
         return;
       }
 
+      // PayMongo featured payment return — success
+      // com.servicehub.app://featured/success
+      if (url.includes('featured/success')) {
+        console.log('[DEEPLINK] featured/success received');
+        if (navigationRef.isReady()) {
+          navigationRef.navigate('Provider', {
+            screen: 'ProviderTabs',
+            params: { screen: 'Dashboard' },
+          } as any);
+        }
+        Alert.alert(
+          'Payment Received',
+          'Your payment was successful. Your Featured Provider request is now awaiting admin approval.'
+        );
+        return;
+      }
+
+      // PayMongo featured payment return — cancel
+      // com.servicehub.app://featured/cancel
+      if (url.includes('featured/cancel')) {
+        console.log('[DEEPLINK] featured/cancel received');
+        if (navigationRef.isReady()) {
+          navigationRef.navigate('Provider', {
+            screen: 'ProviderTabs',
+            params: { screen: 'Dashboard' },
+          } as any);
+        }
+        Alert.alert(
+          'Payment Cancelled',
+          'You cancelled the checkout. Your pending session is saved — tap "Open Checkout" on your Dashboard to complete payment.'
+        );
+        return;
+      }
+
       // Email verification — two possible redirect formats:
       //   PKCE:     com.servicehub.app://verify?code=<CODE>&type=signup
       //   Implicit: com.servicehub.app://verify#access_token=...&refresh_token=...&type=signup

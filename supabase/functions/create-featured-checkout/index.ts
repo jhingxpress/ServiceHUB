@@ -190,8 +190,8 @@ serve(async (req: Request) => {
               },
             ],
             payment_method_types: ['card', 'gcash'],
-            success_url: 'https://servicehub.app/featured/success',
-            cancel_url:  'https://servicehub.app/featured/cancel',
+            success_url: 'com.servicehub.app://featured/success',
+            cancel_url:  'com.servicehub.app://featured/cancel',
             statement_descriptor: 'ServiceHub Featured',
             metadata: {
               payment_id:   paymentId,
