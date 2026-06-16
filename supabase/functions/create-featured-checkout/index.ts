@@ -81,7 +81,7 @@ serve(async (req: Request) => {
   // ── Verify provider is approved ──────────────────────────
   const { data: provider, error: provErr } = await db
     .from('providers')
-    .select('id, business_name, status, is_featured')
+    .select('id, business_name, status, is_featured, featured_until')
     .eq('id', providerId)
     .single();
 
@@ -91,8 +91,14 @@ serve(async (req: Request) => {
   if (provider.status !== 'approved') {
     return json({ error: 'Provider must be approved to request featured status' }, 403);
   }
-  if (provider.is_featured) {
-    return json({ error: 'Provider is already featured' }, 409);
+  // Block only if featured status is ACTIVELY running (not yet expired).
+  // Expired providers (featured_until < now) may purchase a renewal.
+  const activelyFeatured =
+    provider.is_featured &&
+    provider.featured_until &&
+    new Date(provider.featured_until) > new Date();
+  if (activelyFeatured) {
+    return json({ error: 'Provider is already actively featured' }, 409);
   }
 
   // ── Idempotency: return existing pending checkout ─────────

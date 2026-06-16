@@ -45,6 +45,7 @@ serve(async (req: Request) => {
   if (!supabaseUrl || !serviceKey) {
     return json({ error: 'Missing Supabase environment variables' }, 500);
   }
+
   if (!webhookSecret) {
     console.error('[webhook] PAYMONGO_WEBHOOK_SECRET not configured');
     return json({ error: 'Webhook secret not configured' }, 500);
@@ -55,6 +56,7 @@ serve(async (req: Request) => {
 
   // ── Verify PayMongo signature ─────────────────────────────
   const sigHeader = req.headers.get('paymongo-signature');
+
   if (!sigHeader) {
     console.error('[webhook] Missing paymongo-signature header');
     return json({ error: 'Missing signature' }, 401);
@@ -75,10 +77,12 @@ serve(async (req: Request) => {
     return json({ error: 'Malformed signature header' }, 401);
   }
 
-  // Replay-attack guard: reject events older than 5 minutes
+  // Replay-attack guard: reject events older than 1 hour.
+  // PayMongo retries failed webhooks at ~5 min, ~10 min, ~30 min using the
+  // ORIGINAL timestamp — 300 s was rejecting every retry delivery.
   const eventAge = Math.abs(Date.now() / 1000 - parseInt(timestamp, 10));
-  if (eventAge > 300) {
-    console.error('[webhook] Event too old:', eventAge, 'seconds');
+  if (eventAge > 3600) {
+    console.error('[webhook] Event too old:', Math.round(eventAge), 'seconds — exceeds 3600 s limit');
     return json({ error: 'Event timestamp too old' }, 401);
   }
 
@@ -86,9 +90,7 @@ serve(async (req: Request) => {
   const expected = await generateHmacSHA256(webhookSecret, message);
 
   if (expected !== testSig) {
-    console.error('[webhook] Signature mismatch');
-    console.error('[webhook] Expected:', expected);
-    console.error('[webhook] Received:', testSig);
+    console.error('[webhook] Signature mismatch — verify PAYMONGO_WEBHOOK_SECRET is correct');
     return json({ error: 'Invalid signature' }, 401);
   }
 

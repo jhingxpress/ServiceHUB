@@ -350,89 +350,143 @@ export default function ProviderDashboard() {
                 </Text>
               </View>
             </View>
-            {provider.is_featured ? (
-              <View>
-                <View style={styles.featuredActiveRow}>
-                  <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
-                  <Text style={styles.featuredActiveText}>Featured Provider Active</Text>
-                </View>
-                {provider.featured_until && (
-                  <Text style={styles.featuredUntilText}>
-                    Featured until: {format(new Date(provider.featured_until), 'MMM d, yyyy')}
-                  </Text>
-                )}
-              </View>
-            ) : featuredPayment?.status === 'paid' ? (
-              <View style={styles.featuredPayStatusBox}>
-                <View style={styles.featuredPayStatusRow}>
-                  <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
-                  <Text style={[styles.featuredPayStatusText, { color: COLORS.success }]}>
-                    Payment Received
-                  </Text>
-                </View>
-                <View style={[styles.featuredPayStatusRow, { marginTop: 4 }]}>
-                  <Ionicons name="time-outline" size={14} color={COLORS.textSecondary} />
-                  <Text style={styles.featuredPayStatusSubtext}>
-                    Awaiting admin approval. You'll be notified once approved.
-                  </Text>
-                </View>
-                {featuredPayment.paid_at && (
-                  <Text style={styles.featuredPayMeta}>
-                    Paid {format(new Date(featuredPayment.paid_at), 'MMM d, yyyy h:mm a')}
-                  </Text>
-                )}
-              </View>
-            ) : featuredPayment?.status === 'pending' ? (
-              <View>
-                <View style={styles.featuredPayStatusBox}>
-                  <View style={styles.featuredPayStatusRow}>
-                    <Ionicons name="time-outline" size={14} color={COLORS.warning} />
-                    <Text style={[styles.featuredPayStatusText, { color: COLORS.warning }]}>
-                      Payment Pending
-                    </Text>
-                  </View>
-                  <Text style={styles.featuredPayStatusSubtext}>
-                    Complete payment in the browser to activate your request.
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.featuredBtn}
-                  onPress={handleFeaturedRequest}
-                  disabled={checkoutLoading}
-                  activeOpacity={0.8}
-                >
-                  {checkoutLoading ? (
-                    <ActivityIndicator size="small" color={COLORS.white} />
-                  ) : (
-                    <Text style={styles.featuredBtnText}>Open Checkout</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <>
-                <View style={styles.featuredBenefits}>
-                  {['Priority search placement', 'Featured badge on profile', 'Home screen exposure'].map((b) => (
-                    <View key={b} style={styles.featuredBenefitRow}>
-                      <Ionicons name="checkmark" size={13} color={COLORS.warning} />
-                      <Text style={styles.featuredBenefitText}>{b}</Text>
+            {(() => {
+              const _now = new Date();
+              const _until = provider.featured_until ? new Date(provider.featured_until) : null;
+              const _isExpired = provider.is_featured && !!_until && _until <= _now;
+              const _daysLeft = _until && _until > _now
+                ? Math.ceil((_until.getTime() - _now.getTime()) / (1000 * 60 * 60 * 24))
+                : 0;
+              const _isExpiringSoon = provider.is_featured && !_isExpired && !!_until && _daysLeft <= 7;
+              const _isActive = provider.is_featured && !_isExpired;
+
+              if (_isExpired) {
+                return (
+                  <View>
+                    <View style={styles.featuredExpiredRow}>
+                      <Ionicons name="close-circle" size={16} color={COLORS.error} />
+                      <Text style={styles.featuredExpiredText}>Featured Expired</Text>
                     </View>
-                  ))}
-                </View>
-                <Text style={styles.featuredPrice}>₱99/month</Text>
-                <TouchableOpacity
-                  style={styles.featuredBtn}
-                  onPress={handleFeaturedRequest}
-                  disabled={checkoutLoading}
-                  activeOpacity={0.8}
-                >
-                  {checkoutLoading ? (
-                    <ActivityIndicator size="small" color={COLORS.white} />
-                  ) : (
-                    <Text style={styles.featuredBtnText}>Request Featured Badge</Text>
-                  )}
-                </TouchableOpacity>
-              </>
-            )}
+                    <Text style={styles.featuredUntilText}>
+                      Expired on: {format(_until!, 'MMM d, yyyy')}
+                    </Text>
+                    <Text style={[styles.featuredPayStatusSubtext, { marginVertical: SPACING.xs }]}>
+                      Renew now to regain featured visibility.
+                    </Text>
+                    <TouchableOpacity style={styles.featuredBtn} onPress={handleFeaturedRequest} disabled={checkoutLoading} activeOpacity={0.8}>
+                      {checkoutLoading ? <ActivityIndicator size="small" color={COLORS.white} /> : <Text style={styles.featuredBtnText}>Renew Featured</Text>}
+                    </TouchableOpacity>
+                  </View>
+                );
+              }
+
+              if (_isExpiringSoon) {
+                return (
+                  <View>
+                    <View style={styles.featuredWarnRow}>
+                      <Ionicons name="warning" size={16} color={COLORS.warning} />
+                      <Text style={styles.featuredWarnText}>Expires in {_daysLeft} day{_daysLeft !== 1 ? 's' : ''}</Text>
+                    </View>
+                    <Text style={styles.featuredUntilText}>
+                      Expires on: {format(_until!, 'MMM d, yyyy')}
+                    </Text>
+                    <Text style={[styles.featuredPayStatusSubtext, { marginVertical: SPACING.xs }]}>
+                      Renew now to avoid losing your featured placement.
+                    </Text>
+                    <TouchableOpacity style={styles.featuredBtn} onPress={handleFeaturedRequest} disabled={checkoutLoading} activeOpacity={0.8}>
+                      {checkoutLoading ? <ActivityIndicator size="small" color={COLORS.white} /> : <Text style={styles.featuredBtnText}>Renew Featured</Text>}
+                    </TouchableOpacity>
+                  </View>
+                );
+              }
+
+              if (_isActive) {
+                return (
+                  <View>
+                    <View style={styles.featuredActiveRow}>
+                      <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
+                      <Text style={styles.featuredActiveText}>Featured Provider Active</Text>
+                    </View>
+                    {_until && (
+                      <>
+                        <Text style={styles.featuredUntilText}>
+                          Expires on: {format(_until, 'MMM d, yyyy')}
+                        </Text>
+                        <Text style={styles.featuredDaysText}>
+                          {_daysLeft} day{_daysLeft !== 1 ? 's' : ''} remaining
+                        </Text>
+                        <TouchableOpacity
+                          style={[styles.featuredBtn, styles.featuredBtnPending, { marginTop: SPACING.sm }]}
+                          onPress={handleFeaturedRequest}
+                          disabled={checkoutLoading}
+                          activeOpacity={0.8}
+                        >
+                          {checkoutLoading ? <ActivityIndicator size="small" color={COLORS.warning} /> : <Text style={styles.featuredBtnTextPending}>Renew Featured</Text>}
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
+                );
+              }
+
+              if (featuredPayment?.status === 'paid') {
+                return (
+                  <View style={styles.featuredPayStatusBox}>
+                    <View style={styles.featuredPayStatusRow}>
+                      <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
+                      <Text style={[styles.featuredPayStatusText, { color: COLORS.success }]}>Payment Received</Text>
+                    </View>
+                    <View style={[styles.featuredPayStatusRow, { marginTop: 4 }]}>
+                      <Ionicons name="time-outline" size={14} color={COLORS.textSecondary} />
+                      <Text style={styles.featuredPayStatusSubtext}>
+                        Awaiting admin approval. You'll be notified once approved.
+                      </Text>
+                    </View>
+                    {featuredPayment.paid_at && (
+                      <Text style={styles.featuredPayMeta}>
+                        Paid {format(new Date(featuredPayment.paid_at), 'MMM d, yyyy h:mm a')}
+                      </Text>
+                    )}
+                  </View>
+                );
+              }
+
+              if (featuredPayment?.status === 'pending') {
+                return (
+                  <View>
+                    <View style={styles.featuredPayStatusBox}>
+                      <View style={styles.featuredPayStatusRow}>
+                        <Ionicons name="time-outline" size={14} color={COLORS.warning} />
+                        <Text style={[styles.featuredPayStatusText, { color: COLORS.warning }]}>Payment Pending</Text>
+                      </View>
+                      <Text style={styles.featuredPayStatusSubtext}>
+                        Complete payment in the browser to activate your request.
+                      </Text>
+                    </View>
+                    <TouchableOpacity style={styles.featuredBtn} onPress={handleFeaturedRequest} disabled={checkoutLoading} activeOpacity={0.8}>
+                      {checkoutLoading ? <ActivityIndicator size="small" color={COLORS.white} /> : <Text style={styles.featuredBtnText}>Open Checkout</Text>}
+                    </TouchableOpacity>
+                  </View>
+                );
+              }
+
+              return (
+                <>
+                  <View style={styles.featuredBenefits}>
+                    {['Priority search placement', 'Featured badge on profile', 'Home screen exposure'].map((b) => (
+                      <View key={b} style={styles.featuredBenefitRow}>
+                        <Ionicons name="checkmark" size={13} color={COLORS.warning} />
+                        <Text style={styles.featuredBenefitText}>{b}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <Text style={styles.featuredPrice}>₱99/month</Text>
+                  <TouchableOpacity style={styles.featuredBtn} onPress={handleFeaturedRequest} disabled={checkoutLoading} activeOpacity={0.8}>
+                    {checkoutLoading ? <ActivityIndicator size="small" color={COLORS.white} /> : <Text style={styles.featuredBtnText}>Request Featured Badge</Text>}
+                  </TouchableOpacity>
+                </>
+              );
+            })()}
           </View>
         )}
 
@@ -791,4 +845,9 @@ const styles = StyleSheet.create({
   featuredPayStatusText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold },
   featuredPayStatusSubtext: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, flex: 1, lineHeight: 16 },
   featuredPayMeta: { fontSize: FONTS.sizes.xs, color: COLORS.textLight, marginTop: 4 },
+  featuredExpiredRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginBottom: 4 },
+  featuredExpiredText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.error },
+  featuredWarnRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginBottom: 4 },
+  featuredWarnText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.warning },
+  featuredDaysText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
 });

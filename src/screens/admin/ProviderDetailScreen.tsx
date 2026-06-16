@@ -346,10 +346,14 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
     const newValue = !provider.is_featured;
     const updates: Record<string, unknown> = { is_featured: newValue };
     if (newValue) {
-      // Default 30-day feature period
-      const until = new Date();
-      until.setDate(until.getDate() + 30);
-      updates.featured_until = until.toISOString();
+      // Preserve remaining time: if the provider still has active days remaining,
+      // extend from the current expiry rather than from now.
+      // Example: expires July 30, renewed July 20 → new expiry August 29 (not August 19).
+      const base = (provider.featured_until && new Date(provider.featured_until) > new Date())
+        ? new Date(provider.featured_until)
+        : new Date();
+      base.setDate(base.getDate() + 30);
+      updates.featured_until = base.toISOString();
     } else {
       updates.featured_until = null;
     }
@@ -369,6 +373,17 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           .eq('provider_id', providerId)
           .eq('status', 'pending');
         setHasPendingRequest(false);
+        // Notify provider of approval — non-fatal if push fails
+        try {
+          await supabase.functions.invoke('notify-featured-approved', {
+            body: {
+              provider_id:   providerId,
+              featured_until: updates.featured_until as string,
+            },
+          });
+        } catch (notifyErr) {
+          console.warn('[toggleFeatured] Approval notification failed (non-fatal):', notifyErr);
+        }
       }
       setProvider((p) => p ? { ...p, is_featured: newValue, featured_until: (updates.featured_until as string | null) } : p);
     } catch (err: any) {
