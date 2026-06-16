@@ -282,6 +282,21 @@ export default function App() {
               );
             } else {
               console.log('[RESET] PKCE session established — ResetPasswordScreen active');
+              // Re-assert: bootstrapAuthenticatedUser runs in a deferred setTimeout and
+              // may clear passwordResetMode via moderation/status paths before
+              // RootNavigator re-renders. Re-setting here guarantees it survives.
+              setPasswordResetMode(true);
+              // Explicit navigation as a safety net — if RootNavigator already rendered
+              // with passwordResetMode=false (race), navigate directly.
+              setTimeout(() => {
+                try {
+                  if (navigationRef.isReady()) {
+                    navigationRef.navigate('ResetPassword' as never);
+                  }
+                } catch {
+                  // Screen already active — ignore
+                }
+              }, 200);
             }
             return;
           }
@@ -311,6 +326,17 @@ export default function App() {
               );
             } else {
               console.log('[RESET] Implicit session established — ResetPasswordScreen active');
+              // Re-assert after deferred bootstrap may have cleared the flag
+              setPasswordResetMode(true);
+              setTimeout(() => {
+                try {
+                  if (navigationRef.isReady()) {
+                    navigationRef.navigate('ResetPassword' as never);
+                  }
+                } catch {
+                  // Screen already active — ignore
+                }
+              }, 200);
             }
             return;
           }
