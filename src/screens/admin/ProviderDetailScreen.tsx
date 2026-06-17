@@ -282,6 +282,48 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
     }
   };
 
+  const approveFeaturedRequest = async () => {
+    if (!provider) return;
+    setFeaturedLoading(true);
+    const base = (provider.featured_until && new Date(provider.featured_until) > new Date())
+      ? new Date(provider.featured_until)
+      : new Date();
+    base.setDate(base.getDate() + 30);
+    const featuredUntil = base.toISOString();
+    try {
+      const { error } = await supabase
+        .from('providers')
+        .update({ is_featured: true, featured_until: featuredUntil })
+        .eq('id', providerId);
+      if (error) throw error;
+      await supabase.from('provider_verification_logs').insert({
+        provider_id: providerId,
+        action: 'featured_enabled',
+        performed_by: user?.id ?? null,
+        notes: `Featured until ${featuredUntil.slice(0, 10)} (request approved)`,
+      });
+      await supabase
+        .from('featured_requests')
+        .update({ status: 'approved', updated_at: new Date().toISOString() })
+        .eq('provider_id', providerId)
+        .eq('status', 'pending');
+      setHasPendingRequest(false);
+      setProvider((p) => p ? { ...p, is_featured: true, featured_until: featuredUntil } : p);
+      try {
+        await supabase.functions.invoke('notify-featured-approved', {
+          body: { provider_id: providerId, featured_until: featuredUntil },
+        });
+      } catch (notifyErr) {
+        console.warn('[approveFeaturedRequest] Notification failed (non-fatal):', notifyErr);
+      }
+      Alert.alert('Approved', `Featured status granted until ${featuredUntil.slice(0, 10)}.`);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Failed to approve featured request.');
+    } finally {
+      setFeaturedLoading(false);
+    }
+  };
+
   useEffect(() => { loadData(); }, [providerId]);
 
   const handleDocAction = async (docId: string, action: 'approved' | 'rejected' | 'pending') => {
@@ -753,38 +795,56 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
                   <Text style={styles.rejectBtnText}>Suspend</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity
-                style={[styles.featuredBtn, provider.is_featured && styles.featuredBtnActive]}
-                onPress={toggleFeatured}
-                disabled={featuredLoading}
-              >
-                {featuredLoading ? (
-                  <ActivityIndicator size="small" color={provider.is_featured ? COLORS.warning : COLORS.primary} />
-                ) : (
-                  <>
-                    <Ionicons name={provider.is_featured ? 'sparkles' : 'sparkles-outline'} size={18} color={provider.is_featured ? COLORS.warning : COLORS.primary} />
-                    <Text style={[styles.featuredBtnText, provider.is_featured && styles.featuredBtnTextActive]}>
-                      {provider.is_featured ? 'Featured On' : 'Feature Provider'}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              {!hasPendingRequest && (
+                <TouchableOpacity
+                  style={[styles.featuredBtn, provider.is_featured && styles.featuredBtnActive]}
+                  onPress={toggleFeatured}
+                  disabled={featuredLoading}
+                >
+                  {featuredLoading ? (
+                    <ActivityIndicator size="small" color={provider.is_featured ? COLORS.warning : COLORS.primary} />
+                  ) : (
+                    <>
+                      <Ionicons name={provider.is_featured ? 'sparkles' : 'sparkles-outline'} size={18} color={provider.is_featured ? COLORS.warning : COLORS.primary} />
+                      <Text style={[styles.featuredBtnText, provider.is_featured && styles.featuredBtnTextActive]}>
+                        {provider.is_featured ? 'Featured On' : 'Feature Provider'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
             {hasPendingRequest && (
-              <TouchableOpacity
-                style={[styles.rejectBtn, { marginTop: SPACING.sm }]}
-                onPress={rejectFeaturedRequest}
-                disabled={rejectingRequest}
-              >
-                {rejectingRequest ? (
-                  <ActivityIndicator size="small" color={COLORS.error} />
-                ) : (
-                  <>
-                    <Ionicons name="close-circle-outline" size={18} color={COLORS.error} />
-                    <Text style={styles.rejectBtnText}>Reject Featured Request</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              <View style={[styles.actionGrid, { marginTop: SPACING.sm }]}>
+                <TouchableOpacity
+                  style={styles.approveBtn}
+                  onPress={approveFeaturedRequest}
+                  disabled={featuredLoading}
+                >
+                  {featuredLoading ? (
+                    <ActivityIndicator size="small" color={COLORS.white} />
+                  ) : (
+                    <>
+                      <Ionicons name="sparkles" size={18} color={COLORS.white} />
+                      <Text style={styles.approveBtnText}>Approve Featured</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.rejectBtn}
+                  onPress={rejectFeaturedRequest}
+                  disabled={rejectingRequest}
+                >
+                  {rejectingRequest ? (
+                    <ActivityIndicator size="small" color={COLORS.error} />
+                  ) : (
+                    <>
+                      <Ionicons name="close-circle-outline" size={18} color={COLORS.error} />
+                      <Text style={styles.rejectBtnText}>Reject Featured</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         )}

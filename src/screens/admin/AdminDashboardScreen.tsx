@@ -210,10 +210,16 @@ export default function AdminDashboardScreen() {
                 </View>
                 <View style={styles.featuredList}>
                   {featuredRequests.slice(0, 5).map((item) => (
-                    <View key={item.provider_id} style={styles.featuredListRow}>
+                    <TouchableOpacity
+                      key={item.provider_id}
+                      style={styles.featuredListRow}
+                      onPress={() => navigation.navigate('ProviderDetail', { providerId: item.provider_id })}
+                      activeOpacity={0.7}
+                    >
                       <View style={styles.featuredDot} />
                       <Text style={styles.featuredListName} numberOfLines={1}>{item.displayName}</Text>
-                    </View>
+                      <Ionicons name="chevron-forward" size={14} color={COLORS.textLight} />
+                    </TouchableOpacity>
                   ))}
                   {featuredRequests.length > 5 && (
                     <Text style={styles.featuredMoreText}>+{featuredRequests.length - 5} more</Text>
@@ -221,7 +227,7 @@ export default function AdminDashboardScreen() {
                 </View>
                 <TouchableOpacity
                   style={styles.featuredReviewBtn}
-                  onPress={() => navigation.navigate('AllProviders')}
+                  onPress={() => navigation.navigate('AdminNotifications')}
                   activeOpacity={0.8}
                 >
                   <Ionicons name="checkmark-done-outline" size={16} color={COLORS.white} />
