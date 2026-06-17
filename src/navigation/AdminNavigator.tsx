@@ -21,6 +21,8 @@ import DisputeDetailScreen from '../screens/admin/DisputeDetailScreen';
 import AdminBookingDetailScreen from '../screens/admin/AdminBookingDetailScreen';
 import AdminNotificationsScreen from '../screens/admin/AdminNotificationsScreen';
 import AdminRevenueScreen from '../screens/admin/AdminRevenueScreen';
+import FeaturedRevenueScreen from '../screens/admin/FeaturedRevenueScreen';
+import TipsRevenueScreen from '../screens/admin/TipsRevenueScreen';
 import AdminBroadcastScreen from '../screens/admin/AdminBroadcastScreen';
 import AdminKYCScreen from '../screens/admin/AdminKYCScreen';
 
@@ -141,6 +143,8 @@ export default function AdminNavigator() {
       <Stack.Screen name="AdminReviews" component={AdminReviewsScreen} />
       <Stack.Screen name="AdminNotifications" component={AdminNotificationsScreen} />
       <Stack.Screen name="AdminRevenue" component={AdminRevenueScreen} />
+      <Stack.Screen name="FeaturedRevenue" component={FeaturedRevenueScreen} />
+      <Stack.Screen name="TipsRevenue" component={TipsRevenueScreen} />
       <Stack.Screen name="AdminBroadcast" component={AdminBroadcastScreen} />
     </Stack.Navigator>
   );

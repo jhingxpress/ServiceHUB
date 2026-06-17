@@ -112,6 +112,8 @@ export type AdminStackParamList = {
   AdminReviews: undefined;
   AdminNotifications: undefined;
   AdminRevenue: undefined;
+  FeaturedRevenue: undefined;
+  TipsRevenue: undefined;
   AdminBroadcast: undefined;
 };
 

@@ -69,14 +69,13 @@ export default function AdminDashboardScreen() {
         supabase.from('bookings').select('id', { count: 'exact', head: true }),
         supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'completed'),
         supabase.from('payments').select('amount').eq('status', 'completed'),
-        // Paid featured payments — fetch all, filter is_featured client-side
-        // NOTE: do NOT add .eq('providers.is_featured', false) here; PostgREST
-        // embedded-resource boolean filters silently null out the result set.
+        // Pending featured requests — query featured_requests directly so that
+        // approved/rejected requests are never surfaced as actionable items.
         supabase
-          .from('featured_payments')
-          .select('provider_id, paid_at, providers!inner(id, business_name, is_featured, users(full_name))')
-          .eq('status', 'paid')
-          .order('paid_at', { ascending: false }),
+          .from('featured_requests')
+          .select('provider_id, created_at, providers!provider_id(id, business_name)')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false }),
       ]);
 
     const revenue = (revenueRes.data ?? []).reduce(
@@ -88,22 +87,10 @@ export default function AdminDashboardScreen() {
       console.error('[AdminDashboard] featuredRequests query error:', featPayRes.error);
     }
 
-    // Deduplicate by provider_id — keep only the most recent paid payment per provider.
-    // Skip providers already approved (is_featured === true); treat false/null as pending.
-    const seen = new Set<string>();
-    const deduped: FeaturedRequestItem[] = [];
-    for (const row of (featPayRes.data ?? []) as any[]) {
-      if (seen.has(row.provider_id)) continue;
-      if (row.providers?.is_featured === true) continue;
-      seen.add(row.provider_id);
-      deduped.push({
-        provider_id: row.provider_id,
-        displayName:
-          row.providers?.business_name ??
-          row.providers?.users?.full_name ??
-          'Unknown Provider',
-      });
-    }
+    const deduped: FeaturedRequestItem[] = (featPayRes.data ?? []).map((row: any) => ({
+      provider_id: row.provider_id,
+      displayName: (row.providers as any)?.business_name ?? 'Unknown Provider',
+    }));
     setFeaturedRequests(deduped);
 
     setStats({

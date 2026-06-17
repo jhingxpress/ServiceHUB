@@ -255,6 +255,25 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
         .eq('status', 'pending');
       if (error) throw error;
       setHasPendingRequest(false);
+      // Notify provider of rejection (non-fatal)
+      try {
+        const { data: prov } = await supabase
+          .from('providers')
+          .select('user_id')
+          .eq('id', providerId)
+          .single();
+        if (prov?.user_id) {
+          await supabase.from('notifications').insert({
+            user_id: prov.user_id,
+            type: 'system',
+            title: 'Featured Request Not Approved',
+            body: 'Your request for Featured Provider status was not approved at this time. You may resubmit after resolving any outstanding issues.',
+            data: { type: 'featured_rejected', providerId },
+          });
+        }
+      } catch (notifyErr) {
+        console.warn('[rejectFeaturedRequest] Notification failed (non-fatal):', notifyErr);
+      }
       Alert.alert('Done', 'Featured request rejected.');
     } catch (err: any) {
       Alert.alert('Error', err?.message ?? 'Failed to reject request.');
