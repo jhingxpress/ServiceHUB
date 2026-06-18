@@ -204,6 +204,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           .from('featured_payments')
           .select('id, amount, currency, status, paymongo_checkout_id, paymongo_payment_id, checkout_url, paid_at, created_at')
           .eq('provider_id', providerId)
+          .order('paid_at', { ascending: false, nullsFirst: false })
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
@@ -255,22 +256,15 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
         .eq('status', 'pending');
       if (error) throw error;
       setHasPendingRequest(false);
-      // Notify provider of rejection (non-fatal)
+      // Notify provider of rejection — providers.id = auth.users.id (no separate user_id column)
       try {
-        const { data: prov } = await supabase
-          .from('providers')
-          .select('user_id')
-          .eq('id', providerId)
-          .single();
-        if (prov?.user_id) {
-          await supabase.from('notifications').insert({
-            user_id: prov.user_id,
-            type: 'system',
-            title: 'Featured Request Not Approved',
-            body: 'Your request for Featured Provider status was not approved at this time. You may resubmit after resolving any outstanding issues.',
-            data: { type: 'featured_rejected', providerId },
-          });
-        }
+        await supabase.from('notifications').insert({
+          user_id: providerId,
+          type: 'system',
+          title: 'Featured Request Not Approved',
+          body: 'Your request for Featured Provider status was not approved at this time. You may resubmit after resolving any outstanding issues.',
+          data: { type: 'featured_rejected', providerId },
+        });
       } catch (notifyErr) {
         console.warn('[rejectFeaturedRequest] Notification failed (non-fatal):', notifyErr);
       }
@@ -302,19 +296,51 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
         performed_by: user?.id ?? null,
         notes: `Featured until ${featuredUntil.slice(0, 10)} (request approved)`,
       });
+      // Capture request ID before marking it approved (needed to update linked payment)
+      const { data: pendingReq } = await supabase
+        .from('featured_requests')
+        .select('id')
+        .eq('provider_id', providerId)
+        .eq('status', 'pending')
+        .maybeSingle();
       await supabase
         .from('featured_requests')
         .update({ status: 'approved', updated_at: new Date().toISOString() })
         .eq('provider_id', providerId)
         .eq('status', 'pending');
+      // Mark linked payment as paid — admin approval is the manual confirmation path;
+      // the webhook (.eq('status','pending') guard) won't overwrite an already-paid row.
+      if (pendingReq?.id) {
+        await supabase
+          .from('featured_payments')
+          .update({ status: 'paid', paid_at: new Date().toISOString() })
+          .eq('featured_request_id', pendingReq.id)
+          .eq('status', 'pending');
+      }
       setHasPendingRequest(false);
       setProvider((p) => p ? { ...p, is_featured: true, featured_until: featuredUntil } : p);
+      // In-app notification — guaranteed regardless of push token (providers.id = auth.users.id)
+      try {
+        const untilLabel = new Date(featuredUntil).toLocaleDateString('en-PH', {
+          month: 'short', day: 'numeric', year: 'numeric',
+        });
+        await supabase.from('notifications').insert({
+          user_id: providerId,
+          type: 'system',
+          title: '⭐ Featured Provider Approved',
+          body: `Congratulations! Your Featured Provider status is now active until ${untilLabel}.`,
+          data: { type: 'featured_approved', providerId },
+        });
+      } catch (inAppErr) {
+        console.warn('[approveFeaturedRequest] In-app notification failed (non-fatal):', inAppErr);
+      }
+      // Push notification — non-fatal
       try {
         await supabase.functions.invoke('notify-featured-approved', {
           body: { provider_id: providerId, featured_until: featuredUntil },
         });
       } catch (notifyErr) {
-        console.warn('[approveFeaturedRequest] Notification failed (non-fatal):', notifyErr);
+        console.warn('[approveFeaturedRequest] Push notification failed (non-fatal):', notifyErr);
       }
       Alert.alert('Approved', `Featured status granted until ${featuredUntil.slice(0, 10)}.`);
     } catch (err: any) {
