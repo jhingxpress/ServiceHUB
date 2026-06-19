@@ -26,6 +26,7 @@ import NotificationCenterScreen from '../screens/customer/NotificationCenterScre
 import ReportScreen from '../screens/shared/ReportScreen';
 import ProviderReviewsScreen from '../screens/provider/ProviderReviewsScreen';
 import ProviderMessagesScreen from '../screens/provider/ProviderMessagesScreen';
+import ProviderAnalyticsScreen from '../screens/provider/ProviderAnalyticsScreen';
 
 const Stack = createNativeStackNavigator<ProviderStackParamList>();
 const Tab = createBottomTabNavigator<ProviderTabParamList>();
@@ -144,6 +145,7 @@ export default function ProviderNavigator() {
           <Stack.Screen name="ProviderServicePreview" component={ProviderServicePreviewScreen} />
           <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} />
           <Stack.Screen name="ProviderReviews" component={ProviderReviewsScreen} />
+          <Stack.Screen name="ProviderAnalytics" component={ProviderAnalyticsScreen} />
           <Stack.Screen name="ReportScreen" component={ReportScreen} />
         </>
       ) : isPending ? (

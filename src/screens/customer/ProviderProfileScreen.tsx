@@ -14,7 +14,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
-import { Provider, Review } from '../../types';
+import { useAuthStore } from '../../stores/authStore';
+import { Provider, Review, Availability } from '../../types';
+import { getProviderOpenStatus, OpenStatus } from '../../utils/scheduleHelpers';
+import { trackProviderView } from '../../utils/analytics';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 import StarRating from '../../components/ui/StarRating';
@@ -35,10 +38,13 @@ export default function ProviderProfileScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RouteType>();
   const { providerId } = route.params;
+  const { user } = useAuthStore();
 
   const [provider, setProvider] = useState<Provider | null>(null);
   const [services, setServices] = useState<SubService[]>([]);
   const [reviews, setReviews] = useState<ReviewWithMedia[]>([]);
+  const [availability, setAvailability] = useState<Availability[]>([]);
+  const [openStatus, setOpenStatus] = useState<OpenStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedService, setExpandedService] = useState<string | null>(null);
   const [viewerVisible, setViewerVisible] = useState(false);
@@ -83,6 +89,28 @@ export default function ProviderProfileScreen() {
       }));
       setServices(rawServices);
       setReviews((revRes.data ?? []) as unknown as ReviewWithMedia[]);
+
+      // Track profile view (non-blocking, deduplicated, never throws)
+      if (user && user.id !== providerId) {
+        trackProviderView(providerId, user.id);
+      }
+
+      // Non-blocking: load schedule and compute open/closed status
+      try {
+        const { data: avails } = await supabase
+          .from('availability')
+          .select('day_of_week, start_time, end_time, is_available')
+          .eq('provider_id', providerId)
+          .eq('is_available', true)
+          .order('day_of_week');
+        const rows = (avails ?? []) as Availability[];
+        setAvailability(rows);
+        setOpenStatus(getProviderOpenStatus(rows));
+      } catch {
+        setAvailability([]);
+        setOpenStatus(null);
+      }
+
       setLoading(false);
     };
     load();
@@ -158,6 +186,17 @@ export default function ProviderProfileScreen() {
                 )}
               </View>
               <Text style={styles.categoryText}>{(provider as any).categories?.name ?? 'Services'}</Text>
+              {openStatus && (
+                <View style={styles.openStatusWrap}>
+                  <View style={[styles.openStatusDot, { backgroundColor: openStatus.color }]} />
+                  <Text style={[styles.openStatusLabel, { color: openStatus.color }]}>
+                    {openStatus.label}
+                  </Text>
+                  {openStatus.subLabel ? (
+                    <Text style={styles.openStatusSub}>{openStatus.subLabel}</Text>
+                  ) : null}
+                </View>
+              )}
               <View style={styles.ratingRow}>
                 <StarRating rating={provider.rating} size={14} />
                 <Text style={styles.ratingNum}>{Number(provider.rating).toFixed(1)}</Text>
@@ -467,4 +506,15 @@ const styles = StyleSheet.create({
   ctaPrice: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.bold, color: COLORS.text },
   ctaLabel: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
   ctaBtn: { minWidth: 130 },
+  openStatusWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: COLORS.surfaceSecondary,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: 8, paddingVertical: 3,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  openStatusDot: { width: 6, height: 6, borderRadius: 3 },
+  openStatusLabel: { fontFamily: FONTS.semiBold, fontSize: FONTS.sizes.xs },
+  openStatusSub: { fontFamily: FONTS.regular, fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginLeft: 4 },
 });

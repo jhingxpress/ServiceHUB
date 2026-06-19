@@ -12,7 +12,9 @@ import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { useFavorites } from '../../hooks/useFavorites';
-import { Provider, Service, Review, ProviderBadge } from '../../types';
+import { Provider, Service, Review, ProviderBadge, Availability } from '../../types';
+import { getProviderOpenStatus, OpenStatus } from '../../utils/scheduleHelpers';
+import { trackProviderView } from '../../utils/analytics';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import { CustomerStackParamList } from '../../navigation/types';
 import Avatar from '../../components/ui/Avatar';
@@ -51,6 +53,8 @@ export default function ProviderStorefrontScreen() {
   const [provider, setProvider] = useState<Provider | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [availability, setAvailability] = useState<Availability[]>([]);
+  const [openStatus, setOpenStatus] = useState<OpenStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingFavorite, setSavingFavorite] = useState(false);
   const [viewerVisible, setViewerVisible] = useState(false);
@@ -152,6 +156,29 @@ export default function ProviderStorefrontScreen() {
     setProvider(prov as unknown as Provider);
     setServices(servicesWithRelations);
     setReviews((revs ?? []) as unknown as Review[]);
+
+    // Track profile view (non-blocking, deduplicated, never throws)
+    if (user && user.id !== providerId) {
+      trackProviderView(providerId, user.id);
+    }
+
+    // Non-blocking: load schedule and compute open/closed status
+    try {
+      const { data: avails } = await supabase
+        .from('availability')
+        .select('day_of_week, start_time, end_time, is_available')
+        .eq('provider_id', providerId)
+        .eq('is_available', true)
+        .order('day_of_week');
+      const rows = (avails ?? []) as Availability[];
+      setAvailability(rows);
+      setOpenStatus(getProviderOpenStatus(rows));
+    } catch {
+      // Schedule display is optional; never block profile loading
+      setAvailability([]);
+      setOpenStatus(null);
+    }
+
     setLoading(false);
   }, [providerId]);
 
@@ -258,6 +285,17 @@ export default function ProviderStorefrontScreen() {
                 {provider.is_available ? 'Available' : 'Unavailable'}
               </Text>
             </View>
+            {openStatus && (
+              <View style={styles.openStatusWrap}>
+                <View style={[styles.openStatusDot, { backgroundColor: openStatus.color }]} />
+                <Text style={[styles.openStatusLabel, { color: openStatus.color }]}>
+                  {openStatus.label}
+                </Text>
+                {openStatus.subLabel ? (
+                  <Text style={styles.openStatusSub}>{openStatus.subLabel}</Text>
+                ) : null}
+              </View>
+            )}
             {(provider as any).provider_stats?.average_response_minutes > 0 && (
               <View style={styles.responseTimeWrap}>
                 <Ionicons name="timer-outline" size={12} color={COLORS.textLight} />
@@ -641,4 +679,14 @@ const styles = StyleSheet.create({
   reviewTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text, marginTop: SPACING.sm },
   reviewPhotos: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm, flexWrap: 'wrap' },
   reviewPhotoThumb: { width: 80, height: 80, borderRadius: BORDER_RADIUS.md },
+  openStatusWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: COLORS.surfaceSecondary,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: 8, paddingVertical: 3,
+    alignSelf: 'flex-start',
+  },
+  openStatusDot: { width: 6, height: 6, borderRadius: 3 },
+  openStatusLabel: { fontFamily: FONTS.semiBold, fontSize: FONTS.sizes.xs },
+  openStatusSub: { fontFamily: FONTS.regular, fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginLeft: 4 },
 });

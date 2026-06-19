@@ -537,6 +537,7 @@ export default function ProviderDashboard() {
               { label: 'Messages', icon: 'chatbubble-outline', action: () => navigation.getParent()?.navigate('Messages'), badge: undefined },
               { label: 'Services', icon: 'construct-outline', action: () => navigation.navigate('ManageServices') },
               { label: 'Reviews', icon: 'star-outline', action: () => navigation.navigate('ProviderReviews'), badge: newReviewCount > 0 ? newReviewCount.toString() : undefined },
+              { label: 'Analytics', icon: 'analytics-outline', action: () => navigation.navigate('ProviderAnalytics') },
             ].map((q) => (
               <TouchableOpacity
                 key={q.label}

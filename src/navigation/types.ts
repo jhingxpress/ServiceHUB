@@ -85,6 +85,7 @@ export type ProviderStackParamList = {
   PendingApproval: undefined;
   NotificationCenter: undefined;
   ProviderReviews: undefined;
+  ProviderAnalytics: undefined;
   ReportScreen: { reportedUserId: string; bookingId?: string; reportedUserName?: string };
 };
 
