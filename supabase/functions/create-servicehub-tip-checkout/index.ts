@@ -161,10 +161,16 @@ serve(async (req: Request) => {
   }
 
   // ── Persist checkout ID + URL on tip record ───────────────
-  await db
+  const { error: saveErr } = await db
     .from('servicehub_tips')
     .update({ paymongo_checkout_id: checkoutId, checkout_url: checkoutUrl })
     .eq('id', tipId);
+
+  if (saveErr) {
+    // Non-fatal: webhook fallback will still find the row via tip_id in metadata.
+    // Log so the issue is visible in Edge Function logs.
+    console.error(`[tip-checkout] Failed to persist checkout_id on tip ${tipId}:`, saveErr);
+  }
 
   console.log(`[tip-checkout] Tip ${tipId} — checkout created: ${checkoutId}`);
 

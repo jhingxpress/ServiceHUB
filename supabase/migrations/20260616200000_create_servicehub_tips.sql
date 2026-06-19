@@ -7,7 +7,7 @@
 -- ── Table ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.servicehub_tips (
   id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id               UUID NOT NULL REFERENCES auth.users(id) ON DELETE SET NULL,
+  user_id               UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   amount                INTEGER NOT NULL CHECK (amount >= 2000 AND amount <= 1000000), -- centavos: ₱20–₱10,000
   currency              TEXT NOT NULL DEFAULT 'PHP',
   status                TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'failed')),

@@ -17,9 +17,12 @@
 //
 // PayMongo signature format:
 //   Header:  paymongo-signature
-//   Value:   t=<unix_timestamp>,te=<test_sig>,li=<live_sig>
+//   Value:   t=<unix_timestamp>,te=<test_sig>          (test mode)
+//            t=<unix_timestamp>,li=<live_sig>          (live mode)
+//            t=<unix_timestamp>,te=<test_sig>,li=...   (both present — rare)
 //   Message: <timestamp>.<raw_body>
 //   Hash:    HMAC-SHA256(PAYMONGO_WEBHOOK_SECRET, message) → hex
+//   Accept:  HMAC matches te OR li (whichever is present)
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -66,15 +69,17 @@ serve(async (req: Request) => {
 
   const sigParts = Object.fromEntries(
     sigHeader.split(',').map((part) => {
-      const [k, v] = part.split('=');
-      return [k, v];
+      const eqIdx = part.indexOf('=');
+      return eqIdx === -1 ? [part, ''] : [part.slice(0, eqIdx), part.slice(eqIdx + 1)];
     })
   );
 
   const timestamp = sigParts['t'];
-  const testSig   = sigParts['te'];
+  const testSig   = sigParts['te'] || null;  // present in test-mode events
+  const liveSig   = sigParts['li'] || null;  // present in live-mode events
 
-  if (!timestamp || !testSig) {
+  // Malformed if timestamp is missing or neither signature variant is present.
+  if (!timestamp || (!testSig && !liveSig)) {
     console.error('[webhook] Malformed paymongo-signature header:', sigHeader);
     return json({ error: 'Malformed signature header' }, 401);
   }
@@ -91,8 +96,14 @@ serve(async (req: Request) => {
   const message  = `${timestamp}.${rawBody}`;
   const expected = await generateHmacSHA256(webhookSecret, message);
 
-  if (expected !== testSig) {
-    console.error('[webhook] Signature mismatch — verify PAYMONGO_WEBHOOK_SECRET is correct');
+  // Accept if the HMAC matches either the test sig or the live sig.
+  const sigMatches = (testSig && expected === testSig) || (liveSig && expected === liveSig);
+  if (!sigMatches) {
+    console.error(
+      '[webhook] Signature mismatch — te:', testSig ? 'present' : 'absent',
+      '| li:', liveSig ? 'present' : 'absent',
+      '| verify PAYMONGO_WEBHOOK_SECRET is correct'
+    );
     return json({ error: 'Invalid signature' }, 401);
   }
 
