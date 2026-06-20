@@ -18,6 +18,7 @@ import { toTitleCase } from '../../utils/formatting';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 import EmptyState from '../../components/ui/EmptyState';
+import FeaturedBadge from '../../components/marketplace/FeaturedBadge';
 
 type Props = NativeStackScreenProps<CustomerStackParamList, 'ProviderList'>;
 
@@ -31,6 +32,7 @@ interface ProviderItem {
   business_name: string | null;
   profile_photo_url: string | null;
   business_logo: string | null;
+  is_featured: boolean;
   category: { name: string; icon: string } | null;
   services: { name: string }[];
 }
@@ -48,7 +50,7 @@ export default function ProviderListScreen({ route, navigation }: Props) {
       .from('providers')
       .select(`
         id, bio, location, hourly_rate, rating, total_reviews,
-        business_name, profile_photo_url, business_logo,
+        business_name, profile_photo_url, business_logo, is_featured,
         category:categories(name, icon),
         services(name)
       `)
@@ -90,6 +92,7 @@ export default function ProviderListScreen({ route, navigation }: Props) {
       <Avatar uri={item.profile_photo_url ?? item.business_logo} name={item.business_name} size={56} borderColor={COLORS.primary} />
       <View style={styles.listCardInfo}>
         <Text style={styles.providerName}>{item.business_name ?? 'Provider'}</Text>
+        {item.is_featured && <FeaturedBadge style={{ marginTop: 2 }} />}
         <Text style={styles.categoryText}>{toTitleCase(item.category?.name ?? '')}</Text>
         <View style={styles.metaRow}>
           {!!item.rating && (
@@ -124,6 +127,7 @@ export default function ProviderListScreen({ route, navigation }: Props) {
     >
       <Avatar uri={item.profile_photo_url ?? item.business_logo} name={item.business_name} size={64} />
       <Text style={styles.gridName} numberOfLines={1}>{item.business_name ?? 'Pro'}</Text>
+      {item.is_featured && <FeaturedBadge style={{ marginTop: 2, alignSelf: 'center' }} />}
       <Text style={styles.gridCategory} numberOfLines={1}>{toTitleCase(item.category?.name ?? '')}</Text>
       {!!item.rating && (
         <View style={styles.gridRating}>

@@ -27,6 +27,7 @@ import ReportScreen from '../screens/shared/ReportScreen';
 import ProviderReviewsScreen from '../screens/provider/ProviderReviewsScreen';
 import ProviderMessagesScreen from '../screens/provider/ProviderMessagesScreen';
 import ProviderAnalyticsScreen from '../screens/provider/ProviderAnalyticsScreen';
+import HistoricalAnalyticsScreen from '../screens/provider/HistoricalAnalyticsScreen';
 import EarningsSummaryScreen from '../screens/provider/EarningsSummaryScreen';
 
 const Stack = createNativeStackNavigator<ProviderStackParamList>();
@@ -147,6 +148,7 @@ export default function ProviderNavigator() {
           <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} />
           <Stack.Screen name="ProviderReviews" component={ProviderReviewsScreen} />
           <Stack.Screen name="ProviderAnalytics" component={ProviderAnalyticsScreen} />
+          <Stack.Screen name="HistoricalAnalytics" component={HistoricalAnalyticsScreen} />
           <Stack.Screen name="EarningsSummary" component={EarningsSummaryScreen} />
           <Stack.Screen name="ReportScreen" component={ReportScreen} />
         </>

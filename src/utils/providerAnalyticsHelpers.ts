@@ -188,3 +188,71 @@ export function generateInsights(metrics: {
 
   return msgs;
 }
+
+/** Generate dashboard-specific insights from loaded data (read-only computation). */
+export function generateDashboardInsights(params: {
+  recentBookings: Array<{ status: string; created_at: string; service?: { name: string } | null }>;
+  providerRating: number;
+  totalReviews: number;
+  completedJobs: number;
+  profileViews: number;
+  responseRate: number;
+}): string[] {
+  const msgs: string[] = [];
+  const { recentBookings, providerRating, totalReviews, completedJobs, profileViews, responseRate } = params;
+
+  // Day-of-week insight
+  const dayCounts = new Array(7).fill(0);
+  recentBookings.forEach((b) => {
+    if (b.status === 'completed') {
+      dayCounts[new Date(b.created_at).getDay()] += 1;
+    }
+  });
+  const topDayIdx = dayCounts.indexOf(Math.max(...dayCounts));
+  if (topDayIdx >= 0 && dayCounts[topDayIdx] > 1) {
+    msgs.push(`${WEEKDAY_NAMES[topDayIdx]} generates the most bookings for you.`);
+  }
+
+  // Service popularity insight
+  const serviceCounts: Record<string, number> = {};
+  recentBookings.forEach((b) => {
+    const name = b.service?.name ?? 'Unknown';
+    serviceCounts[name] = (serviceCounts[name] ?? 0) + 1;
+  });
+  const topService = Object.entries(serviceCounts).sort((a, b) => b[1] - a[1])[0];
+  if (topService && topService[1] >= 2) {
+    const total = recentBookings.length;
+    const pct = Math.round((topService[1] / total) * 100);
+    msgs.push(`${topService[0]} accounts for ${pct}% of your recent bookings.`);
+  }
+
+  // Rating insight
+  if (providerRating >= 4.8 && totalReviews >= 10) {
+    msgs.push('Your rating is in the top tier — a strong competitive advantage.');
+  } else if (providerRating >= 4.5 && totalReviews >= 5) {
+    msgs.push('Your rating is excellent. Keep delivering great service.');
+  }
+
+  // Volume insight
+  if (completedJobs >= 50) {
+    msgs.push('You have completed 50+ jobs — a milestone that builds trust.');
+  } else if (completedJobs >= 20) {
+    msgs.push('Your growing experience is reflected in customer satisfaction.');
+  }
+
+  // Visibility insight
+  if (profileViews >= 100) {
+    msgs.push('Your profile is getting strong visibility.');
+  } else if (profileViews > 0 && profileViews < 30) {
+    msgs.push('Featured status can significantly increase your profile views.');
+  }
+
+  // Response rate insight
+  if (responseRate >= 0.95) {
+    msgs.push('Your response rate is outstanding — customers value reliability.');
+  } else if (responseRate > 0 && responseRate < 0.7) {
+    msgs.push('Improving your response rate can boost customer confidence.');
+  }
+
+  return msgs;
+}

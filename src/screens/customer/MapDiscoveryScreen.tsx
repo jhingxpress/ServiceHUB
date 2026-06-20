@@ -20,6 +20,7 @@ import { toTitleCase } from '../../utils/formatting';
 import { Category } from '../../types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
+import FeaturedBadge from '../../components/marketplace/FeaturedBadge';
 import { CustomerStackParamList } from '../../navigation/types';
 
 const SEARCH_RADIUS_KM = 50;
@@ -38,6 +39,7 @@ interface MapProvider {
   rating: number;
   total_reviews: number;
   hourly_rate: number | null;
+  is_featured: boolean;
   categories?: { name: string; icon: string; color: string } | null;
 }
 
@@ -86,7 +88,7 @@ export default function MapDiscoveryScreen() {
       let query = supabase
         .from('providers')
         .select(
-          'id, business_name, profile_photo_url, business_logo, category_id, latitude, longitude, rating, total_reviews, hourly_rate, status, is_verified, is_available, marketplace_status, deleted_at, categories(name, icon, color)'
+          'id, business_name, profile_photo_url, business_logo, category_id, latitude, longitude, rating, total_reviews, hourly_rate, is_featured, status, is_verified, is_available, marketplace_status, deleted_at, categories(name, icon, color)'
         )
         .eq('status', 'approved')
         .eq('is_verified', true)
@@ -231,6 +233,7 @@ export default function MapDiscoveryScreen() {
         <Avatar uri={item.profile_photo_url ?? item.business_logo} name={item.business_name} size={52} />
         <View style={styles.cardInfo}>
           <Text style={styles.cardName} numberOfLines={1}>{item.business_name ?? 'Provider'}</Text>
+          {item.is_featured && <FeaturedBadge style={{ marginTop: 2 }} />}
           <Text style={styles.cardCategory}>{toTitleCase(item.categories?.name) ?? 'Services'}</Text>
           <View style={styles.cardMeta}>
             <Ionicons name="star" size={12} color="#F59E0B" />
@@ -358,6 +361,7 @@ export default function MapDiscoveryScreen() {
                 <Callout tooltip>
                   <View style={styles.callout}>
                     <Text style={styles.calloutName} numberOfLines={1}>{p.business_name}</Text>
+                    {p.is_featured && <FeaturedBadge size="sm" style={{ marginTop: 2 }} />}
                     <View style={styles.calloutMeta}>
                       <Ionicons name="star" size={10} color="#F59E0B" />
                       <Text style={styles.calloutRating}>{Number(p.rating).toFixed(1)}</Text>

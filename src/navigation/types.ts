@@ -86,6 +86,7 @@ export type ProviderStackParamList = {
   NotificationCenter: undefined;
   ProviderReviews: undefined;
   ProviderAnalytics: undefined;
+  HistoricalAnalytics: undefined;
   EarningsSummary: undefined;
   ReportScreen: { reportedUserId: string; bookingId?: string; reportedUserName?: string };
 };

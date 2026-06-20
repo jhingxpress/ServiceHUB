@@ -27,6 +27,7 @@ interface ServiceItem {
   provider_name: string | null;
   provider_rating: number | null;
   provider_total_reviews: number | null;
+  provider_is_featured?: boolean;
   image_url: string | null;
 }
 
@@ -59,7 +60,7 @@ export default function CategoryListScreen({ route, navigation }: Props) {
         .select(`
           id, name, price, provider_id,
           provider:providers!inner(
-            business_name, rating, total_reviews, profile_photo_url, business_logo
+            business_name, rating, total_reviews, profile_photo_url, business_logo, is_featured
           )
         `)
         .in('provider.category_id', categoryIds)
@@ -107,6 +108,7 @@ export default function CategoryListScreen({ route, navigation }: Props) {
         provider_name: s.provider?.business_name ?? null,
         provider_rating: s.provider?.rating ?? null,
         provider_total_reviews: s.provider?.total_reviews ?? null,
+        provider_is_featured: s.provider?.is_featured ?? false,
         image_url: imageMap[s.id] ?? null,
       }));
 
@@ -138,6 +140,7 @@ export default function CategoryListScreen({ route, navigation }: Props) {
       onPress={() => navigation.navigate('ServiceDetail', { serviceId: item.id })}
       showBookButton
       onBook={() => navigation.navigate('ServiceDetail', { serviceId: item.id })}
+      providerIsFeatured={item.provider_is_featured}
     />
   );
 

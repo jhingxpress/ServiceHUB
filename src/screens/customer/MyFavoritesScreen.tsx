@@ -15,6 +15,7 @@ import { useFavorites } from '../../hooks/useFavorites';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 import EmptyState from '../../components/ui/EmptyState';
+import FeaturedBadge from '../../components/marketplace/FeaturedBadge';
 
 type Props = NativeStackScreenProps<CustomerStackParamList, 'MyFavorites'>;
 
@@ -39,6 +40,7 @@ export default function MyFavoritesScreen({ navigation }: Props) {
         />
         <View style={styles.info}>
           <Text style={styles.name}>{provider.business_name ?? 'Provider'}</Text>
+          {(provider as any).is_featured && <FeaturedBadge style={{ marginTop: 2 }} />}
           <Text style={styles.category}>{(provider as any).categories?.name ?? ''}</Text>
           <View style={styles.metaRow}>
             {!!provider.rating && (

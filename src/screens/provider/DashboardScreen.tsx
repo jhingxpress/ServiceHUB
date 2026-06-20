@@ -22,6 +22,8 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { useNotificationStore, formatBadgeCount } from '../../stores/notificationStore';
 import { Booking, Provider, ProviderChecklist, ProviderPerformance, ProviderScore, BusinessStatus } from '../../types';
+import { computeReputationBadges } from '../../utils/reputationHelpers';
+import { generateDashboardInsights } from '../../utils/providerAnalyticsHelpers';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 import Badge from '../../components/ui/Badge';
@@ -239,6 +241,28 @@ export default function ProviderDashboard() {
           </View>
           <Avatar uri={avatarUri} name={user?.full_name} size={44} borderColor={COLORS.primary} />
         </View>
+
+        {/* Reputation Badges */}
+        {provider && (
+          <View style={styles.reputationRow}>
+            {computeReputationBadges({
+              is_featured: provider.is_featured ?? false,
+              rating: provider.rating ?? 0,
+              total_reviews: provider.total_reviews ?? 0,
+              completed_jobs: provider.completed_jobs ?? 0,
+              response_rate: (performance as any)?.response_rate ?? 0,
+              average_response_minutes: (performance as any)?.average_response_minutes ?? 0,
+              profile_views: performance?.profile_views ?? 0,
+              total_bookings: performance?.total_bookings ?? 0,
+              completion_rate: (performance as any)?.completion_rate ?? 0,
+            }).map((b) => (
+              <View key={b.key} style={[styles.reputationChip, { backgroundColor: b.color + '18' }]}>
+                <Ionicons name={b.icon as any} size={12} color={b.color} />
+                <Text style={[styles.reputationChipText, { color: b.color }]}>{b.label}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Business Status */}
         {provider && (
@@ -556,6 +580,28 @@ export default function ProviderDashboard() {
             ))}
           </View>
         </View>
+
+        {/* Smart Insights */}
+        {provider && recentBookings.length > 0 && (
+          <View style={styles.insightSection}>
+            <Text style={styles.sectionTitle}>Smart Insights</Text>
+            <View style={styles.insightCard}>
+              {generateDashboardInsights({
+                recentBookings: recentBookings as any,
+                providerRating: provider.rating ?? 0,
+                totalReviews: provider.total_reviews ?? 0,
+                completedJobs: provider.completed_jobs ?? 0,
+                profileViews: performance?.profile_views ?? 0,
+                responseRate: (performance as any)?.response_rate ?? 0,
+              }).map((insight, idx) => (
+                <View key={idx} style={styles.insightRow}>
+                  <Ionicons name="bulb-outline" size={16} color={COLORS.primary} />
+                  <Text style={styles.insightText}>{insight}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Business Performance — hidden when no meaningful activity */}
         {performance && (performance.profile_views > 0 || performance.total_bookings > 0 || performance.completion_rate > 0) && (
@@ -876,4 +922,21 @@ const styles = StyleSheet.create({
   featuredWarnRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginBottom: 4 },
   featuredWarnText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.warning },
   featuredDaysText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
+  reputationRow: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs,
+    marginHorizontal: SPACING.md, marginTop: SPACING.sm,
+  },
+  reputationChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    borderRadius: BORDER_RADIUS.full, paddingHorizontal: 10, paddingVertical: 4,
+  },
+  reputationChipText: { fontFamily: FONTS.medium, fontSize: FONTS.sizes.xs },
+  insightSection: { marginHorizontal: SPACING.md, marginTop: SPACING.lg },
+  insightCard: {
+    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border,
+    gap: SPACING.sm,
+  },
+  insightRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm },
+  insightText: { flex: 1, fontFamily: FONTS.regular, fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, lineHeight: 20 },
 });

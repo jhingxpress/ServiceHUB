@@ -13,8 +13,9 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { useFavorites } from '../../hooks/useFavorites';
 import { Provider, Service, Review, ProviderBadge, Availability } from '../../types';
-import { getProviderOpenStatus, OpenStatus } from '../../utils/scheduleHelpers';
+import { getProviderOpenStatus, OpenStatus, formatBusinessHours } from '../../utils/scheduleHelpers';
 import { trackProviderView } from '../../utils/analytics';
+import { computeReputationBadges } from '../../utils/reputationHelpers';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import { CustomerStackParamList } from '../../navigation/types';
 import Avatar from '../../components/ui/Avatar';
@@ -222,6 +223,18 @@ export default function ProviderStorefrontScreen() {
   const badges = (provider.provider_badges ?? []) as ProviderBadge[];
   const gallery = provider.provider_gallery ?? [];
 
+  const reputationBadges = computeReputationBadges({
+    is_featured: provider.is_featured ?? false,
+    rating: provider.rating ?? 0,
+    total_reviews: (provider as any).provider_stats?.total_reviews ?? provider.total_reviews ?? 0,
+    completed_jobs: (provider as any).provider_stats?.completed_jobs ?? provider.completed_jobs ?? 0,
+    response_rate: (provider as any).provider_stats?.response_rate ?? 0,
+    average_response_minutes: (provider as any).provider_stats?.average_response_minutes ?? 0,
+    profile_views: (provider as any).provider_performance?.profile_views ?? 0,
+    total_bookings: (provider as any).provider_performance?.total_bookings ?? 0,
+    completion_rate: (provider as any).provider_performance?.completion_rate ?? 0,
+  });
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -306,6 +319,19 @@ export default function ProviderStorefrontScreen() {
             )}
           </View>
 
+          {/* Business Hours */}
+          {availability.length > 0 && (
+            <View style={styles.hoursSection}>
+              <Text style={styles.hoursTitle}>Business Hours</Text>
+              {formatBusinessHours(availability).map((row, idx) => (
+                <View key={idx} style={styles.hoursRow}>
+                  <Text style={styles.hoursDays}>{row.days}</Text>
+                  <Text style={styles.hoursTime}>{row.hours}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
           {/* Trust Metrics */}
           <View style={styles.metricsRow}>
             <View style={styles.metric}>
@@ -334,7 +360,7 @@ export default function ProviderStorefrontScreen() {
           </View>
 
           {/* Badges */}
-          {(badges.length > 0 || provider.is_featured) && (
+          {(badges.length > 0 || provider.is_featured || reputationBadges.length > 0) && (
             <View style={styles.badgesRow}>
               {provider.is_featured && (
                 <View style={[styles.badgeChip, styles.featuredBadgeChip]}>
@@ -346,6 +372,12 @@ export default function ProviderStorefrontScreen() {
                 <View key={b.id} style={styles.badgeChip}>
                   <Ionicons name={BADGE_ICONS[b.badge_type] ?? 'ribbon'} size={12} color={COLORS.primary} />
                   <Text style={styles.badgeChipText}>{BADGE_LABELS[b.badge_type] ?? b.badge_type}</Text>
+                </View>
+              ))}
+              {reputationBadges.map((b) => (
+                <View key={b.key} style={[styles.badgeChip, { backgroundColor: b.color + '18' }]}>
+                  <Ionicons name={b.icon as any} size={12} color={b.color} />
+                  <Text style={[styles.badgeChipText, { color: b.color }]}>{b.label}</Text>
                 </View>
               ))}
             </View>
@@ -689,4 +721,9 @@ const styles = StyleSheet.create({
   openStatusDot: { width: 6, height: 6, borderRadius: 3 },
   openStatusLabel: { fontFamily: FONTS.semiBold, fontSize: FONTS.sizes.xs },
   openStatusSub: { fontFamily: FONTS.regular, fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginLeft: 4 },
+  hoursSection: { marginTop: SPACING.md },
+  hoursTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: SPACING.xs },
+  hoursRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+  hoursDays: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
+  hoursTime: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
 });

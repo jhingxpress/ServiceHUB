@@ -16,7 +16,7 @@ import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { Provider, Review, Availability } from '../../types';
-import { getProviderOpenStatus, OpenStatus } from '../../utils/scheduleHelpers';
+import { getProviderOpenStatus, OpenStatus, formatBusinessHours } from '../../utils/scheduleHelpers';
 import { trackProviderView } from '../../utils/analytics';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
@@ -274,6 +274,19 @@ export default function ProviderProfileScreen() {
               <Text style={styles.bioText}>{provider.bio}</Text>
             </View>
           ) : null}
+
+          {/* Business Hours */}
+          {availability.length > 0 && (
+            <View style={styles.hoursSection}>
+              <Text style={styles.hoursTitle}>Business Hours</Text>
+              {formatBusinessHours(availability).map((row, idx) => (
+                <View key={idx} style={styles.hoursRow}>
+                  <Text style={styles.hoursDays}>{row.days}</Text>
+                  <Text style={styles.hoursTime}>{row.hours}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Sub-services with options */}
@@ -517,4 +530,9 @@ const styles = StyleSheet.create({
   openStatusDot: { width: 6, height: 6, borderRadius: 3 },
   openStatusLabel: { fontFamily: FONTS.semiBold, fontSize: FONTS.sizes.xs },
   openStatusSub: { fontFamily: FONTS.regular, fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginLeft: 4 },
+  hoursSection: { marginTop: SPACING.md },
+  hoursTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: SPACING.xs },
+  hoursRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+  hoursDays: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
+  hoursTime: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
 });

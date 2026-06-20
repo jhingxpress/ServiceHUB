@@ -160,3 +160,57 @@ function findNextOpenDay(
   }
   return null;
 }
+
+export interface BusinessHourRow {
+  days: string;
+  hours: string;
+}
+
+/** Format availability rows into readable business hours, grouping consecutive days. */
+export function formatBusinessHours(schedule: Availability[]): BusinessHourRow[] {
+  if (!schedule || schedule.length === 0) return [];
+
+  const active = [...schedule]
+    .filter((s) => s.is_available)
+    .sort((a, b) => a.day_of_week - b.day_of_week);
+
+  if (active.length === 0) return [{ days: 'All days', hours: 'Closed' }];
+
+  const rows: BusinessHourRow[] = [];
+  let currentGroup: number[] = [];
+  let currentHours = '';
+
+  const hoursKey = (s: Availability) => {
+    if (is24Hour(s.start_time, s.end_time)) return 'Open 24 hours';
+    const overnight = minutesFromMidnight(s.end_time) < minutesFromMidnight(s.start_time);
+    if (overnight) {
+      return `${formatTime12h(s.start_time)} – ${formatTime12h(s.end_time)}`;
+    }
+    return `${formatTime12h(s.start_time)} – ${formatTime12h(s.end_time)}`;
+  };
+
+  const flushGroup = () => {
+    if (currentGroup.length === 0) return;
+    const days = currentGroup.length > 2
+      ? `${DAY_NAMES[currentGroup[0]]} – ${DAY_NAMES[currentGroup[currentGroup.length - 1]]}`
+      : currentGroup.map((d) => DAY_NAMES[d]).join(', ');
+    rows.push({ days, hours: currentHours });
+    currentGroup = [];
+  };
+
+  for (const s of active) {
+    const hk = hoursKey(s);
+    const lastDay = currentGroup[currentGroup.length - 1];
+    if (currentGroup.length === 0 || (s.day_of_week === lastDay + 1 && hk === currentHours)) {
+      currentGroup.push(s.day_of_week);
+      currentHours = hk;
+    } else {
+      flushGroup();
+      currentGroup = [s.day_of_week];
+      currentHours = hk;
+    }
+  }
+  flushGroup();
+
+  return rows;
+}

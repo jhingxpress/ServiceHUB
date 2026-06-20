@@ -27,6 +27,21 @@ import {
 
 type NavProp = NativeStackNavigationProp<ProviderStackParamList>;
 
+interface FeaturedGrowth {
+  beforeViews: number;
+  beforeRequests: number;
+  beforeCompleted: number;
+  duringViews: number;
+  duringRequests: number;
+  duringCompleted: number;
+  viewGrowth: number;
+  requestGrowth: number;
+  completedGrowth: number;
+  conversionBefore: number;
+  conversionDuring: number;
+  insights: string[];
+}
+
 interface AnalyticsData {
   profile_views: number;
   booking_requests: number;
@@ -42,6 +57,7 @@ interface AnalyticsData {
   views_while_featured: number;
   requests_while_featured: number;
   completed_while_featured: number;
+  featuredGrowth: FeaturedGrowth | null;
   monthly: MonthlyTrends;
   topServices: TopService[];
   repeatCustomers: RepeatCustomerData;
@@ -73,6 +89,17 @@ const METRIC_COLOR: Record<string, string> = {
   total_reviews: '#F59E0B',
   conversion_rate: '#2563EB',
 };
+
+function GrowthPill({ value }: { value: number }) {
+  const isPositive = value >= 0;
+  return (
+    <View style={[styles.pill, { backgroundColor: isPositive ? '#D1FAE5' : '#FEE2E2' }]}>
+      <Text style={[styles.pillText, { color: isPositive ? '#059669' : '#DC2626' }]}>
+        {isPositive ? '+' : ''}{value}%
+      </Text>
+    </View>
+  );
+}
 
 export default function ProviderAnalyticsScreen() {
   const navigation = useNavigation<NavProp>();
@@ -141,17 +168,68 @@ export default function ProviderAnalyticsScreen() {
       let viewsWhileFeatured = 0;
       let requestsWhileFeatured = 0;
       let completedWhileFeatured = 0;
+      let featuredGrowth: FeaturedGrowth | null = null;
+
       if (provider.is_featured && featuredPayment?.paid_at) {
         const start = featuredPayment.paid_at;
         const end = provider.featured_until ?? new Date().toISOString();
-        const [viewsRes, requestsRes, completedRes] = await Promise.all([
+        const featuredDuration = new Date(end).getTime() - new Date(start).getTime();
+        const beforeStart = new Date(new Date(start).getTime() - featuredDuration).toISOString();
+
+        const [viewsRes, requestsRes, completedRes, beforeViewsRes, beforeRequestsRes, beforeCompletedRes] = await Promise.all([
           supabase.from('provider_views').select('*', { count: 'exact', head: true }).eq('provider_id', providerId).gte('viewed_at', start).lte('viewed_at', end),
           supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('provider_id', providerId).gte('created_at', start).lte('created_at', end),
           supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('provider_id', providerId).eq('status', 'completed').gte('created_at', start).lte('created_at', end),
+          supabase.from('provider_views').select('*', { count: 'exact', head: true }).eq('provider_id', providerId).gte('viewed_at', beforeStart).lt('viewed_at', start),
+          supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('provider_id', providerId).gte('created_at', beforeStart).lt('created_at', start),
+          supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('provider_id', providerId).eq('status', 'completed').gte('created_at', beforeStart).lt('created_at', start),
         ]);
-        viewsWhileFeatured = viewsRes.count ?? 0;
-        requestsWhileFeatured = requestsRes.count ?? 0;
-        completedWhileFeatured = completedRes.count ?? 0;
+
+        const duringViews = viewsRes.count ?? 0;
+        const duringRequests = requestsRes.count ?? 0;
+        const duringCompleted = completedRes.count ?? 0;
+        viewsWhileFeatured = duringViews;
+        requestsWhileFeatured = duringRequests;
+        completedWhileFeatured = duringCompleted;
+
+        const beforeViews = beforeViewsRes.count ?? 0;
+        const beforeRequests = beforeRequestsRes.count ?? 0;
+        const beforeCompleted = beforeCompletedRes.count ?? 0;
+
+        const growth = (before: number, during: number) =>
+          before > 0 ? Math.round(((during - before) / before) * 100) : (during > 0 ? 100 : 0);
+
+        const conversionBefore = beforeViews > 0 ? Math.min(100, (beforeCompleted / beforeViews) * 100) : 0;
+        const conversionDuring = duringViews > 0 ? Math.min(100, (duringCompleted / duringViews) * 100) : 0;
+
+        const growthInsights: string[] = [];
+        if (duringViews > beforeViews) {
+          growthInsights.push('Featured increased your profile visibility.');
+        }
+        if (duringRequests > beforeRequests) {
+          growthInsights.push('Customers are viewing your profile more frequently.');
+        }
+        if (conversionDuring >= conversionBefore && conversionDuring > 0) {
+          growthInsights.push('Featured conversion remains strong.');
+        }
+        if (growthInsights.length === 0) {
+          growthInsights.push('Featured status is active. Metrics will improve as more customers discover you.');
+        }
+
+        featuredGrowth = {
+          beforeViews,
+          beforeRequests,
+          beforeCompleted,
+          duringViews,
+          duringRequests,
+          duringCompleted,
+          viewGrowth: growth(beforeViews, duringViews),
+          requestGrowth: growth(beforeRequests, duringRequests),
+          completedGrowth: growth(beforeCompleted, duringCompleted),
+          conversionBefore,
+          conversionDuring,
+          insights: growthInsights,
+        };
       }
 
       // ── Sprint 4.1 Metrics ──
@@ -189,6 +267,7 @@ export default function ProviderAnalyticsScreen() {
         views_while_featured: viewsWhileFeatured,
         requests_while_featured: requestsWhileFeatured,
         completed_while_featured: completedWhileFeatured,
+        featuredGrowth,
         monthly,
         topServices,
         repeatCustomers,
@@ -339,6 +418,82 @@ export default function ProviderAnalyticsScreen() {
           )}
         </View>
 
+        {/* Featured Growth */}
+        {data?.featuredGrowth && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Featured Growth</Text>
+            <View style={styles.growthCard}>
+              {/* Header row */}
+              <View style={styles.growthHeaderRow}>
+                <Text style={[styles.growthHeaderCell, { flex: 1.4 }]}>Metric</Text>
+                <Text style={styles.growthHeaderCell}>Before</Text>
+                <Text style={styles.growthHeaderCell}>During</Text>
+                <Text style={styles.growthHeaderCell}>Growth</Text>
+              </View>
+
+              {/* Views */}
+              <View style={styles.growthRow}>
+                <View style={styles.growthLabelCell}>
+                  <Ionicons name="eye-outline" size={14} color="#8B5CF6" />
+                  <Text style={styles.growthLabel}>Views</Text>
+                </View>
+                <Text style={styles.growthValue}>{data.featuredGrowth.beforeViews}</Text>
+                <Text style={styles.growthValue}>{data.featuredGrowth.duringViews}</Text>
+                <GrowthPill value={data.featuredGrowth.viewGrowth} />
+              </View>
+
+              {/* Requests */}
+              <View style={styles.growthRow}>
+                <View style={styles.growthLabelCell}>
+                  <Ionicons name="calendar-outline" size={14} color={COLORS.primary} />
+                  <Text style={styles.growthLabel}>Requests</Text>
+                </View>
+                <Text style={styles.growthValue}>{data.featuredGrowth.beforeRequests}</Text>
+                <Text style={styles.growthValue}>{data.featuredGrowth.duringRequests}</Text>
+                <GrowthPill value={data.featuredGrowth.requestGrowth} />
+              </View>
+
+              {/* Completed */}
+              <View style={styles.growthRow}>
+                <View style={styles.growthLabelCell}>
+                  <Ionicons name="checkmark-circle-outline" size={14} color="#059669" />
+                  <Text style={styles.growthLabel}>Completed</Text>
+                </View>
+                <Text style={styles.growthValue}>{data.featuredGrowth.beforeCompleted}</Text>
+                <Text style={styles.growthValue}>{data.featuredGrowth.duringCompleted}</Text>
+                <GrowthPill value={data.featuredGrowth.completedGrowth} />
+              </View>
+
+              {/* Conversion */}
+              <View style={[styles.growthRow, { borderBottomWidth: 0 }]}>
+                <View style={styles.growthLabelCell}>
+                  <Ionicons name="trending-up-outline" size={14} color="#2563EB" />
+                  <Text style={styles.growthLabel}>Conversion</Text>
+                </View>
+                <Text style={styles.growthValue}>{data.featuredGrowth.conversionBefore.toFixed(1)}%</Text>
+                <Text style={styles.growthValue}>{data.featuredGrowth.conversionDuring.toFixed(1)}%</Text>
+                <GrowthPill
+                  value={data.featuredGrowth.conversionBefore > 0
+                    ? Math.round(((data.featuredGrowth.conversionDuring - data.featuredGrowth.conversionBefore) / data.featuredGrowth.conversionBefore) * 100)
+                    : (data.featuredGrowth.conversionDuring > 0 ? 100 : 0)}
+                />
+              </View>
+            </View>
+
+            {/* Insights */}
+            {data.featuredGrowth.insights.length > 0 && (
+              <View style={styles.insightCard}>
+                {data.featuredGrowth.insights.map((insight, idx) => (
+                  <View key={idx} style={styles.insightRow}>
+                    <Ionicons name="checkmark-circle" size={14} color={COLORS.success} />
+                    <Text style={styles.insightText}>{insight}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Monthly Trends */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>This Month</Text>
@@ -443,6 +598,21 @@ export default function ProviderAnalyticsScreen() {
             </View>
           </View>
         )}
+
+        {/* Historical Analytics Link */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.historicalCard}
+            onPress={() => navigation.navigate('HistoricalAnalytics')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.historicalLeft}>
+              <Ionicons name="bar-chart" size={20} color={COLORS.primary} />
+              <Text style={styles.historicalTitle}>Historical Analytics</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textLight} />
+          </TouchableOpacity>
+        </View>
 
         {/* Quick note */}
         <View style={styles.noteCard}>
@@ -571,4 +741,32 @@ const styles = StyleSheet.create({
   },
   insightRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm },
   insightText: { flex: 1, fontFamily: FONTS.regular, fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, lineHeight: 20 },
+  pill: { borderRadius: BORDER_RADIUS.md, paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'center' },
+  pillText: { fontFamily: FONTS.bold, fontSize: 10 },
+  growthCard: {
+    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border,
+  },
+  growthHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', paddingBottom: SPACING.xs,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border, marginBottom: SPACING.xs,
+  },
+  growthHeaderCell: {
+    flex: 1, fontFamily: FONTS.semiBold, fontSize: 10, color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  growthRow: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: SPACING.xs,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+  },
+  growthLabelCell: { flex: 1.4, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  growthLabel: { fontFamily: FONTS.medium, fontSize: FONTS.sizes.sm, color: COLORS.text },
+  growthValue: { flex: 1, fontFamily: FONTS.semiBold, fontSize: FONTS.sizes.sm, color: COLORS.text, textAlign: 'center' },
+  historicalCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border,
+  },
+  historicalLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  historicalTitle: { fontFamily: FONTS.semiBold, fontSize: FONTS.sizes.base, color: COLORS.text },
 });

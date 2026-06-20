@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
+import FeaturedBadge from './FeaturedBadge';
 
 export interface ServiceCardData {
   id: string;
@@ -37,6 +38,7 @@ interface Props {
   showBookButton?: boolean;
   onBook?: () => void;
   style?: object;
+  providerIsFeatured?: boolean;
 }
 
 export default function ServiceCard({
@@ -45,6 +47,7 @@ export default function ServiceCard({
   showBookButton = false,
   onBook,
   style,
+  providerIsFeatured = false,
 }: Props) {
   return (
     <TouchableOpacity
@@ -71,6 +74,7 @@ export default function ServiceCard({
         <Text style={styles.providerName} numberOfLines={1}>
           {service.provider_name ?? 'Provider'}
         </Text>
+        {providerIsFeatured && <FeaturedBadge style={{ marginTop: 2 }} />}
 
         <View style={styles.metaRow}>
           {service.provider_rating !== undefined && service.provider_rating !== null && (

@@ -19,6 +19,7 @@ import { supabase } from '../../lib/supabase';
 import { toTitleCase } from '../../utils/formatting';
 import { Provider, Category } from '../../types';
 import ServiceCard from '../../components/marketplace/ServiceCard';
+import FeaturedBadge from '../../components/marketplace/FeaturedBadge';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 import EmptyState from '../../components/ui/EmptyState';
@@ -242,6 +243,7 @@ export default function SearchScreen() {
             <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} />
           )}
         </View>
+        {item.is_featured && <FeaturedBadge style={{ marginTop: 2 }} />}
         <Text style={styles.category}>{toTitleCase(item.categories?.name) ?? 'General'}</Text>
         <View style={styles.metaRow}>
           <View style={styles.ratingRow}>

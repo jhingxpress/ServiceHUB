@@ -23,6 +23,7 @@ import Avatar from '../../components/ui/Avatar';
 import StarRating from '../../components/ui/StarRating';
 import Badge from '../../components/ui/Badge';
 import ServiceCard from '../../components/marketplace/ServiceCard';
+import FeaturedBadge from '../../components/marketplace/FeaturedBadge';
 import { CustomerStackParamList, CustomerTabParamList } from '../../navigation/types';
 
 type NavProp = CompositeNavigationProp<
@@ -55,6 +56,8 @@ export default function HomeScreen() {
     image_url: string | null;
   }>>([]);
   const [recentBookings, setRecentBookings] = useState<Booking[]>([]);
+  const [recentlyViewed, setRecentlyViewed] = useState<Provider[]>([]);
+  const [favorites, setFavorites] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -157,6 +160,48 @@ export default function HomeScreen() {
         }))
       );
       setRecentBookings((booksRes as { data: Booking[] | null }).data ?? []);
+
+      // Engagement data (non-blocking, wrapped in try/catch)
+      if (user) {
+        try {
+          const { data: views } = await supabase
+            .from('provider_views')
+            .select('provider_id')
+            .eq('customer_id', user.id)
+            .order('viewed_at', { ascending: false })
+            .limit(10);
+          const viewPids = [...new Set((views ?? []).map((v: any) => v.provider_id))].slice(0, 6);
+          if (viewPids.length > 0) {
+            const { data: viewedProvs } = await supabase
+              .from('providers')
+              .select('*, categories(name, icon, color), profile_photo_url, business_logo')
+              .in('id', viewPids)
+              .eq('is_available', true)
+              .eq('marketplace_status', 'live')
+              .is('deleted_at', null);
+            // Preserve view order
+            const provMap = new Map((viewedProvs ?? []).map((p: any) => [p.id, p]));
+            setRecentlyViewed(viewPids.map((id) => provMap.get(id)).filter(Boolean) as Provider[]);
+          } else {
+            setRecentlyViewed([]);
+          }
+        } catch {
+          setRecentlyViewed([]);
+        }
+
+        try {
+          const { data: favs } = await supabase
+            .from('favorite_providers')
+            .select('provider:providers(*)')
+            .eq('customer_id', user.id)
+            .limit(10);
+          const favProvs = ((favs ?? []).map((f: any) => f.provider).filter(Boolean) as Provider[])
+            .filter((p) => p.is_available && !p.deleted_at);
+          setFavorites(favProvs);
+        } catch {
+          setFavorites([]);
+        }
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -374,6 +419,7 @@ export default function HomeScreen() {
                 <Text style={styles.providerName} numberOfLines={1}>
                   {item.business_name ?? 'Provider'}
                 </Text>
+                {item.is_featured && <FeaturedBadge style={{ marginTop: 2 }} />}
                 <Text style={styles.providerCategory} numberOfLines={1}>
                   {toTitleCase(item.categories?.name) ?? 'Services'}
                 </Text>
@@ -431,6 +477,9 @@ export default function HomeScreen() {
                       <Text style={styles.recentProvName} numberOfLines={2}>
                         {prov?.business_name ?? 'Provider'}
                       </Text>
+                      {prov?.is_featured && (
+                        <FeaturedBadge style={{ marginTop: 2 }} />
+                      )}
                       <View style={styles.recentProvBtn}>
                         <Ionicons name="refresh-outline" size={11} color={COLORS.primary} />
                         <Text style={styles.recentProvBtnText}>Rebook</Text>
@@ -442,6 +491,70 @@ export default function HomeScreen() {
             </View>
           );
         })()}
+
+        {/* Recently Viewed Providers */}
+        {recentlyViewed.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Recently Viewed</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Search')}>
+                <Text style={styles.sectionLink}>Browse</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={recentlyViewed}
+              keyExtractor={(p) => p.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.hscroll}
+              renderItem={({ item: p }) => (
+                <TouchableOpacity
+                  style={styles.recentProvCard}
+                  onPress={() => navigation.navigate('ProviderStorefront', { providerId: p.id })}
+                  activeOpacity={0.8}
+                >
+                  <Avatar uri={p.profile_photo_url ?? p.business_logo} name={p.business_name} size={48} />
+                  <Text style={styles.recentProvName} numberOfLines={2}>
+                    {p.business_name ?? 'Provider'}
+                  </Text>
+                  {p.is_featured && <FeaturedBadge style={{ marginTop: 2 }} />}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        )}
+
+        {/* Your Favorites */}
+        {favorites.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Your Favorites</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('MyFavorites')}>
+                <Text style={styles.sectionLink}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={favorites}
+              keyExtractor={(p) => p.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.hscroll}
+              renderItem={({ item: p }) => (
+                <TouchableOpacity
+                  style={styles.recentProvCard}
+                  onPress={() => navigation.navigate('ProviderStorefront', { providerId: p.id })}
+                  activeOpacity={0.8}
+                >
+                  <Avatar uri={p.profile_photo_url ?? p.business_logo} name={p.business_name} size={48} />
+                  <Text style={styles.recentProvName} numberOfLines={2}>
+                    {p.business_name ?? 'Provider'}
+                  </Text>
+                  {p.is_featured && <FeaturedBadge style={{ marginTop: 2 }} />}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        )}
 
         {/* Recent Bookings */}
         {recentBookings.length > 0 && (
