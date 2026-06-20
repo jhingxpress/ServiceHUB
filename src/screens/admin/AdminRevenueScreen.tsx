@@ -25,6 +25,13 @@ interface RevenueSource {
   lifetime: number;
 }
 
+interface MonthlyPoint {
+  label: string;
+  featured: number;
+  tips: number;
+  economy: number;
+}
+
 function fmtPHP(n: number) {
   return `₱${Math.round(n).toLocaleString()}`;
 }
@@ -54,6 +61,7 @@ export default function AdminRevenueScreen() {
   const [bookings, setBookings] = useState<RevenueSource>({ today: 0, thisMonth: 0, lifetime: 0 });
   const [featured, setFeatured] = useState<RevenueSource>({ today: 0, thisMonth: 0, lifetime: 0 });
   const [tips, setTips] = useState<RevenueSource>({ today: 0, thisMonth: 0, lifetime: 0 });
+  const [monthly, setMonthly] = useState<MonthlyPoint[]>([]);
 
   const loadData = useCallback(async () => {
     const todayStart = startOfDay(new Date()).toISOString();
@@ -69,6 +77,29 @@ export default function AdminRevenueScreen() {
     setFeatured(aggSource(featRes.data ?? [], 'paid_at', todayStart, monthStart));
     setTips(aggSource(tipsRes.data ?? [], 'paid_at', todayStart, monthStart, 100));
 
+    // Build monthly grouped data for chart
+    const monthMap: Record<string, { label: string; featured: number; tips: number; economy: number }> = {};
+    const addToMonth = (rows: any[], dateKey: string, amountKey: string, field: 'featured' | 'tips' | 'economy', divisor = 1) => {
+      rows.forEach((r) => {
+        const date = r[dateKey] ?? r.created_at ?? '';
+        if (!date) return;
+        const d = new Date(date);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const label = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        if (!monthMap[key]) monthMap[key] = { label, featured: 0, tips: 0, economy: 0 };
+        monthMap[key][field] += (Number(r[amountKey]) || 0) / divisor;
+      });
+    };
+
+    addToMonth(featRes.data ?? [], 'paid_at', 'amount', 'featured');
+    addToMonth(tipsRes.data ?? [], 'paid_at', 'amount', 'tips', 100);
+    addToMonth(bookRes.data ?? [], 'created_at', 'amount', 'economy');
+
+    const sortedMonthly = Object.entries(monthMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, v]) => v);
+    setMonthly(sortedMonthly);
+
     setLoading(false);
     setRefreshing(false);
   }, []);
@@ -82,13 +113,6 @@ export default function AdminRevenueScreen() {
       </SafeAreaView>
     );
   }
-
-  // ServiceHub platform income ONLY — bookings belong to providers, not ServiceHub
-  const platformRevenue: RevenueSource = {
-    today:     featured.today     + tips.today,
-    thisMonth: featured.thisMonth + tips.thisMonth,
-    lifetime:  featured.lifetime  + tips.lifetime,
-  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -111,21 +135,87 @@ export default function AdminRevenueScreen() {
         }
         contentContainerStyle={styles.scroll}
       >
-        {/* ── ServiceHub Revenue ───────────────────────────── */}
-        <Text style={styles.sectionLabel}>💰 ServiceHub Revenue</Text>
+        {/* ── Platform Growth Trends Chart ───────────────────── */}
+        {monthly.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>Platform Growth Trends</Text>
+            <View style={styles.chartCard}>
+              {/* Legend */}
+              <View style={styles.legendRow}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
+                  <Text style={styles.legendText}>Featured</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#E11D48' }]} />
+                  <Text style={styles.legendText}>Tips</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+                  <Text style={styles.legendText}>Economy</Text>
+                </View>
+              </View>
+
+              {/* Grouped bars */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.chartBody}>
+                  {monthly.map((m) => {
+                    const max = Math.max(m.featured, m.tips, m.economy, 1);
+                    return (
+                      <View key={m.label} style={styles.chartColumn}>
+                        <View style={styles.barGroup}>
+                          <View style={styles.barWrap}>
+                            <View style={[styles.bar, { height: `${(m.featured / max) * 100}%`, backgroundColor: '#F59E0B' }]} />
+                          </View>
+                          <View style={styles.barWrap}>
+                            <View style={[styles.bar, { height: `${(m.tips / max) * 100}%`, backgroundColor: '#E11D48' }]} />
+                          </View>
+                          <View style={styles.barWrap}>
+                            <View style={[styles.bar, { height: `${(m.economy / max) * 100}%`, backgroundColor: '#10B981' }]} />
+                          </View>
+                        </View>
+                        <Text style={styles.chartXLabel} numberOfLines={1}>{m.label}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            </View>
+          </>
+        )}
+
+        {/* ── This Month ───────────────────────────────────────── */}
+        <Text style={styles.sectionLabel}>This Month</Text>
         <View style={styles.totalsRow}>
           {[
-            { label: 'Today',      value: fmtPHP(platformRevenue.today) },
-            { label: 'This Month', value: fmtPHP(platformRevenue.thisMonth) },
-            { label: 'Lifetime',   value: fmtPHP(platformRevenue.lifetime) },
+            { label: 'Featured', value: fmtPHP(featured.thisMonth), color: '#B45309', bg: '#FEF3C7', border: '#FDE68A' },
+            { label: 'Tips',     value: fmtPHP(tips.thisMonth),     color: '#E11D48', bg: '#FFF1F2', border: '#FECDD3' },
+            { label: 'Economy',  value: fmtPHP(bookings.thisMonth), color: COLORS.success, bg: '#DCFCE7', border: '#BBF7D0' },
           ].map((c) => (
-            <View key={c.label} style={[styles.totalCard, styles.platformCard]}>
-              <Text style={[styles.totalValue, { color: COLORS.primary }]}>{c.value}</Text>
+            <View key={c.label} style={[styles.totalCard, { backgroundColor: c.bg, borderColor: c.border }]}>
+              <Text style={[styles.totalValue, { color: c.color }]}>{c.value}</Text>
               <Text style={styles.totalLabel}>{c.label}</Text>
             </View>
           ))}
         </View>
 
+        {/* ── Lifetime ───────────────────────────────────────── */}
+        <Text style={styles.sectionLabel}>Lifetime</Text>
+        <View style={styles.totalsRow}>
+          {[
+            { label: 'Featured', value: fmtPHP(featured.lifetime), color: '#B45309', bg: '#FEF3C7', border: '#FDE68A' },
+            { label: 'Tips',     value: fmtPHP(tips.lifetime),     color: '#E11D48', bg: '#FFF1F2', border: '#FECDD3' },
+            { label: 'Economy',  value: fmtPHP(bookings.lifetime),  color: COLORS.success, bg: '#DCFCE7', border: '#BBF7D0' },
+          ].map((c) => (
+            <View key={c.label} style={[styles.totalCard, { backgroundColor: c.bg, borderColor: c.border }]}>
+              <Text style={[styles.totalValue, { color: c.color }]}>{c.value}</Text>
+              <Text style={styles.totalLabel}>{c.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* ── Drill-down Cards ───────────────────────────────── */}
+        <View style={styles.divider} />
         <Text style={styles.sectionLabel}>Revenue Sources</Text>
 
         {/* Featured Revenue — drilldown */}
@@ -143,18 +233,6 @@ export default function AdminRevenueScreen() {
               <Text style={styles.sourceSub}>Provider promotion payments</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
-          </View>
-          <View style={styles.sourceTotals}>
-            {[
-              { label: 'Today',    value: fmtPHP(featured.today) },
-              { label: 'Month',    value: fmtPHP(featured.thisMonth) },
-              { label: 'Lifetime', value: fmtPHP(featured.lifetime) },
-            ].map((s) => (
-              <View key={s.label} style={styles.sourceStat}>
-                <Text style={[styles.sourceStatValue, { color: '#B45309' }]}>{s.value}</Text>
-                <Text style={styles.sourceStatLabel}>{s.label}</Text>
-              </View>
-            ))}
           </View>
         </TouchableOpacity>
 
@@ -174,61 +252,18 @@ export default function AdminRevenueScreen() {
             </View>
             <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
           </View>
-          <View style={styles.sourceTotals}>
-            {[
-              { label: 'Today',    value: fmtPHP(tips.today) },
-              { label: 'Month',    value: fmtPHP(tips.thisMonth) },
-              { label: 'Lifetime', value: fmtPHP(tips.lifetime) },
-            ].map((s) => (
-              <View key={s.label} style={styles.sourceStat}>
-                <Text style={[styles.sourceStatValue, { color: '#E11D48' }]}>{s.value}</Text>
-                <Text style={styles.sourceStatLabel}>{s.label}</Text>
-              </View>
-            ))}
-          </View>
         </TouchableOpacity>
 
-        {/* ── Provider Economy ─────────────────────────────── */}
-        <View style={styles.divider} />
-        <Text style={styles.sectionLabel}>👷 Provider Economy</Text>
-        <Text style={styles.economyDisclaimer}>
-          Earnings generated by providers through completed bookings. Not included in ServiceHub Revenue.
-        </Text>
-        <View style={styles.totalsRow}>
-          {[
-            { label: 'Today',      value: fmtPHP(bookings.today) },
-            { label: 'This Month', value: fmtPHP(bookings.thisMonth) },
-            { label: 'Lifetime',   value: fmtPHP(bookings.lifetime) },
-          ].map((c) => (
-            <View key={c.label} style={[styles.totalCard, styles.economyCard]}>
-              <Text style={[styles.totalValue, { color: COLORS.success }]}>{c.value}</Text>
-              <Text style={styles.totalLabel}>{c.label}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Service Bookings — analytics only, no drill-down */}
+        {/* Provider Economy */}
         <View style={[styles.sourceCard, { borderColor: '#BBF7D0' }]}>
           <View style={styles.sourceHeader}>
             <View style={[styles.sourceIcon, { backgroundColor: '#DCFCE7' }]}>
               <Ionicons name="calendar-outline" size={20} color={COLORS.success} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.sourceTitle}>Service Bookings</Text>
+              <Text style={styles.sourceTitle}>👷 Provider Economy</Text>
               <Text style={styles.sourceSub}>Customer payments for completed bookings</Text>
             </View>
-          </View>
-          <View style={styles.sourceTotals}>
-            {[
-              { label: 'Today',    value: fmtPHP(bookings.today) },
-              { label: 'Month',    value: fmtPHP(bookings.thisMonth) },
-              { label: 'Lifetime', value: fmtPHP(bookings.lifetime) },
-            ].map((s) => (
-              <View key={s.label} style={styles.sourceStat}>
-                <Text style={[styles.sourceStatValue, { color: COLORS.success }]}>{s.value}</Text>
-                <Text style={styles.sourceStatLabel}>{s.label}</Text>
-              </View>
-            ))}
           </View>
         </View>
 
@@ -265,28 +300,33 @@ const styles = StyleSheet.create({
     padding: SPACING.md, alignItems: 'center', gap: 4,
     borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.small,
   },
-  platformCard: { backgroundColor: COLORS.primaryLight, borderColor: COLORS.primary },
-  economyCard:  { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' },
   totalValue:   { fontSize: FONTS.sizes.base, fontFamily: FONTS.bold, color: COLORS.text },
   totalLabel:   { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, textAlign: 'center' },
   divider: {
     height: 1, backgroundColor: COLORS.border,
     marginTop: SPACING.md, marginBottom: SPACING.xs,
   },
-  economyDisclaimer: {
-    fontSize: FONTS.sizes.xs, color: COLORS.textSecondary,
-    marginBottom: SPACING.sm, lineHeight: 18,
+  chartCard: {
+    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border,
+    ...SHADOWS.small,
   },
+  legendRow: { flexDirection: 'row', justifyContent: 'center', gap: SPACING.md, marginBottom: SPACING.sm },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.medium, color: COLORS.textSecondary },
+  chartBody: { flexDirection: 'row', alignItems: 'flex-end', gap: SPACING.md, paddingHorizontal: SPACING.xs },
+  chartColumn: { alignItems: 'center', width: 50 },
+  barGroup: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: 120 },
+  barWrap: { width: 12, height: '100%', justifyContent: 'flex-end', backgroundColor: COLORS.surfaceSecondary, borderRadius: BORDER_RADIUS.sm, overflow: 'hidden' },
+  bar: { width: '100%', borderRadius: BORDER_RADIUS.sm },
+  chartXLabel: { fontSize: 9, fontFamily: FONTS.medium, color: COLORS.textSecondary, marginTop: 4, textAlign: 'center' },
   sourceCard: {
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.xl,
     padding: SPACING.md, borderWidth: 1.5, ...SHADOWS.small,
   },
-  sourceHeader:    { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm },
+  sourceHeader:    { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   sourceIcon:      { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   sourceTitle:     { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
   sourceSub:       { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 1 },
-  sourceTotals:    { flexDirection: 'row', gap: SPACING.sm, paddingTop: SPACING.xs, borderTopWidth: 1, borderTopColor: COLORS.border },
-  sourceStat:      { flex: 1, alignItems: 'center', gap: 2 },
-  sourceStatValue: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.bold },
-  sourceStatLabel: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
 });

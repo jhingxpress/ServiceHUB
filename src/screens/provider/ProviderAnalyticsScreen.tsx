@@ -250,22 +250,24 @@ export default function ProviderAnalyticsScreen() {
           <View style={styles.backBtnPlaceholder} />
         </View>
 
-        {/* Metrics Grid */}
-        <View style={styles.grid}>
+        {/* Compact Metrics */}
+        <View style={styles.compactCard}>
           {metrics.map((m) => {
             const icon = METRIC_ICON[m.key];
             const label = METRIC_LABEL[m.key];
             const color = METRIC_COLOR[m.key];
             const suffix = m.key === 'conversion_rate' ? '%' : '';
             return (
-              <View key={m.key} style={styles.metricCard}>
-                <View style={[styles.iconWrap, { backgroundColor: color + '15' }]}>
-                  <Ionicons name={icon} size={22} color={color} />
+              <View key={m.key} style={styles.compactRow}>
+                <View style={styles.compactLeft}>
+                  <View style={[styles.compactIconWrap, { backgroundColor: color + '15' }]}>
+                    <Ionicons name={icon} size={18} color={color} />
+                  </View>
+                  <Text style={styles.compactLabel}>{label}</Text>
                 </View>
-                <Text style={styles.metricValue}>
+                <Text style={styles.compactValue}>
                   {m.value}{suffix}
                 </Text>
-                <Text style={styles.metricLabel}>{label}</Text>
               </View>
             );
           })}
@@ -466,22 +468,23 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   backBtnPlaceholder: { width: 40 },
   headerTitle: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.lg, color: COLORS.text },
-  grid: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    paddingHorizontal: SPACING.md, gap: SPACING.sm, marginTop: SPACING.sm,
-  },
-  metricCard: {
-    flex: 1, minWidth: '46%', alignItems: 'center',
+  compactCard: {
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border,
-    gap: SPACING.xs,
+    marginHorizontal: SPACING.md, borderWidth: 1, borderColor: COLORS.border,
+    overflow: 'hidden',
   },
-  iconWrap: {
-    width: 40, height: 40, borderRadius: 20,
+  compactRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+  },
+  compactLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  compactIconWrap: {
+    width: 32, height: 32, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
   },
-  metricValue: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.xl, color: COLORS.text },
-  metricLabel: { fontFamily: FONTS.medium, fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
+  compactLabel: { fontFamily: FONTS.medium, fontSize: FONTS.sizes.sm, color: COLORS.text },
+  compactValue: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.base, color: COLORS.text },
   section: { marginTop: SPACING.lg, paddingHorizontal: SPACING.md },
   sectionTitle: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.lg, color: COLORS.text, marginBottom: SPACING.sm },
   featuredCard: {

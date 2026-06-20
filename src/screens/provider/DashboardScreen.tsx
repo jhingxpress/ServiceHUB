@@ -537,7 +537,6 @@ export default function ProviderDashboard() {
               { label: 'Messages', icon: 'chatbubble-outline', action: () => navigation.getParent()?.navigate('Messages'), badge: undefined },
               { label: 'Services', icon: 'construct-outline', action: () => navigation.navigate('ManageServices') },
               { label: 'Reviews', icon: 'star-outline', action: () => navigation.navigate('ProviderReviews'), badge: newReviewCount > 0 ? newReviewCount.toString() : undefined },
-              { label: 'Analytics', icon: 'analytics-outline', action: () => navigation.navigate('ProviderAnalytics') },
             ].map((q) => (
               <TouchableOpacity
                 key={q.label}
@@ -560,7 +559,12 @@ export default function ProviderDashboard() {
 
         {/* Business Performance — hidden when no meaningful activity */}
         {performance && (performance.profile_views > 0 || performance.total_bookings > 0 || performance.completion_rate > 0) && (
-          <PerformanceCard performance={performance} />
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('ProviderAnalytics')}
+          >
+            <PerformanceCard performance={performance} />
+          </TouchableOpacity>
         )}
 
         {/* My Reviews Tap Card */}

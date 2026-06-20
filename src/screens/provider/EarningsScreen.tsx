@@ -4,16 +4,22 @@ import {
   Text,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
   ActivityIndicator,
   FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import EmptyState from '../../components/ui/EmptyState';
+import { ProviderStackParamList } from '../../navigation/types';
+
+type NavProp = NativeStackNavigationProp<ProviderStackParamList>;
 
 interface EarningRecord {
   id: string;
@@ -23,6 +29,7 @@ interface EarningRecord {
 }
 
 export default function EarningsScreen() {
+  const navigation = useNavigation<NavProp>();
   const { user } = useAuthStore();
   const [total, setTotal] = useState(0);
   const [thisMonth, setThisMonth] = useState(0);
@@ -80,13 +87,17 @@ export default function EarningsScreen() {
 
         {/* Summary cards */}
         <View style={styles.summaryRow}>
-          <View style={styles.summaryCard}>
+          <TouchableOpacity
+            style={styles.summaryCard}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('EarningsSummary')}
+          >
             <View style={styles.summaryIcon}>
               <Ionicons name="wallet-outline" size={24} color={COLORS.primary} />
             </View>
             <Text style={styles.summaryValue}>₱{Number(total).toFixed(2)}</Text>
             <Text style={styles.summaryLabel}>Total Earned</Text>
-          </View>
+          </TouchableOpacity>
           <View style={[styles.summaryCard, styles.summaryCardHighlight]}>
             <View style={[styles.summaryIcon, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
               <Ionicons name="trending-up-outline" size={24} color={COLORS.white} />
