@@ -150,7 +150,7 @@ export default function ScheduleScreen() {
 
         <View style={styles.infoCard}>
           <Text style={styles.infoText}>
-            Customers can only book you during your available hours. Toggle days on/off and set your working hours.
+            Set your regular working hours so customers can see when you are available. Customers may still send booking requests anytime.
           </Text>
         </View>
 

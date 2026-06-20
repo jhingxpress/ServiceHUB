@@ -1,6 +1,19 @@
 import { Availability } from '../types';
 
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+/**
+ * Database convention (matches ScheduleScreen DAYS.indexOf):
+ * 0 = Monday, 1 = Tuesday, 2 = Wednesday, 3 = Thursday,
+ * 4 = Friday, 5 = Saturday, 6 = Sunday
+ *
+ * JS getDay() convention:
+ * 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+ */
+const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+function jsDayToDbDay(jsDay: number): number {
+  // Convert JS getDay() (Sun=0) to DB day_of_week (Mon=0)
+  return (jsDay + 6) % 7;
+}
 
 function parseTime(t: string): { h: number; m: number } {
   const [h, m] = t.split(':').map(Number);
@@ -37,7 +50,7 @@ export interface OpenStatus {
  *
  * Cases handled:
  * 1. Currently inside today's schedule → "Open Now / Until 6:00 PM"
- * 2. After closing today → "Closed / Opens Tomorrow at 7:00 AM"
+ * 2. After closing today → "Closed / Opens Monday at 7:00 AM"
  * 3. Today not scheduled   → "Closed / Opens Monday at 7:00 AM"
  * 4. 24-hour provider      → "Open 24 Hours"
  * 5. Overnight schedule    → "Open Now / Until 6:00 AM"
@@ -61,7 +74,7 @@ export function getProviderOpenStatus(schedule: Availability[]): OpenStatus {
   }
 
   const now = new Date();
-  const todayDow = now.getDay(); // 0-6, Sunday=0
+  const todayDow = jsDayToDbDay(now.getDay());
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
   // Find today's schedule row
