@@ -117,6 +117,7 @@ export type AdminStackParamList = {
   AdminRevenue: undefined;
   FeaturedRevenue: undefined;
   TipsRevenue: undefined;
+  ProviderEconomy: undefined;
   AdminBroadcast: undefined;
 };
 

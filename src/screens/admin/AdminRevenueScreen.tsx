@@ -150,28 +150,27 @@ export default function AdminRevenueScreen() {
                   <View style={[styles.legendDot, { backgroundColor: '#E11D48' }]} />
                   <Text style={styles.legendText}>Tips</Text>
                 </View>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
-                  <Text style={styles.legendText}>Economy</Text>
-                </View>
               </View>
 
-              {/* Grouped bars */}
+              {/* Grouped bars with value labels */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={styles.chartBody}>
                   {monthly.map((m) => {
-                    const max = Math.max(m.featured, m.tips, m.economy, 1);
+                    const max = Math.max(m.featured, m.tips, 1);
                     return (
                       <View key={m.label} style={styles.chartColumn}>
                         <View style={styles.barGroup}>
-                          <View style={styles.barWrap}>
-                            <View style={[styles.bar, { height: `${(m.featured / max) * 100}%`, backgroundColor: '#F59E0B' }]} />
+                          <View style={styles.barCol}>
+                            <Text style={styles.barValue}>{fmtPHP(m.featured)}</Text>
+                            <View style={styles.barWrap}>
+                              <View style={[styles.bar, { height: `${(m.featured / max) * 100}%`, backgroundColor: '#F59E0B' }]} />
+                            </View>
                           </View>
-                          <View style={styles.barWrap}>
-                            <View style={[styles.bar, { height: `${(m.tips / max) * 100}%`, backgroundColor: '#E11D48' }]} />
-                          </View>
-                          <View style={styles.barWrap}>
-                            <View style={[styles.bar, { height: `${(m.economy / max) * 100}%`, backgroundColor: '#10B981' }]} />
+                          <View style={styles.barCol}>
+                            <Text style={styles.barValue}>{fmtPHP(m.tips)}</Text>
+                            <View style={styles.barWrap}>
+                              <View style={[styles.bar, { height: `${(m.tips / max) * 100}%`, backgroundColor: '#E11D48' }]} />
+                            </View>
                           </View>
                         </View>
                         <Text style={styles.chartXLabel} numberOfLines={1}>{m.label}</Text>
@@ -255,7 +254,11 @@ export default function AdminRevenueScreen() {
         </TouchableOpacity>
 
         {/* Provider Economy */}
-        <View style={[styles.sourceCard, { borderColor: '#BBF7D0' }]}>
+        <TouchableOpacity
+          style={[styles.sourceCard, { borderColor: '#BBF7D0' }]}
+          onPress={() => navigation.navigate('ProviderEconomy')}
+          activeOpacity={0.85}
+        >
           <View style={styles.sourceHeader}>
             <View style={[styles.sourceIcon, { backgroundColor: '#DCFCE7' }]}>
               <Ionicons name="calendar-outline" size={20} color={COLORS.success} />
@@ -264,8 +267,9 @@ export default function AdminRevenueScreen() {
               <Text style={styles.sourceTitle}>👷 Provider Economy</Text>
               <Text style={styles.sourceSub}>Customer payments for completed bookings</Text>
             </View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
           </View>
-        </View>
+        </TouchableOpacity>
 
         <View style={{ height: SPACING.xl }} />
       </ScrollView>
@@ -318,6 +322,8 @@ const styles = StyleSheet.create({
   chartBody: { flexDirection: 'row', alignItems: 'flex-end', gap: SPACING.md, paddingHorizontal: SPACING.xs },
   chartColumn: { alignItems: 'center', width: 50 },
   barGroup: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: 120 },
+  barCol: { alignItems: 'center' },
+  barValue: { fontSize: 9, fontFamily: FONTS.medium, color: COLORS.textSecondary, marginBottom: 2 },
   barWrap: { width: 12, height: '100%', justifyContent: 'flex-end', backgroundColor: COLORS.surfaceSecondary, borderRadius: BORDER_RADIUS.sm, overflow: 'hidden' },
   bar: { width: '100%', borderRadius: BORDER_RADIUS.sm },
   chartXLabel: { fontSize: 9, fontFamily: FONTS.medium, color: COLORS.textSecondary, marginTop: 4, textAlign: 'center' },
