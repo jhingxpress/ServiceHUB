@@ -427,57 +427,83 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
     finally { setSaving(false); }
   };
 
-  const toggleFeatured = async () => {
+  const enableFeatured = async () => {
     if (!provider) return;
     setFeaturedLoading(true);
-    const newValue = !provider.is_featured;
-    const updates: Record<string, unknown> = { is_featured: newValue };
-    if (newValue) {
-      // Preserve remaining time: if the provider still has active days remaining,
-      // extend from the current expiry rather than from now.
-      // Example: expires July 30, renewed July 20 → new expiry August 29 (not August 19).
-      const base = (provider.featured_until && new Date(provider.featured_until) > new Date())
-        ? new Date(provider.featured_until)
-        : new Date();
-      base.setDate(base.getDate() + 30);
-      updates.featured_until = base.toISOString();
-    } else {
-      updates.featured_until = null;
-    }
+    const base = (provider.featured_until && new Date(provider.featured_until) > new Date())
+      ? new Date(provider.featured_until)
+      : new Date();
+    base.setDate(base.getDate() + 30);
+    const featuredUntil = base.toISOString();
     try {
-      const { error } = await supabase.from('providers').update(updates).eq('id', providerId);
+      const { error } = await supabase
+        .from('providers')
+        .update({ is_featured: true, featured_until: featuredUntil })
+        .eq('id', providerId);
       if (error) throw error;
       await supabase.from('provider_verification_logs').insert({
         provider_id: providerId,
-        action: newValue ? 'featured_enabled' : 'featured_disabled',
+        action: 'featured_enabled',
         performed_by: user?.id ?? null,
-        notes: newValue ? `Featured until ${(updates.featured_until as string).slice(0, 10)}` : 'Featured status removed',
+        notes: `Featured until ${featuredUntil.slice(0, 10)}`,
       });
-      if (newValue) {
-        await supabase
-          .from('featured_requests')
-          .update({ status: 'approved', updated_at: new Date().toISOString() })
-          .eq('provider_id', providerId)
-          .eq('status', 'pending');
-        setHasPendingRequest(false);
-        // Notify provider of approval — non-fatal if push fails
-        try {
-          await supabase.functions.invoke('notify-featured-approved', {
-            body: {
-              provider_id:   providerId,
-              featured_until: updates.featured_until as string,
-            },
-          });
-        } catch (notifyErr) {
-          console.warn('[toggleFeatured] Approval notification failed (non-fatal):', notifyErr);
-        }
+      await supabase
+        .from('featured_requests')
+        .update({ status: 'approved', updated_at: new Date().toISOString() })
+        .eq('provider_id', providerId)
+        .eq('status', 'pending');
+      setHasPendingRequest(false);
+      // Notify provider of approval — non-fatal if push fails
+      try {
+        await supabase.functions.invoke('notify-featured-approved', {
+          body: { provider_id: providerId, featured_until: featuredUntil },
+        });
+      } catch (notifyErr) {
+        console.warn('[enableFeatured] Approval notification failed (non-fatal):', notifyErr);
       }
-      setProvider((p) => p ? { ...p, is_featured: newValue, featured_until: (updates.featured_until as string | null) } : p);
+      setProvider((p) => p ? { ...p, is_featured: true, featured_until: featuredUntil } : p);
     } catch (err: any) {
-      Alert.alert('Error', err?.message ?? 'Failed to update featured status');
+      Alert.alert('Error', err?.message ?? 'Failed to enable featured status');
     } finally {
       setFeaturedLoading(false);
     }
+  };
+
+  const cancelFeatured = () => {
+    if (!provider) return;
+    Alert.alert(
+      'Cancel Featured subscription?',
+      'This removes the Featured badge and visibility immediately.\n\nPayment history and analytics will remain intact.\n\nThis action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove Featured',
+          style: 'destructive',
+          onPress: async () => {
+            setFeaturedLoading(true);
+            try {
+              const { error } = await supabase
+                .from('providers')
+                .update({ is_featured: false, featured_until: null })
+                .eq('id', providerId);
+              if (error) throw error;
+              await supabase.from('provider_verification_logs').insert({
+                provider_id: providerId,
+                action: 'featured_disabled',
+                performed_by: user?.id ?? null,
+                notes: 'Featured status cancelled by moderator',
+              });
+              setProvider((p) => p ? { ...p, is_featured: false, featured_until: null } : p);
+            } catch (err: any) {
+              Alert.alert('Error', err?.message ?? 'Failed to cancel featured status');
+            } finally {
+              setFeaturedLoading(false);
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   if (loading) {
@@ -822,22 +848,39 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
                 </TouchableOpacity>
               )}
               {!hasPendingRequest && (
-                <TouchableOpacity
-                  style={[styles.featuredBtn, provider.is_featured && styles.featuredBtnActive]}
-                  onPress={toggleFeatured}
-                  disabled={featuredLoading}
-                >
-                  {featuredLoading ? (
-                    <ActivityIndicator size="small" color={provider.is_featured ? COLORS.warning : COLORS.primary} />
-                  ) : (
-                    <>
-                      <Ionicons name={provider.is_featured ? 'sparkles' : 'sparkles-outline'} size={18} color={provider.is_featured ? COLORS.warning : COLORS.primary} />
-                      <Text style={[styles.featuredBtnText, provider.is_featured && styles.featuredBtnTextActive]}>
-                        {provider.is_featured ? 'Featured On' : 'Feature Provider'}
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+                provider.is_featured ? (
+                  <TouchableOpacity
+                    style={[styles.featuredBtn, styles.cancelFeaturedBtn]}
+                    onPress={cancelFeatured}
+                    disabled={featuredLoading}
+                  >
+                    {featuredLoading ? (
+                      <ActivityIndicator size="small" color={COLORS.error} />
+                    ) : (
+                      <>
+                        <Ionicons name="close-circle" size={18} color={COLORS.error} />
+                        <Text style={[styles.featuredBtnText, { color: COLORS.error }]}>
+                          Cancel Featured
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.featuredBtn}
+                    onPress={enableFeatured}
+                    disabled={featuredLoading}
+                  >
+                    {featuredLoading ? (
+                      <ActivityIndicator size="small" color={COLORS.primary} />
+                    ) : (
+                      <>
+                        <Ionicons name="sparkles-outline" size={18} color={COLORS.primary} />
+                        <Text style={styles.featuredBtnText}>Feature Provider</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )
               )}
             </View>
             {hasPendingRequest && (
@@ -1088,9 +1131,8 @@ const styles = StyleSheet.create({
     gap: SPACING.sm, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.xl,
     backgroundColor: COLORS.warningLight, borderWidth: 1, borderColor: '#FEF3C7',
   },
-  featuredBtnActive: { backgroundColor: COLORS.warningLight, borderColor: COLORS.warning },
+  cancelFeaturedBtn: { backgroundColor: COLORS.errorLight, borderColor: '#FECACA' },
   featuredBtnText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.warning },
-  featuredBtnTextActive: { color: '#92400E' },
   docCard: {
     backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.md,
     padding: SPACING.md, marginBottom: SPACING.sm,
