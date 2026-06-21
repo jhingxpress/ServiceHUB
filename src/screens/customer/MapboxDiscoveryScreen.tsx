@@ -78,6 +78,8 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
   const [markers, setMarkers] = useState<ProviderMarkerData[]>([]);
   const [markersLoading, setMarkersLoading] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<ProviderMarkerData | null>(null);
+  const [routeDistanceKm, setRouteDistanceKm] = useState<number | null>(null);
+  const [routeEtaMin, setRouteEtaMin] = useState<number | null>(null);
 
   // ─── Location ────────────────────────────────────────────────────────────────
   const statusText = useMemo(() => {
@@ -161,6 +163,9 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
           isFeatured: p.is_featured ?? false,
           imageUrl: p.profile_photo_url ?? p.business_logo ?? null,
           hourlyRate: p.hourly_rate ?? null,
+          distanceKm: haversine(centerLat, centerLng, p.latitude, p.longitude),
+          responseRate: null,
+          openStatus: 'open' as const,
         }));
 
       setMarkers(mapped);
@@ -193,6 +198,29 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
     setMapReady(true);
   }, []);
 
+  const fetchRoute = useCallback(async (
+    fromLat: number, fromLng: number,
+    toLat: number, toLng: number,
+  ) => {
+    try {
+      const url =
+        `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`;
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const json = await res.json();
+      const route = json?.routes?.[0];
+      if (!route) return;
+      const points: [number, number][] = (route.geometry.coordinates as [number, number][]).map(
+        ([lng, lat]) => [lat, lng],
+      );
+      setRouteDistanceKm(Math.round((route.distance / 1000) * 10) / 10);
+      setRouteEtaMin(Math.round(route.duration / 60));
+      mapRef.current?.drawRoute(points);
+    } catch {
+      // Route is non-critical — silently ignore network failures
+    }
+  }, []);
+
   const handleMarkerPress = useCallback(
     (providerId: string) => {
       const found = markers.find((m) => m.id === providerId) ?? null;
@@ -200,9 +228,15 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
       if (found) {
         setSheetState('full');
         mapRef.current?.flyTo(found.latitude, found.longitude, 15);
+        if (userLocation) {
+          fetchRoute(
+            userLocation.latitude, userLocation.longitude,
+            found.latitude, found.longitude,
+          );
+        }
       }
     },
-    [markers],
+    [markers, userLocation, fetchRoute],
   );
 
   const handleSheetStateChange = useCallback(
@@ -210,7 +244,10 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
       setSheetState(state);
       if (state === 'peek') {
         setSelectedProvider(null);
+        setRouteDistanceKm(null);
+        setRouteEtaMin(null);
         mapRef.current?.selectMarker('');
+        mapRef.current?.clearRoute();
       }
     },
     [],
@@ -219,6 +256,13 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
   const handleViewProfile = useCallback(
     (id: string) => {
       navigation.navigate('ProviderStorefront', { providerId: id });
+    },
+    [navigation],
+  );
+
+  const handleBookNow = useCallback(
+    (id: string) => {
+      navigation.navigate('BookService', { providerId: id });
     },
     [navigation],
   );
@@ -329,6 +373,9 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
         statusText={statusText}
         selectedProvider={selectedProvider}
         onViewProfile={handleViewProfile}
+        onBookNow={handleBookNow}
+        routeDistanceKm={routeDistanceKm}
+        routeEtaMin={routeEtaMin}
       />
     </View>
   );
