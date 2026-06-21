@@ -15,9 +15,10 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
-import { Provider, Review, Availability } from '../../types';
+import { Provider, Review, Availability, ProviderBadge } from '../../types';
 import { getProviderOpenStatus, OpenStatus, formatBusinessHours } from '../../utils/scheduleHelpers';
 import { trackProviderView } from '../../utils/analytics';
+import { computeReputationBadges } from '../../utils/reputationHelpers';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
 import StarRating from '../../components/ui/StarRating';
@@ -30,6 +31,23 @@ type RouteType = RouteProp<CustomerStackParamList, 'ProviderProfile'>;
 interface ServiceOption { id: string; name: string; description: string | null; price: number; is_active: boolean; }
 interface SubService { id: string; name: string; description: string | null; is_active: boolean; service_options: ServiceOption[]; }
 interface ReviewWithMedia extends Review { }
+
+const BADGE_LABELS: Record<string, string> = {
+  verified_provider: 'Verified',
+  fast_responder: 'Fast Responder',
+  top_rated: 'Top Rated',
+  highly_rated: 'Highly Rated',
+  reliable: 'Reliable',
+  new_provider: 'New',
+};
+const BADGE_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
+  verified_provider: 'checkmark-circle',
+  fast_responder: 'flash',
+  top_rated: 'star',
+  highly_rated: 'star-half',
+  reliable: 'shield-checkmark',
+  new_provider: 'sparkles',
+};
 
 const formatPrice = (amount: number) =>
   `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -63,7 +81,7 @@ export default function ProviderProfileScreen() {
       const [provRes, srvRes, revRes] = await Promise.all([
         supabase
           .from('providers')
-          .select('*, categories(name, icon, color)')
+          .select('*, categories(name, icon, color), provider_badges(*), provider_stats(*), provider_performance(*)')
           .eq('id', providerId)
           .is('deleted_at', null)
           .single(),
@@ -136,6 +154,28 @@ export default function ProviderProfileScreen() {
     .flatMap((s) => s.service_options.map((o) => o.price))
     .reduce((min, p) => (p < min ? p : min), Infinity);
 
+  const storedBadges = (provider.provider_badges ?? []) as ProviderBadge[];
+  const reputationBadges = computeReputationBadges({
+    is_featured: provider.is_featured ?? false,
+    rating: provider.rating ?? 0,
+    total_reviews: (provider as any).provider_stats?.total_reviews ?? provider.total_reviews ?? 0,
+    completed_jobs: (provider as any).provider_stats?.completed_jobs ?? provider.completed_jobs ?? 0,
+    response_rate: (provider as any).provider_stats?.response_rate ?? 0,
+    average_response_minutes: (provider as any).provider_stats?.average_response_minutes ?? 0,
+    profile_views: (provider as any).provider_performance?.profile_views ?? 0,
+    total_bookings: (provider as any).provider_performance?.total_bookings ?? 0,
+    completion_rate: (provider as any).provider_performance?.completion_rate ?? 0,
+  });
+  const storedLabels = new Set(
+    storedBadges.map((b) => (BADGE_LABELS[b.badge_type] ?? b.badge_type).toLowerCase())
+  );
+  const mergedBadges = [
+    ...storedBadges.map((b) => ({ type: 'stored' as const, key: b.id, badge_type: b.badge_type })),
+    ...reputationBadges
+      .filter((rb) => !storedLabels.has(rb.label.toLowerCase()))
+      .map((rb) => ({ type: 'reputation' as const, key: rb.key, label: rb.label, icon: rb.icon, color: rb.color })),
+  ];
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -178,13 +218,27 @@ export default function ProviderProfileScreen() {
               <View style={styles.nameRow}>
                 <Text style={styles.providerName}>{provider.business_name || 'Provider'}</Text>
                 {provider.is_verified && <Ionicons name="checkmark-circle" size={18} color={COLORS.primary} />}
-                {provider.is_featured && (
-                  <View style={styles.featuredBadge}>
-                    <Ionicons name="sparkles" size={10} color={COLORS.warning} />
-                    <Text style={styles.featuredBadgeText}>Featured</Text>
-                  </View>
-                )}
               </View>
+              {mergedBadges.length > 0 && (
+                <View style={styles.badgesRow}>
+                  {mergedBadges.map((b) => {
+                    if (b.type === 'stored') {
+                      return (
+                        <View key={b.key} style={styles.badgeChip}>
+                          <Ionicons name={BADGE_ICONS[b.badge_type] ?? 'ribbon'} size={12} color={COLORS.primary} />
+                          <Text style={styles.badgeChipText}>{BADGE_LABELS[b.badge_type] ?? b.badge_type}</Text>
+                        </View>
+                      );
+                    }
+                    return (
+                      <View key={b.key} style={[styles.badgeChip, { backgroundColor: b.color + '18' }]}>
+                        <Ionicons name={b.icon as any} size={12} color={b.color} />
+                        <Text style={[styles.badgeChipText, { color: b.color }]}>{b.label}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
               <Text style={styles.categoryText}>{(provider as any).categories?.name ?? 'Services'}</Text>
               {openStatus && (
                 <View style={styles.openStatusWrap}>
@@ -452,12 +506,16 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   providerName: { fontSize: FONTS.sizes.xl, fontFamily: FONTS.bold, color: COLORS.text, flexShrink: 1 },
   categoryText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
-  featuredBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    backgroundColor: COLORS.warningLight, borderRadius: BORDER_RADIUS.full,
-    paddingHorizontal: 6, paddingVertical: 2,
+  badgesRow: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs,
+    marginTop: 4,
   },
-  featuredBadgeText: { fontFamily: FONTS.semiBold, fontSize: 9, color: '#92400E' },
+  badgeChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: COLORS.primaryLight, borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  badgeChipText: { fontFamily: FONTS.medium, fontSize: FONTS.sizes.xs, color: COLORS.primary },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   ratingNum: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
   reviewCount: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },

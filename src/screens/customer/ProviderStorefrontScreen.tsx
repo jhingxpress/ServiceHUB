@@ -235,6 +235,17 @@ export default function ProviderStorefrontScreen() {
     completion_rate: (provider as any).provider_performance?.completion_rate ?? 0,
   });
 
+  // Merge stored badges with computed reputation badges; dedupe by label
+  const storedLabels = new Set(
+    badges.map((b) => (BADGE_LABELS[b.badge_type] ?? b.badge_type).toLowerCase())
+  );
+  const mergedBadges = [
+    ...badges.map((b) => ({ type: 'stored' as const, key: b.id, badge_type: b.badge_type })),
+    ...reputationBadges
+      .filter((rb) => !storedLabels.has(rb.label.toLowerCase()))
+      .map((rb) => ({ type: 'reputation' as const, key: rb.key, label: rb.label, icon: rb.icon, color: rb.color })),
+  ];
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -360,26 +371,24 @@ export default function ProviderStorefrontScreen() {
           </View>
 
           {/* Badges */}
-          {(badges.length > 0 || provider.is_featured || reputationBadges.length > 0) && (
+          {mergedBadges.length > 0 && (
             <View style={styles.badgesRow}>
-              {provider.is_featured && (
-                <View style={[styles.badgeChip, styles.featuredBadgeChip]}>
-                  <Ionicons name="sparkles" size={12} color={COLORS.warning} />
-                  <Text style={[styles.badgeChipText, styles.featuredBadgeText]}>Featured</Text>
-                </View>
-              )}
-              {badges.map((b) => (
-                <View key={b.id} style={styles.badgeChip}>
-                  <Ionicons name={BADGE_ICONS[b.badge_type] ?? 'ribbon'} size={12} color={COLORS.primary} />
-                  <Text style={styles.badgeChipText}>{BADGE_LABELS[b.badge_type] ?? b.badge_type}</Text>
-                </View>
-              ))}
-              {reputationBadges.map((b) => (
-                <View key={b.key} style={[styles.badgeChip, { backgroundColor: b.color + '18' }]}>
-                  <Ionicons name={b.icon as any} size={12} color={b.color} />
-                  <Text style={[styles.badgeChipText, { color: b.color }]}>{b.label}</Text>
-                </View>
-              ))}
+              {mergedBadges.map((b) => {
+                if (b.type === 'stored') {
+                  return (
+                    <View key={b.key} style={styles.badgeChip}>
+                      <Ionicons name={BADGE_ICONS[b.badge_type] ?? 'ribbon'} size={12} color={COLORS.primary} />
+                      <Text style={styles.badgeChipText}>{BADGE_LABELS[b.badge_type] ?? b.badge_type}</Text>
+                    </View>
+                  );
+                }
+                return (
+                  <View key={b.key} style={[styles.badgeChip, { backgroundColor: b.color + '18' }]}>
+                    <Ionicons name={b.icon as any} size={12} color={b.color} />
+                    <Text style={[styles.badgeChipText, { color: b.color }]}>{b.label}</Text>
+                  </View>
+                );
+              })}
             </View>
           )}
         </View>
