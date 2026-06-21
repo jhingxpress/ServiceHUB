@@ -47,17 +47,24 @@ export default function MyFavoritesScreen({ navigation }: Props) {
               <View style={styles.ratingPill}>
                 <Ionicons name="star" size={11} color="#F59E0B" />
                 <Text style={styles.ratingText}>{Number(provider.rating).toFixed(1)}</Text>
+                {!!(provider as any).total_reviews && (
+                  <Text style={styles.ratingCount}>({(provider as any).total_reviews})</Text>
+                )}
               </View>
             )}
-            {!!provider.location && (
-              <View style={styles.locRow}>
-                <Ionicons name="location-outline" size={11} color={COLORS.textLight} />
-                <Text style={styles.locText} numberOfLines={1}>
-                  {provider.location}
-                </Text>
+            {!!(provider as any).response_rate && (
+              <View style={styles.statPill}>
+                <Ionicons name="chatbubble-outline" size={10} color={COLORS.primary} />
+                <Text style={styles.statText}>{(provider as any).response_rate}% resp</Text>
               </View>
             )}
           </View>
+          {!!provider.location && (
+            <View style={styles.locRow}>
+              <Ionicons name="location-outline" size={11} color={COLORS.textLight} />
+              <Text style={styles.locText} numberOfLines={1}>{provider.location}</Text>
+            </View>
+          )}
         </View>
         <Ionicons name="chevron-forward" size={16} color={COLORS.textLight} />
       </TouchableOpacity>
@@ -141,6 +148,13 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.full,
   },
   ratingText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.bold, color: '#B45309' },
-  locRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  ratingCount: { fontSize: FONTS.sizes.xs, color: '#B45309', marginLeft: 1 },
+  statPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+    backgroundColor: COLORS.primaryLight, paddingHorizontal: 6, paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.full,
+  },
+  statText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.medium, color: COLORS.primary },
+  locRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 4 },
   locText: { fontSize: FONTS.sizes.xs, color: COLORS.textLight, maxWidth: 140 },
 });

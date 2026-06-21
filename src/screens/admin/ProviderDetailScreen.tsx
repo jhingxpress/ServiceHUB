@@ -152,6 +152,45 @@ const getDocumentLabel = (doc: DocRecord): string => {
   return DOC_LABELS[doc.document_type] || doc.document_type;
 };
 
+const ACTION_LABELS: Record<string, string> = {
+  approved: 'Provider Approved',
+  rejected: 'Application Rejected',
+  suspended: 'Provider Suspended',
+  kyc_approved: 'KYC Approved',
+  kyc_rejected: 'KYC Rejected',
+  featured_enabled: 'Featured Enabled',
+  featured_disabled: 'Featured Disabled',
+  featured_payment_received: 'Featured Payment Received',
+  document_approved: 'Document Approved',
+  document_rejected: 'Document Rejected',
+};
+
+const ACTION_ICONS: Record<string, string> = {
+  approved: 'checkmark-circle',
+  rejected: 'close-circle',
+  suspended: 'ban',
+  kyc_approved: 'shield-checkmark',
+  kyc_rejected: 'shield-outline',
+  featured_enabled: 'sparkles',
+  featured_disabled: 'sparkles-outline',
+  featured_payment_received: 'card',
+  document_approved: 'document-text',
+  document_rejected: 'document-text-outline',
+};
+
+const ACTION_COLORS: Record<string, string> = {
+  approved: '#059669',
+  kyc_approved: '#059669',
+  document_approved: '#059669',
+  featured_enabled: '#F59E0B',
+  featured_payment_received: '#3B82F6',
+  rejected: '#DC2626',
+  kyc_rejected: '#DC2626',
+  suspended: '#DC2626',
+  featured_disabled: '#DC2626',
+  document_rejected: '#DC2626',
+};
+
 const STATUS_CFG: Record<string, { label: string; bg: string; color: string }> = {
   draft: { label: 'Draft', bg: COLORS.surfaceSecondary, color: COLORS.textLight },
   pending_review: { label: 'Pending Review', bg: COLORS.warningLight, color: '#92400E' },
@@ -179,6 +218,8 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [processingDoc, setProcessingDoc] = useState<string | null>(null);
+  const [showFeaturedCancelForm, setShowFeaturedCancelForm] = useState(false);
+  const [featuredCancelReason, setFeaturedCancelReason] = useState('');
 
   const loadData = async () => {
     setLoading(true);
@@ -471,39 +512,33 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
 
   const cancelFeatured = () => {
     if (!provider) return;
-    Alert.alert(
-      'Cancel Featured subscription?',
-      'This removes the Featured badge and visibility immediately.\n\nPayment history and analytics will remain intact.\n\nThis action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove Featured',
-          style: 'destructive',
-          onPress: async () => {
-            setFeaturedLoading(true);
-            try {
-              const { error } = await supabase
-                .from('providers')
-                .update({ is_featured: false, featured_until: null })
-                .eq('id', providerId);
-              if (error) throw error;
-              await supabase.from('provider_verification_logs').insert({
-                provider_id: providerId,
-                action: 'featured_disabled',
-                performed_by: user?.id ?? null,
-                notes: 'Featured status cancelled by moderator',
-              });
-              setProvider((p) => p ? { ...p, is_featured: false, featured_until: null } : p);
-            } catch (err: any) {
-              Alert.alert('Error', err?.message ?? 'Failed to cancel featured status');
-            } finally {
-              setFeaturedLoading(false);
-            }
-          },
-        },
-      ],
-      { cancelable: true }
-    );
+    setFeaturedCancelReason('');
+    setShowFeaturedCancelForm(true);
+  };
+
+  const doFeaturedCancel = async () => {
+    setFeaturedLoading(true);
+    try {
+      const { error } = await supabase
+        .from('providers')
+        .update({ is_featured: false, featured_until: null })
+        .eq('id', providerId);
+      if (error) throw error;
+      await supabase.from('provider_verification_logs').insert({
+        provider_id: providerId,
+        action: 'featured_disabled',
+        performed_by: user?.id ?? null,
+        notes: featuredCancelReason.trim() || 'Featured status cancelled by moderator',
+      });
+      setProvider((p) => p ? { ...p, is_featured: false, featured_until: null } : p);
+      setShowFeaturedCancelForm(false);
+      setFeaturedCancelReason('');
+      await loadData();
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Failed to cancel featured status');
+    } finally {
+      setFeaturedLoading(false);
+    }
   };
 
   if (loading) {
@@ -918,24 +953,67 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           </View>
         )}
 
-        {/* Verification log */}
+        {/* Cancel Featured inline form */}
+        {showFeaturedCancelForm && (
+          <View style={styles.actionForm}>
+            <Text style={styles.actionFormTitle}>Cancel Featured Status</Text>
+            <Text style={[styles.logNotes, { marginBottom: SPACING.sm }]}>
+              This removes the Featured badge and visibility immediately. Payment history and analytics will remain intact.
+            </Text>
+            <TextInput
+              style={styles.actionFormInput}
+              value={featuredCancelReason}
+              onChangeText={setFeaturedCancelReason}
+              placeholder="Reason (optional)..."
+              placeholderTextColor={COLORS.textLight}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+            <View style={styles.actionFormBtns}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => { setShowFeaturedCancelForm(false); setFeaturedCancelReason(''); }}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmBtn, { backgroundColor: COLORS.error }, featuredLoading && styles.disabledBtn]}
+                onPress={doFeaturedCancel}
+                disabled={featuredLoading}
+              >
+                {featuredLoading
+                  ? <ActivityIndicator color={COLORS.white} size="small" />
+                  : <Text style={styles.confirmBtnText}>Remove Featured</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Moderation Timeline */}
         {logs.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Verification Log</Text>
-            {logs.map(log => (
-              <View key={log.id} style={styles.logRow}>
-                <View style={[styles.logDot, {
-                  backgroundColor: log.action === 'approved' ? COLORS.success : log.action === 'rejected' || log.action === 'suspended' ? COLORS.error : COLORS.primary,
-                }]} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.logAction}>{log.action.charAt(0).toUpperCase() + log.action.slice(1)}</Text>
-                  {log.notes ? <Text style={styles.logNotes}>{log.notes}</Text> : null}
-                  <Text style={styles.logMeta}>
-                    {log.performer?.full_name ?? 'System'} · {format(new Date(log.created_at), 'MMM d, yyyy h:mm a')}
-                  </Text>
+            <Text style={styles.sectionTitle}>Moderation Timeline</Text>
+            {logs.map((log, idx) => {
+              const iconName = ACTION_ICONS[log.action] ?? 'ellipse-outline';
+              const dotColor = ACTION_COLORS[log.action] ?? COLORS.primary;
+              const label = ACTION_LABELS[log.action] ?? (log.action.charAt(0).toUpperCase() + log.action.slice(1).replace(/_/g, ' '));
+              return (
+                <View key={log.id} style={styles.logRow}>
+                  <View style={[styles.logIconWrap, { backgroundColor: dotColor + '20' }]}>
+                    <Ionicons name={iconName as React.ComponentProps<typeof Ionicons>['name']} size={14} color={dotColor} />
+                  </View>
+                  <View style={[{ flex: 1 }, idx < logs.length - 1 && styles.logConnector]}>
+                    <Text style={styles.logAction}>{label}</Text>
+                    {log.notes ? <Text style={styles.logNotes}>{log.notes}</Text> : null}
+                    <Text style={styles.logMeta}>
+                      {log.performer?.full_name ?? 'System'} · {format(new Date(log.created_at), 'MMM d, yyyy h:mm a')}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
@@ -1149,7 +1227,8 @@ const styles = StyleSheet.create({
   },
   docActionText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold },
   logRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.md, paddingVertical: SPACING.sm },
-  logDot: { width: 10, height: 10, borderRadius: 5, marginTop: 5 },
+  logIconWrap: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  logConnector: { borderLeftWidth: 0 },
   logAction: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
   logNotes: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2, lineHeight: 20 },
   logMeta: { fontSize: FONTS.sizes.xs, color: COLORS.textLight, marginTop: 3 },

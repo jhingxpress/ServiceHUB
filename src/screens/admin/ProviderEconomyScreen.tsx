@@ -60,6 +60,8 @@ export default function ProviderEconomyScreen() {
   const [avgBookingValue, setAvgBookingValue] = useState(0);
   const [monthly, setMonthly] = useState<MonthlyPoint[]>([]);
   const [topServices, setTopServices] = useState<TopService[]>([]);
+  const [avgMonthlyRev, setAvgMonthlyRev] = useState(0);
+  const [bestMonth, setBestMonth] = useState<MonthlyPoint | null>(null);
 
   const loadData = useCallback(async () => {
     const todayStart = startOfDay(new Date()).toISOString();
@@ -143,6 +145,14 @@ export default function ProviderEconomyScreen() {
       .slice(0, 5);
     setTopServices(sortedServices);
 
+    // Derived metrics
+    const avgMonthly = sortedMonthly.length > 0 ? Math.round(lifetime / sortedMonthly.length) : 0;
+    setAvgMonthlyRev(avgMonthly);
+    const best = sortedMonthly.length > 0
+      ? sortedMonthly.reduce((b, m) => (m.revenue > b.revenue ? m : b), sortedMonthly[0])
+      : null;
+    setBestMonth(best);
+
     setLoading(false);
     setRefreshing(false);
   }, []);
@@ -160,7 +170,7 @@ export default function ProviderEconomyScreen() {
   const METRICS = [
     { icon: 'calendar-outline', color: COLORS.success, bg: '#DCFCE7', label: 'Total Bookings', value: String(totalBookings) },
     { icon: 'analytics-outline', color: COLORS.primary, bg: COLORS.primaryLight, label: 'Avg Booking Value', value: fmtPHP(avgBookingValue) },
-    { icon: 'trending-up-outline', color: '#7C3AED', bg: '#EDE9FE', label: 'Monthly Growth', value: String(monthly.length) },
+    { icon: 'trending-up-outline', color: '#7C3AED', bg: '#EDE9FE', label: 'Avg Monthly Rev', value: fmtPHP(avgMonthlyRev) },
   ] as const;
 
   const maxMonthlyRev = Math.max(...monthly.map((m) => m.revenue), 1);
@@ -213,6 +223,23 @@ export default function ProviderEconomyScreen() {
             </View>
           ))}
         </View>
+
+        {/* Best Month */}
+        {bestMonth && (
+          <>
+            <Text style={styles.sectionLabel}>Best Month</Text>
+            <View style={styles.bestMonthCard}>
+              <View style={[styles.metricIcon, { backgroundColor: '#FEF3C7' }]}>
+                <Ionicons name="trophy-outline" size={18} color="#B45309" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.bestMonthLabel}>{bestMonth.label}</Text>
+                <Text style={styles.bestMonthSub}>{bestMonth.bookings} booking{bestMonth.bookings !== 1 ? 's' : ''}</Text>
+              </View>
+              <Text style={styles.bestMonthValue}>{fmtPHP(bestMonth.revenue)}</Text>
+            </View>
+          </>
+        )}
 
         {/* Monthly Trend */}
         {monthly.length > 0 && (
@@ -358,4 +385,12 @@ const styles = StyleSheet.create({
   serviceValue:   { fontSize: FONTS.sizes.base, fontFamily: FONTS.bold, color: COLORS.text },
   empty:     { alignItems: 'center', paddingTop: SPACING.xl, gap: SPACING.sm },
   emptyText: { fontSize: FONTS.sizes.base, color: COLORS.textSecondary },
+  bestMonthCard: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    backgroundColor: '#FFFBEB', borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.md, borderWidth: 1, borderColor: '#FDE68A', ...SHADOWS.small,
+  },
+  bestMonthLabel: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
+  bestMonthSub:   { fontSize: FONTS.sizes.xs, color: COLORS.textLight, marginTop: 2 },
+  bestMonthValue: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.bold, color: '#B45309' },
 });

@@ -143,9 +143,10 @@ export default function HomeScreen() {
       setProviders(provsRes.data ?? []);
       const now = new Date().toISOString();
       setFeaturedProviders(
-        (featProvRes.data ?? []).filter(
-          (p: any) => !p.featured_until || p.featured_until > now
-        ) as Provider[]
+        (featProvRes.data ?? [])
+          .filter((p: any) => !p.featured_until || p.featured_until > now)
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 10) as Provider[]
       );
       setFeaturedServices(
         rawServices.map((s) => ({
@@ -480,6 +481,11 @@ export default function HomeScreen() {
                       {prov?.is_featured && (
                         <FeaturedBadge style={{ marginTop: 2 }} />
                       )}
+                      {!!(booking.scheduled_date || booking.created_at) && (
+                        <Text style={styles.recentProvDate}>
+                          {new Date(booking.scheduled_date || booking.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </Text>
+                      )}
                       <View style={styles.recentProvBtn}>
                         <Ionicons name="refresh-outline" size={11} color={COLORS.primary} />
                         <Text style={styles.recentProvBtnText}>Rebook</Text>
@@ -754,6 +760,7 @@ const styles = StyleSheet.create({
     padding: SPACING.sm, borderWidth: 1, borderColor: COLORS.border,
   },
   recentProvName: { fontFamily: FONTS.medium, fontSize: FONTS.sizes.xs, color: COLORS.text, textAlign: 'center', lineHeight: 15 },
+  recentProvDate: { fontSize: FONTS.sizes.xs, color: COLORS.textLight, marginTop: 2 },
   recentProvBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
     backgroundColor: COLORS.primaryLight, borderRadius: BORDER_RADIUS.full,

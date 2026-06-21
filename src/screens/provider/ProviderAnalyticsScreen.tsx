@@ -101,12 +101,21 @@ function GrowthPill({ value }: { value: number }) {
   );
 }
 
+type TimeRange = '7d' | '30d' | 'all';
+
+
 export default function ProviderAnalyticsScreen() {
   const navigation = useNavigation<NavProp>();
   const { user } = useAuthStore();
 
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [timeRange, setTimeRange] = useState<TimeRange>('30d');
+  const [rangeLoading, setRangeLoading] = useState(false);
+  const [rangeViews, setRangeViews] = useState(0);
+  const [rangeBookings, setRangeBookings] = useState(0);
+  const [rangeCompleted, setRangeCompleted] = useState(0);
+  const [rangeReviews, setRangeReviews] = useState(0);
 
   const loadAnalytics = useCallback(async () => {
     if (!user) return;
@@ -282,9 +291,40 @@ export default function ProviderAnalyticsScreen() {
     }
   }, [user]);
 
+  const loadRangeMetrics = useCallback(async (range: TimeRange) => {
+    if (!user) return;
+    setRangeLoading(true);
+    try {
+      if (range === 'all') {
+        setRangeViews(data?.profile_views ?? 0);
+        setRangeBookings((data?.booking_requests ?? 0) + (data?.completed_jobs ?? 0));
+        setRangeCompleted(data?.completed_jobs ?? 0);
+        setRangeReviews(data?.total_reviews ?? 0);
+      } else {
+        const days = range === '7d' ? 7 : 30;
+        const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+        const [viewsRes, bookingsRes, completedRes] = await Promise.all([
+          supabase.from('provider_views').select('*', { count: 'exact', head: true }).eq('provider_id', user.id).gte('viewed_at', since),
+          supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('provider_id', user.id).gte('created_at', since),
+          supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('provider_id', user.id).eq('status', 'completed').gte('created_at', since),
+        ]);
+        setRangeViews(viewsRes.count ?? 0);
+        setRangeBookings(bookingsRes.count ?? 0);
+        setRangeCompleted(completedRes.count ?? 0);
+        setRangeReviews(data?.total_reviews ?? 0);
+      }
+    } finally {
+      setRangeLoading(false);
+    }
+  }, [user, data]);
+
   useEffect(() => {
     loadAnalytics();
   }, [loadAnalytics]);
+
+  useEffect(() => {
+    if (data) loadRangeMetrics(timeRange);
+  }, [data, timeRange, loadRangeMetrics]);
 
   if (loading) {
     return (
@@ -494,24 +534,60 @@ export default function ProviderAnalyticsScreen() {
           </View>
         )}
 
-        {/* Monthly Trends */}
+        {/* Historical Analytics — Time Range Filter */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>This Month</Text>
-          <View style={styles.trendRow}>
+          <Text style={styles.sectionTitle}>Historical Analytics</Text>
+          <View style={styles.rangeTabRow}>
+            {(['7d', '30d', 'all'] as TimeRange[]).map((r) => (
+              <TouchableOpacity
+                key={r}
+                style={[styles.rangeTab, timeRange === r && styles.rangeTabActive]}
+                onPress={() => setTimeRange(r)}
+              >
+                <Text style={[styles.rangeTabText, timeRange === r && styles.rangeTabTextActive]}>
+                  {r === '7d' ? '7 Days' : r === '30d' ? '30 Days' : 'All Time'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {rangeLoading ? (
+            <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.md }} />
+          ) : (
+            <View style={styles.trendRow}>
+              <View style={styles.trendItem}>
+                <Ionicons name="eye-outline" size={18} color="#8B5CF6" />
+                <Text style={styles.trendValue}>{rangeViews}</Text>
+                <Text style={styles.trendLabel}>Profile Views</Text>
+              </View>
+              <View style={styles.trendItem}>
+                <Ionicons name="calendar-outline" size={18} color={COLORS.primary} />
+                <Text style={styles.trendValue}>{rangeBookings}</Text>
+                <Text style={styles.trendLabel}>Bookings</Text>
+              </View>
+              <View style={styles.trendItem}>
+                <Ionicons name="checkmark-circle-outline" size={18} color="#059669" />
+                <Text style={styles.trendValue}>{rangeCompleted}</Text>
+                <Text style={styles.trendLabel}>Completed</Text>
+              </View>
+              <View style={styles.trendItem}>
+                <Ionicons name="star-outline" size={18} color="#F59E0B" />
+                <Text style={styles.trendValue}>{rangeReviews}</Text>
+                <Text style={styles.trendLabel}>Reviews</Text>
+              </View>
+            </View>
+          )}
+          <View style={[styles.trendRow, { marginTop: SPACING.sm }]}>
             <View style={styles.trendItem}>
-              <Ionicons name="eye-outline" size={18} color="#8B5CF6" />
-              <Text style={styles.trendValue}>{data?.monthly.profileViews ?? 0}</Text>
-              <Text style={styles.trendLabel}>Profile Views</Text>
+              <Ionicons name="chatbubble-outline" size={18} color={COLORS.primary} />
+              <Text style={styles.trendValue}>{data?.response_rate ?? 0}%</Text>
+              <Text style={styles.trendLabel}>Response Rate</Text>
             </View>
             <View style={styles.trendItem}>
-              <Ionicons name="calendar-outline" size={18} color={COLORS.primary} />
-              <Text style={styles.trendValue}>{data?.monthly.bookingRequests ?? 0}</Text>
-              <Text style={styles.trendLabel}>Booking Requests</Text>
-            </View>
-            <View style={styles.trendItem}>
-              <Ionicons name="checkmark-circle-outline" size={18} color="#059669" />
-              <Text style={styles.trendValue}>{data?.monthly.completedJobs ?? 0}</Text>
-              <Text style={styles.trendLabel}>Completed Jobs</Text>
+              <Ionicons name="trending-up-outline" size={18} color="#2563EB" />
+              <Text style={styles.trendValue}>
+                {rangeViews > 0 ? Math.min(100, (rangeCompleted / rangeViews) * 100).toFixed(1) : '0'}%
+              </Text>
+              <Text style={styles.trendLabel}>Completion Rate</Text>
             </View>
           </View>
         </View>
@@ -769,4 +845,22 @@ const styles = StyleSheet.create({
   },
   historicalLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   historicalTitle: { fontFamily: FONTS.semiBold, fontSize: FONTS.sizes.base, color: COLORS.text },
+  rangeTabRow: {
+    flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.md,
+  },
+  rangeTab: {
+    flex: 1, paddingVertical: SPACING.xs + 2, borderRadius: BORDER_RADIUS.xl,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.surfaceSecondary,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  rangeTabActive: {
+    backgroundColor: COLORS.primary, borderColor: COLORS.primary,
+  },
+  rangeTabText: {
+    fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: COLORS.textSecondary,
+  },
+  rangeTabTextActive: {
+    color: COLORS.white,
+  },
 });
