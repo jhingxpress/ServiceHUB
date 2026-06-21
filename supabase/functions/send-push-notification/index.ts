@@ -52,15 +52,20 @@ serve(async (req: Request) => {
   // as the x-push-secret header. Direct / anonymous callers are rejected.
   // ─────────────────────────────────────────────
   const expectedSecret = Deno.env.get('PUSH_NOTIFICATION_SECRET');
-  if (expectedSecret) {
-    const incomingSecret = req.headers.get('x-push-secret');
-    if (!incomingSecret || incomingSecret !== expectedSecret) {
-      console.error('[push] Unauthorized: missing or invalid x-push-secret header');
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+  if (!expectedSecret) {
+    console.error('[push] PUSH_NOTIFICATION_SECRET is not configured — rejecting all requests');
+    return new Response(
+      JSON.stringify({ error: 'Server misconfigured' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+  const incomingSecret = req.headers.get('x-push-secret');
+  if (!incomingSecret || incomingSecret !== expectedSecret) {
+    console.error('[push] Unauthorized: missing or invalid x-push-secret header');
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');

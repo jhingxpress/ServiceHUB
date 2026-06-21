@@ -1,0 +1,30 @@
+-- ============================================================
+-- SECURITY: Remove provider_performance self-update RLS policy
+-- Sprint 5.2B — Integrity Hardening (M-02)
+-- Date: 2026-06-21
+-- ============================================================
+--
+-- Vulnerability:
+--   "provider_performance_update_own" allowed any provider to directly
+--   UPDATE their own provider_performance row via the Supabase REST API,
+--   enabling manipulation of response_rate, completion_rate,
+--   conversion_rate, and profile_views without any recomputation.
+--
+-- Fix:
+--   Drop the self-update policy. All legitimate writes to this table
+--   come exclusively from SECURITY DEFINER functions
+--   (refresh_provider_performance, refresh_all_provider_metrics)
+--   and the auto_refresh trigger, all of which bypass RLS.
+--
+-- Retained policies (unchanged):
+--   provider_performance_select   — public read for dashboard/analytics
+--   provider_performance_admin_all — admin full access
+--
+-- Protected systems (unchanged):
+--   - provider_performance reads on all screens
+--   - refresh_provider_performance() SECURITY DEFINER function
+--   - on_provider_change_refresh trigger
+--   - reputation badges, analytics screens, dashboard
+-- ============================================================
+
+DROP POLICY IF EXISTS provider_performance_update_own ON public.provider_performance;

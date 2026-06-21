@@ -359,6 +359,12 @@ async function processTipPayment(
     return json({ error: 'Tip amount out of valid range' }, 400);
   }
 
+  if (expectedCentavos > 0 && paidCentavos !== expectedCentavos) {
+    console.error(`[webhook/tip] Amount mismatch: paid ${paidCentavos} centavos, expected ${expectedCentavos} centavos (tip: ${record.id})`);
+    await db.from('servicehub_tips').update({ status: 'failed' }).eq('id', record.id);
+    return json({ error: 'Tip amount mismatch' }, 400);
+  }
+
   const pmPaymentId = payments[0]?.id ?? null;
   const paidAt      = new Date().toISOString();
 
