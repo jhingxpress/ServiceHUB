@@ -56,6 +56,7 @@ export type CustomerStackParamList = {
   };
   MyFavorites: undefined;
   MapDiscovery: undefined;
+  MapboxDiscovery: undefined;
   ReportScreen: { reportedUserId: string; bookingId?: string; reportedUserName?: string };
   AllCategories: undefined;
 };

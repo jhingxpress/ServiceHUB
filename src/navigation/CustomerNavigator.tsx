@@ -28,6 +28,7 @@ import ReviewDetailScreen from '../screens/customer/ReviewDetailScreen';
 import EditProfileScreen from '../screens/customer/EditProfileScreen';
 import MyFavoritesScreen from '../screens/customer/MyFavoritesScreen';
 import MapDiscoveryScreen from '../screens/customer/MapDiscoveryScreen';
+import MapboxDiscoveryScreen from '../screens/customer/MapboxDiscoveryScreen';
 import AllCategoriesScreen from '../screens/customer/AllCategoriesScreen';
 import ReportScreen from '../screens/shared/ReportScreen';
 
@@ -162,6 +163,7 @@ export default function CustomerNavigator() {
       <Stack.Screen name="ReviewDetail" component={ReviewDetailScreen} />
       <Stack.Screen name="MyFavorites" component={MyFavoritesScreen} />
       <Stack.Screen name="MapDiscovery" component={MapDiscoveryScreen} />
+      <Stack.Screen name="MapboxDiscovery" component={MapboxDiscoveryScreen} options={{ headerShown: false, animation: 'fade' }} />
       <Stack.Screen name="AllCategories" component={AllCategoriesScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="ReportScreen" component={ReportScreen} />
