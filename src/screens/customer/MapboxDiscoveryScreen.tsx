@@ -1,22 +1,26 @@
 /**
- * MapboxDiscoveryScreen — Sprint 6.0A
+ * MapboxDiscoveryScreen — Sprint 6.0B
  *
  * Parallel map implementation using WebView + Leaflet + OpenStreetMap.
  * Coexists with the existing Google MapDiscoveryScreen untouched.
  *
- * Sprint 6.0A scope:
+ * Sprint 6.0A ✅:
  *   ✅ OSM tile map via Leaflet (WebView)
  *   ✅ User location dot + accuracy circle
  *   ✅ Pan and zoom
  *   ✅ Locate Me FAB
  *   ✅ Bottom sheet (peek state)
- *   ⬜ Provider markers      — Sprint 6.0B
- *   ⬜ Clustering            — Sprint 6.0B
+ *
+ * Sprint 6.0B ✅:
+ *   ✅ Provider markers (red = normal, gold = featured)
+ *   ✅ Marker tap → bottom sheet provider card
+ *   ✅ View Profile navigation
+ *   ⬜ Clustering            — Sprint 6.0C
  *   ⬜ Routing / directions  — future
  *   ⬜ Booking integration   — future
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
@@ -31,8 +35,10 @@ import * as Location from 'expo-location';
 
 import MapboxMap, { MapboxMapHandle } from '../../components/maps/MapboxMap';
 import MapboxBottomSheet, { SheetState } from '../../components/maps/MapboxBottomSheet';
+import { ProviderMarkerData } from '../../components/maps/ProviderMarker';
 import { CustomerStackParamList } from '../../navigation/types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
+import { supabase } from '../../lib/supabase';
 
 type Props = NativeStackScreenProps<CustomerStackParamList, 'MapboxDiscovery'>;
 
@@ -40,6 +46,19 @@ type Props = NativeStackScreenProps<CustomerStackParamList, 'MapboxDiscovery'>;
 const DEFAULT_LAT = 14.5995;
 const DEFAULT_LNG = 120.9842;
 const DEFAULT_ZOOM = 13;
+const SEARCH_RADIUS_KM = 50;
+
+function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 interface UserLocation {
   latitude: number;
@@ -56,32 +75,38 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [sheetState, setSheetState] = useState<SheetState>('peek');
-  const [statusText, setStatusText] = useState('Locating you…');
+  const [markers, setMarkers] = useState<ProviderMarkerData[]>([]);
+  const [markersLoading, setMarkersLoading] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderMarkerData | null>(null);
 
   // ─── Location ────────────────────────────────────────────────────────────────
+  const statusText = useMemo(() => {
+    if (selectedProvider) return selectedProvider.name;
+    if (markersLoading || locationState === 'requesting') return 'Loading…';
+    if (markers.length > 0)
+      return `${markers.length} provider${markers.length !== 1 ? 's' : ''} nearby`;
+    if (locationState === 'denied') return 'Location unavailable';
+    return 'Explore nearby services';
+  }, [selectedProvider, markersLoading, locationState, markers.length]);
+
   const requestLocation = useCallback(async () => {
     setLocationState('requesting');
-    setStatusText('Locating you…');
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setLocationState('denied');
-        setStatusText('Location unavailable — showing default area');
         return;
       }
       const position = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
-      const loc = {
+      setUserLocation({
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
-      };
-      setUserLocation(loc);
+      });
       setLocationState('granted');
-      setStatusText('Exploring map');
     } catch {
       setLocationState('error');
-      setStatusText('Could not get location');
     }
   }, []);
 
@@ -96,6 +121,65 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
     }
   }, [mapReady, userLocation]);
 
+  // ─── Provider loading ─────────────────────────────────────────
+  const loadProviders = useCallback(async () => {
+    setMarkersLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('providers')
+        .select(
+          'id, business_name, latitude, longitude, rating, total_reviews, hourly_rate, is_featured, profile_photo_url, business_logo, categories(name, icon, color)',
+        )
+        .eq('status', 'approved')
+        .eq('is_verified', true)
+        .eq('is_available', true)
+        .eq('marketplace_status', 'live')
+        .is('deleted_at', null)
+        .not('latitude', 'is', null)
+        .not('longitude', 'is', null);
+
+      if (error || !data) return;
+
+      const centerLat = userLocation?.latitude ?? DEFAULT_LAT;
+      const centerLng = userLocation?.longitude ?? DEFAULT_LNG;
+
+      const mapped: ProviderMarkerData[] = (data as any[])
+        .filter(
+          (p) =>
+            p.latitude != null &&
+            p.longitude != null &&
+            haversine(centerLat, centerLng, p.latitude, p.longitude) <= SEARCH_RADIUS_KM,
+        )
+        .map((p) => ({
+          id: p.id,
+          name: p.business_name ?? 'Provider',
+          latitude: p.latitude,
+          longitude: p.longitude,
+          category: (p.categories as any)?.name ?? null,
+          rating: Number(p.rating ?? 0),
+          totalReviews: p.total_reviews ?? 0,
+          isFeatured: p.is_featured ?? false,
+          imageUrl: p.profile_photo_url ?? p.business_logo ?? null,
+          hourlyRate: p.hourly_rate ?? null,
+        }));
+
+      setMarkers(mapped);
+    } finally {
+      setMarkersLoading(false);
+    }
+  }, [userLocation]);
+
+  useEffect(() => {
+    if (mapReady) loadProviders();
+  }, [mapReady, loadProviders]);
+
+  // Inject markers whenever the markers array changes (after map is ready)
+  useEffect(() => {
+    if (mapReady && markers.length > 0) {
+      mapRef.current?.setMarkers(markers);
+    }
+  }, [mapReady, markers]);
+
   // ─── Handlers ────────────────────────────────────────────────────────────────
   const handleLocateMe = useCallback(() => {
     if (userLocation) {
@@ -108,6 +192,36 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
   const handleMapReady = useCallback(() => {
     setMapReady(true);
   }, []);
+
+  const handleMarkerPress = useCallback(
+    (providerId: string) => {
+      const found = markers.find((m) => m.id === providerId) ?? null;
+      setSelectedProvider(found);
+      if (found) {
+        setSheetState('full');
+        mapRef.current?.flyTo(found.latitude, found.longitude, 15);
+      }
+    },
+    [markers],
+  );
+
+  const handleSheetStateChange = useCallback(
+    (state: SheetState) => {
+      setSheetState(state);
+      if (state === 'peek') {
+        setSelectedProvider(null);
+        mapRef.current?.selectMarker('');
+      }
+    },
+    [],
+  );
+
+  const handleViewProfile = useCallback(
+    (id: string) => {
+      navigation.navigate('ProviderStorefront', { providerId: id });
+    },
+    [navigation],
+  );
 
   // ─── Initial map center ──────────────────────────────────────────────────────
   const mapLat = userLocation?.latitude ?? DEFAULT_LAT;
@@ -124,6 +238,7 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
         initialZoom={DEFAULT_ZOOM}
         showUserLocation={locationState === 'granted'}
         onMapReady={handleMapReady}
+        onMarkerPress={handleMarkerPress}
         style={StyleSheet.absoluteFillObject}
       />
 
@@ -210,8 +325,10 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
       {/* ── Bottom Sheet ────────────────────────────────────────────────── */}
       <MapboxBottomSheet
         sheetState={sheetState}
-        onStateChange={setSheetState}
+        onStateChange={handleSheetStateChange}
         statusText={statusText}
+        selectedProvider={selectedProvider}
+        onViewProfile={handleViewProfile}
       />
     </View>
   );

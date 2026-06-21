@@ -6,6 +6,7 @@ import React, {
 } from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
+import { ProviderMarkerData } from './ProviderMarker';
 
 // ─── Public Handle ─────────────────────────────────────────────────────────────
 // Mirrors the imperative API that @rnmapbox/maps would expose.
@@ -15,6 +16,10 @@ export interface MapboxMapHandle {
   zoomIn: () => void;
   zoomOut: () => void;
   updateUserLocation: (latitude: number, longitude: number) => void;
+  addMarker: (marker: ProviderMarkerData) => void;
+  clearMarkers: () => void;
+  setMarkers: (markers: ProviderMarkerData[]) => void;
+  selectMarker: (id: string) => void;
 }
 
 // ─── Props ─────────────────────────────────────────────────────────────────────
@@ -26,6 +31,7 @@ export interface MapboxMapProps {
   style?: ViewStyle;
   onMapReady?: () => void;
   onRegionChange?: (latitude: number, longitude: number, zoom: number) => void;
+  onMarkerPress?: (providerId: string) => void;
 }
 
 // ─── HTML builder ──────────────────────────────────────────────────────────────
@@ -95,7 +101,7 @@ function buildMapHTML(
       postMsg({ type: 'regionChange', latitude: c.lat, longitude: c.lng, zoom: map.getZoom() });
     });
 
-    // Exposed to React Native via injectJavaScript
+    // ── Navigation commands ───────────────────────────────────────────
     window.mapCmd = {
       flyTo: function (lat, lng, z) {
         map.flyTo([lat, lng], z !== undefined ? z : map.getZoom(), { duration: 0.8 });
@@ -106,6 +112,77 @@ function buildMapHTML(
         if (userMarker)      userMarker.setLatLng([lat, lng]);
         if (accuracyCircle)  accuracyCircle.setLatLng([lat, lng]);
       },
+    };
+
+    // ── Provider marker management ────────────────────────────────────
+    var providerMarkers = {};
+    var selectedProviderId = null;
+
+    function createMarkerIcon(m, isSelected) {
+      var featured = m.isFeatured;
+      var size = isSelected ? (featured ? 46 : 42) : (featured ? 40 : 34);
+      var bg = featured ? '#F59E0B' : '#E31C3D';
+      var borderColor = isSelected ? (featured ? '#FEF3C7' : '#7C3AED') : '#fff';
+      var borderW = isSelected ? '3' : '2';
+      var shadow = featured
+        ? '0 2px 8px rgba(245,158,11,0.5)'
+        : (isSelected ? '0 3px 12px rgba(0,0,0,0.4)' : '0 2px 6px rgba(0,0,0,0.25)');
+      var ratingStr = m.rating > 0 ? Number(m.rating).toFixed(1) : '';
+      var label = featured ? ('\u2B50' + ratingStr) : (ratingStr ? '\u2605' + ratingStr : '');
+      var html = '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;'
+        + 'background:' + bg + ';border:' + borderW + 'px solid ' + borderColor + ';'
+        + 'box-shadow:' + shadow + ';cursor:pointer;'
+        + 'display:flex;align-items:center;justify-content:center;">'
+        + '<span style="color:#fff;font-size:9px;font-weight:700;white-space:nowrap;line-height:1;">'
+        + label + '</span></div>';
+      return L.divIcon({ className: '', html: html, iconSize: [size, size], iconAnchor: [size/2, size/2] });
+    }
+
+    window.mapCmd.addMarker = function(m) {
+      if (!m || !m.latitude || !m.longitude) return;
+      if (providerMarkers[m.id]) {
+        map.removeLayer(providerMarkers[m.id].lm);
+        delete providerMarkers[m.id];
+      }
+      var icon = createMarkerIcon(m, false);
+      var lm = L.marker([m.latitude, m.longitude], { icon: icon }).addTo(map);
+      lm.on('click', function() {
+        if (selectedProviderId && providerMarkers[selectedProviderId]) {
+          providerMarkers[selectedProviderId].lm.setIcon(
+            createMarkerIcon(providerMarkers[selectedProviderId].data, false)
+          );
+        }
+        lm.setIcon(createMarkerIcon(m, true));
+        selectedProviderId = m.id;
+        postMsg({ type: 'markerPress', providerId: m.id });
+      });
+      providerMarkers[m.id] = { lm: lm, data: m };
+    };
+
+    window.mapCmd.clearMarkers = function() {
+      Object.keys(providerMarkers).forEach(function(id) {
+        map.removeLayer(providerMarkers[id].lm);
+      });
+      providerMarkers = {};
+      selectedProviderId = null;
+    };
+
+    window.mapCmd.setMarkers = function(arr) {
+      window.mapCmd.clearMarkers();
+      (arr || []).forEach(function(m) { window.mapCmd.addMarker(m); });
+    };
+
+    window.mapCmd.selectMarker = function(id) {
+      if (selectedProviderId && providerMarkers[selectedProviderId]) {
+        providerMarkers[selectedProviderId].lm.setIcon(
+          createMarkerIcon(providerMarkers[selectedProviderId].data, false)
+        );
+      }
+      selectedProviderId = null;
+      if (id && providerMarkers[id]) {
+        providerMarkers[id].lm.setIcon(createMarkerIcon(providerMarkers[id].data, true));
+        selectedProviderId = id;
+      }
     };
 
     // Notify React Native that the map is ready
@@ -128,6 +205,7 @@ const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(
       style,
       onMapReady,
       onRegionChange,
+      onMarkerPress,
     },
     ref,
   ) => {
@@ -146,6 +224,13 @@ const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(
         zoomOut: () => inject('window.mapCmd.zoomOut()'),
         updateUserLocation: (lat, lng) =>
           inject(`window.mapCmd.updateUserLocation(${lat}, ${lng})`),
+        addMarker: (marker) =>
+          inject(`window.mapCmd.addMarker(${JSON.stringify(marker)})`),
+        clearMarkers: () => inject('window.mapCmd.clearMarkers()'),
+        setMarkers: (markers) =>
+          inject(`window.mapCmd.setMarkers(${JSON.stringify(markers)})`),
+        selectMarker: (id) =>
+          inject(`window.mapCmd.selectMarker(${JSON.stringify(id)})`),
       }),
       [inject],
     );
@@ -158,12 +243,14 @@ const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(
             onMapReady?.();
           } else if (payload.type === 'regionChange') {
             onRegionChange?.(payload.latitude, payload.longitude, payload.zoom);
+          } else if (payload.type === 'markerPress') {
+            onMarkerPress?.(payload.providerId);
           }
         } catch {
           // ignore malformed messages
         }
       },
-      [onMapReady, onRegionChange],
+      [onMapReady, onRegionChange, onMarkerPress],
     );
 
     const html = buildMapHTML(

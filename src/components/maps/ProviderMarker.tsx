@@ -1,32 +1,31 @@
 /**
- * ProviderMarker — Sprint 6.0A stub
+ * ProviderMarker — Sprint 6.0B
  *
- * Placeholder typed to the intended future interface.
- * Sprint 6.0B will implement real marker injection into MapboxMap.
- *
- * Rendering is handled inside the Leaflet WebView via injectJavaScript.
- * This component exists as the React-facing interface layer so callers
- * in MapboxDiscoveryScreen can be written now and filled in later.
+ * Typed data contract for provider markers rendered inside the Leaflet WebView.
+ * Actual rendering happens via window.mapCmd.addMarker() / setMarkers() in MapboxMap.
+ * This module owns the shared interface so MapboxMap, MapboxBottomSheet,
+ * and MapboxDiscoveryScreen remain in sync.
  */
 
 export interface ProviderMarkerData {
   id: string;
+  name: string;
   latitude: number;
   longitude: number;
-  businessName: string | null;
+  category: string | null;
   rating: number;
   isFeatured: boolean;
-  profilePhotoUrl: string | null;
-  businessLogo: string | null;
+  imageUrl?: string | null;
+  totalReviews?: number;
+  hourlyRate?: number | null;
 }
 
 export interface ProviderMarkerProps {
-  provider: ProviderMarkerData;
+  marker: ProviderMarkerData;
   selected?: boolean;
-  onPress?: (id: string) => void;
 }
 
-// Sprint 6.0A: no-op — markers will be injected into MapboxMap WebView in 6.0B.
+// Rendering is handled inside MapboxMap's Leaflet WebView via injectJavaScript.
 export default function ProviderMarker(_props: ProviderMarkerProps): null {
   return null;
 }

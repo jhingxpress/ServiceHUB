@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
+import { ProviderMarkerData } from './ProviderMarker';
 
 // ─── Snap config ───────────────────────────────────────────────────────────────
 const PEEK_HEIGHT  = 72;   // always-visible strip
@@ -21,6 +22,8 @@ export interface MapboxBottomSheetProps {
   sheetState?: SheetState;
   onStateChange?: (state: SheetState) => void;
   statusText?: string;
+  selectedProvider?: ProviderMarkerData | null;
+  onViewProfile?: (id: string) => void;
   children?: React.ReactNode;
   containerStyle?: ViewStyle;
 }
@@ -29,6 +32,8 @@ export default function MapboxBottomSheet({
   sheetState = 'peek',
   onStateChange,
   statusText = 'Exploring map…',
+  selectedProvider,
+  onViewProfile,
   children,
   containerStyle,
 }: MapboxBottomSheetProps) {
@@ -100,16 +105,60 @@ export default function MapboxBottomSheet({
         </View>
       </TouchableOpacity>
 
-      {/* Sheet content — filled by parent in future sprints */}
+      {/* Sheet content */}
       <View style={styles.content}>
-        {children ?? (
-          <View style={styles.placeholder}>
-            <Ionicons name="search-outline" size={32} color={COLORS.textLight} />
-            <Text style={styles.placeholderTitle}>Provider search coming soon</Text>
-            <Text style={styles.placeholderSub}>
-              Sprint 6.0B will add nearby provider cards and filters here.
+        {selectedProvider ? (
+          <View style={styles.providerCard}>
+            {selectedProvider.isFeatured && (
+              <View style={styles.featuredRow}>
+                <View style={styles.featuredBadge}>
+                  <Text style={styles.featuredText}>⭐ Featured Provider</Text>
+                </View>
+              </View>
+            )}
+            <Text style={styles.providerName} numberOfLines={2}>
+              {selectedProvider.name}
             </Text>
+            {!!selectedProvider.category && (
+              <View style={styles.categoryPill}>
+                <Text style={styles.categoryText}>{selectedProvider.category}</Text>
+              </View>
+            )}
+            <View style={styles.providerMeta}>
+              <View style={styles.ratingRow}>
+                <Ionicons name="star" size={13} color="#F59E0B" />
+                <Text style={styles.ratingVal}>
+                  {selectedProvider.rating > 0 ? selectedProvider.rating.toFixed(1) : 'No rating'}
+                </Text>
+                {(selectedProvider.totalReviews ?? 0) > 0 && (
+                  <Text style={styles.reviewCount}>
+                    · {selectedProvider.totalReviews} review{selectedProvider.totalReviews !== 1 ? 's' : ''}
+                  </Text>
+                )}
+              </View>
+              {(selectedProvider.hourlyRate ?? 0) > 0 && (
+                <Text style={styles.rateText}>₱{selectedProvider.hourlyRate}/hr</Text>
+              )}
+            </View>
+            <TouchableOpacity
+              style={styles.viewProfileBtn}
+              onPress={() => onViewProfile?.(selectedProvider.id)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.viewProfileText}>View Profile</Text>
+              <Ionicons name="arrow-forward-outline" size={14} color={COLORS.white} />
+            </TouchableOpacity>
           </View>
+        ) : (
+          children ?? (
+            <View style={styles.placeholder}>
+              <Ionicons name="location-outline" size={32} color={COLORS.textLight} />
+              <Text style={styles.placeholderTitle}>Tap a marker to explore</Text>
+              <Text style={styles.placeholderSub}>
+                Provider details will appear here.
+              </Text>
+            </View>
+          )
         )}
       </View>
     </Animated.View>
@@ -180,5 +229,48 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     maxWidth: 260,
+  },
+  providerCard: { gap: SPACING.sm },
+  featuredRow: { flexDirection: 'row' },
+  featuredBadge: {
+    backgroundColor: '#FEF3C7', borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: SPACING.sm, paddingVertical: 3,
+    borderWidth: 1, borderColor: '#FDE68A',
+    alignSelf: 'flex-start',
+  },
+  featuredText: {
+    fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: '#B45309',
+  },
+  providerName: {
+    fontSize: FONTS.sizes.xl, fontFamily: FONTS.bold,
+    color: COLORS.text, lineHeight: 26,
+  },
+  categoryPill: {
+    alignSelf: 'flex-start', backgroundColor: COLORS.primaryLight,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: SPACING.sm, paddingVertical: 2,
+  },
+  categoryText: {
+    fontSize: FONTS.sizes.xs, fontFamily: FONTS.medium, color: COLORS.primary,
+  },
+  providerMeta: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  ratingVal: {
+    fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text,
+  },
+  reviewCount: { fontSize: FONTS.sizes.sm, color: COLORS.textLight },
+  rateText: {
+    fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.textSecondary,
+  },
+  viewProfileBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: SPACING.xs, backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.xl, paddingVertical: SPACING.sm + 2,
+    marginTop: SPACING.xs, ...SHADOWS.small,
+  },
+  viewProfileText: {
+    fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.white,
   },
 });
