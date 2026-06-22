@@ -44,6 +44,16 @@ const BADGE_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']>
   new_provider: 'leaf',
 };
 
+function formatResponseTime(minutes: number): string {
+  if (minutes < 60) return `${minutes} mins`;
+  if (minutes < 1440) {
+    const hrs = minutes / 60;
+    return Number.isInteger(hrs) ? `${hrs} hrs` : `${hrs.toFixed(1)} hrs`;
+  }
+  const days = minutes / 1440;
+  return Number.isInteger(days) ? `${days} day${days !== 1 ? 's' : ''}` : `${days.toFixed(1)} days`;
+}
+
 export default function ProviderStorefrontScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RouteType>();
@@ -324,7 +334,7 @@ export default function ProviderStorefrontScreen() {
               <View style={styles.responseTimeWrap}>
                 <Ionicons name="timer-outline" size={12} color={COLORS.textLight} />
                 <Text style={styles.responseTimeText}>
-                  Responds in {Math.ceil((provider as any).provider_stats.average_response_minutes / 5) * 5} mins
+                  Responds in {formatResponseTime((provider as any).provider_stats.average_response_minutes)}
                 </Text>
               </View>
             )}
@@ -365,7 +375,7 @@ export default function ProviderStorefrontScreen() {
             <View style={styles.metricDivider} />
             <View style={styles.metric}>
               <Ionicons name="heart" size={16} color={COLORS.error} />
-              <Text style={styles.metricValue}>{(provider as any).provider_stats?.favorite_count ?? 0}</Text>
+              <Text style={styles.metricValue}>{((provider as any).provider_stats?.favorite_count ?? 0) || '—'}</Text>
               <Text style={styles.metricLabel}>Favorites</Text>
             </View>
           </View>
@@ -607,7 +617,7 @@ const styles = StyleSheet.create({
   verifiedBadge: { position: 'absolute', bottom: -2, right: -2, backgroundColor: COLORS.white, borderRadius: 10 },
   providerName: { fontFamily: FONTS.bold, fontSize: FONTS.sizes.xl, color: COLORS.text, marginTop: SPACING.sm },
   categoryName: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, marginTop: 2 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginTop: SPACING.sm },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.sm, flexWrap: 'wrap', justifyContent: 'center' },
   availabilityRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   availabilityDot: { width: 8, height: 8, borderRadius: 4 },
   availableDot: { backgroundColor: '#22C55E' },
@@ -732,7 +742,7 @@ const styles = StyleSheet.create({
   openStatusSub: { fontFamily: FONTS.regular, fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginLeft: 4 },
   hoursSection: { marginTop: SPACING.md },
   hoursTitle: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: SPACING.xs },
-  hoursRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+  hoursRow: { flexDirection: 'column', paddingVertical: 4 },
   hoursDays: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
-  hoursTime: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
+  hoursTime: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text, marginTop: 2 },
 });

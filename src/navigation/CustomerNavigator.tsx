@@ -31,6 +31,8 @@ import MapDiscoveryScreen from '../screens/customer/MapDiscoveryScreen';
 import MapboxDiscoveryScreen from '../screens/customer/MapboxDiscoveryScreen';
 import AllCategoriesScreen from '../screens/customer/AllCategoriesScreen';
 import ReportScreen from '../screens/shared/ReportScreen';
+import LiveTrackingScreen from '../screens/customer/LiveTrackingScreen';
+import SavedLocationsScreen from '../screens/customer/SavedLocationsScreen';
 
 const Stack = createNativeStackNavigator<CustomerStackParamList>();
 const Tab = createBottomTabNavigator<CustomerTabParamList>();
@@ -167,6 +169,8 @@ export default function CustomerNavigator() {
       <Stack.Screen name="AllCategories" component={AllCategoriesScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="ReportScreen" component={ReportScreen} />
+      <Stack.Screen name="LiveTracking" component={LiveTrackingScreen} options={{ headerShown: false, animation: 'slide_from_bottom' }} />
+      <Stack.Screen name="SavedLocations" component={SavedLocationsScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

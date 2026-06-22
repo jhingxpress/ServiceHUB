@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -34,6 +34,24 @@ import { useErrorHandler } from '../../utils/errorHandler';
 type NavProp = NativeStackNavigationProp<CustomerStackParamList>;
 type RouteType = RouteProp<CustomerStackParamList, 'BookService'>;
 
+interface SavedLocation {
+  id: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  is_default: boolean;
+}
+
+function getSavedLocIcon(name: string): React.ComponentProps<typeof Ionicons>['name'] {
+  const n = name.toLowerCase();
+  if (n.includes('home') || n.includes('house')) return 'home-outline';
+  if (n.includes('office') || n.includes('work')) return 'business-outline';
+  if (n.includes('school') || n.includes('university')) return 'school-outline';
+  if (n.includes('parent') || n.includes('mom') || n.includes('dad')) return 'people-outline';
+  return 'location-outline';
+}
+
 export default function BookingScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RouteType>();
@@ -67,10 +85,24 @@ export default function BookingScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [detectingLocation, setDetectingLocation] = useState(false);
+  const [savedLocations, setSavedLocations] = useState<SavedLocation[]>([]);
+  const [activeSavedLocId, setActiveSavedLocId] = useState<string | null>(null);
   const { showError, showSuccess } = useErrorHandler();
+
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from('saved_locations')
+      .select('id, name, address, latitude, longitude, is_default')
+      .eq('customer_id', user.id)
+      .order('is_default', { ascending: false })
+      .order('created_at', { ascending: true })
+      .then(({ data }) => { if (data) setSavedLocations(data as SavedLocation[]); });
+  }, [user]);
 
   const applyProfileLocation = () => {
     if (!user) return;
+    setActiveSavedLocId(null);
     setUseProfileLocation(true);
     setLocationMode('saved');
     setLocation(user.address ?? '');
@@ -84,6 +116,7 @@ export default function BookingScreen() {
   };
 
   const clearProfileLocation = () => {
+    setActiveSavedLocId(null);
     setUseProfileLocation(false);
     setLocationMode(null);
     setLocation('');
@@ -94,6 +127,7 @@ export default function BookingScreen() {
   };
 
   const handleDetectBookingLocation = async () => {
+    setActiveSavedLocId(null);
     setDetectingLocation(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -140,7 +174,7 @@ export default function BookingScreen() {
     if (latRef.current == null || lngRef.current == null) return;
     const url = Platform.select({
       ios: `http://maps.apple.com/?q=${encodeURIComponent(location)}&ll=${latRef.current},${lngRef.current}`,
-      android: `geo:${latRef.current},${lngRef.current}?q=${encodeURIComponent(location)}`,
+      android: `https://www.google.com/maps/dir/?api=1&destination=${latRef.current},${lngRef.current}`,
     });
     if (url) Linking.openURL(url);
   };
@@ -475,6 +509,49 @@ export default function BookingScreen() {
             {/* Service Location */}
             <Text style={styles.label}>Where should the service be performed?</Text>
 
+            {/* Saved Locations from DB */}
+            {savedLocations.length > 0 && (
+              <>
+                <Text style={styles.locationGroupLabel}>Saved Locations</Text>
+                {savedLocations.map((sl) => (
+                  <TouchableOpacity
+                    key={sl.id}
+                    style={[styles.locationOption, activeSavedLocId === sl.id && styles.locationOptionActive]}
+                    onPress={() => {
+                      if (activeSavedLocId === sl.id) {
+                        setActiveSavedLocId(null);
+                        clearProfileLocation();
+                      } else {
+                        setActiveSavedLocId(sl.id);
+                        setLocationMode(null);
+                        setUseProfileLocation(false);
+                        setLocation(sl.address);
+                        setCity('');
+                        setProvince('');
+                        setCoords(sl.latitude, sl.longitude);
+                      }
+                    }}
+                  >
+                    <View style={[styles.locationOptionIcon, { backgroundColor: activeSavedLocId === sl.id ? COLORS.primaryLight : '#F0F0F0' }]}>
+                      <Ionicons name={getSavedLocIcon(sl.name)} size={22} color={COLORS.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.locationOptionTitle}>
+                        {sl.name}{sl.is_default ? '  ★' : ''}
+                      </Text>
+                      <Text style={styles.locationOptionSub} numberOfLines={1}>{sl.address}</Text>
+                    </View>
+                    <Ionicons
+                      name={activeSavedLocId === sl.id ? 'radio-button-on' : 'radio-button-off'}
+                      size={22}
+                      color={activeSavedLocId === sl.id ? COLORS.primary : COLORS.textLight}
+                    />
+                  </TouchableOpacity>
+                ))}
+                <Text style={styles.locationGroupLabel}>Other Options</Text>
+              </>
+            )}
+
             {/* Option 1: Saved Address */}
             {user?.address && (
               <TouchableOpacity
@@ -527,6 +604,7 @@ export default function BookingScreen() {
                 if (locationMode === 'manual') {
                   clearProfileLocation();
                 } else {
+                  setActiveSavedLocId(null);
                   setLocationMode('manual');
                   setUseProfileLocation(false);
                   setCoords(null, null);
@@ -608,8 +686,8 @@ export default function BookingScreen() {
                   GPS coordinates captured
                 </Text>
                 <TouchableOpacity onPress={openInMaps} style={styles.openMapsBtn}>
-                  <Ionicons name="map-outline" size={14} color={COLORS.primary} />
-                  <Text style={styles.openMapsText}>Open in Maps</Text>
+                  <Ionicons name="navigate-outline" size={14} color={COLORS.primary} />
+                  <Text style={styles.openMapsText}>Navigate</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -992,5 +1070,14 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.xs,
     fontFamily: FONTS.semiBold,
     color: COLORS.primary,
+  },
+  locationGroupLabel: {
+    fontSize: FONTS.sizes.xs,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: SPACING.xs,
+    marginTop: SPACING.xs,
   },
 });

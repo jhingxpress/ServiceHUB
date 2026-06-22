@@ -274,6 +274,21 @@ export default function BookingDetailScreen() {
 
         {/* Actions */}
         <View style={styles.actions}>
+          {['accepted', 'on_the_way', 'arrived'].includes(booking.status) && (
+            <Button
+              title="Track Provider"
+              onPress={() =>
+                navigation.navigate('LiveTracking', {
+                  bookingId,
+                  providerName,
+                  customerLat: booking.latitude ?? undefined,
+                  customerLng: booking.longitude ?? undefined,
+                })
+              }
+              fullWidth
+              style={styles.actionBtn}
+            />
+          )}
           {isCompleted && !hasReview && (
             <Button
               title="Leave a Review"

@@ -227,10 +227,19 @@ export default function ProviderBookingDetailScreen() {
             <>
               <View style={styles.infoRow}>
                 <Ionicons name="navigate-outline" size={16} color={COLORS.textSecondary} />
-                <Text style={styles.infoLabel}>Coordinates</Text>
-                <Text style={styles.infoValue}>
-                  {booking.latitude.toFixed(5)}, {booking.longitude.toFixed(5)}
-                </Text>
+                <Text style={styles.infoLabel}>GPS</Text>
+                <View style={{ flex: 1 }}>
+                  {(booking.booking_city || booking.booking_province) ? (
+                    <Text style={styles.infoValue}>
+                      📍 {[booking.booking_city, booking.booking_province].filter(Boolean).join(', ')}
+                    </Text>
+                  ) : (
+                    <Text style={styles.infoValue}>{booking.location}</Text>
+                  )}
+                  <Text style={styles.coordsSub}>
+                    ({booking.latitude.toFixed(5)}, {booking.longitude.toFixed(5)})
+                  </Text>
+                </View>
               </View>
               <TouchableOpacity
                 style={styles.mapsBtn}
@@ -239,8 +248,8 @@ export default function ProviderBookingDetailScreen() {
                   Linking.openURL(url);
                 }}
               >
-                <Ionicons name="map-outline" size={18} color={COLORS.primary} />
-                <Text style={styles.mapsBtnText}>Open in Maps</Text>
+                <Ionicons name="navigate-outline" size={18} color={COLORS.primary} />
+                <Text style={styles.mapsBtnText}>Navigate</Text>
               </TouchableOpacity>
             </>
           )}
@@ -284,6 +293,21 @@ export default function ProviderBookingDetailScreen() {
 
         {/* Actions */}
         <View style={styles.actions}>
+          {['accepted', 'on_the_way', 'arrived'].includes(booking.status) && (
+            <Button
+              title="Share Live Location"
+              onPress={() =>
+                navigation.navigate('ProviderLiveTracking', {
+                  bookingId,
+                  customerName: customerName ?? 'Customer',
+                  customerLat: booking.latitude ?? undefined,
+                  customerLng: booking.longitude ?? undefined,
+                })
+              }
+              fullWidth
+              style={styles.actionBtn}
+            />
+          )}
           {booking.status === 'pending' && (
             <>
               <Button
@@ -398,6 +422,7 @@ const styles = StyleSheet.create({
   infoLabel: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, width: 70 },
   infoValue: { flex: 1, fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
   locationSub: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
+  coordsSub: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontFamily: FONTS.regular, marginTop: 2 },
   mapsBtn: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
     backgroundColor: COLORS.primaryLight, borderRadius: BORDER_RADIUS.md,

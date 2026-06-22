@@ -25,6 +25,7 @@ import Badge from '../../components/ui/Badge';
 import ServiceCard from '../../components/marketplace/ServiceCard';
 import FeaturedBadge from '../../components/marketplace/FeaturedBadge';
 import { CustomerStackParamList, CustomerTabParamList } from '../../navigation/types';
+import NearbyProvidersCard from '../../components/home/NearbyProvidersCard';
 
 type NavProp = CompositeNavigationProp<
   BottomTabNavigationProp<CustomerTabParamList, 'Home'>,
@@ -272,6 +273,9 @@ export default function HomeScreen() {
           </View>
           <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
         </TouchableOpacity>
+
+        {/* Nearby Providers */}
+        <NearbyProvidersCard />
 
         {/* Banner */}
         <View style={styles.banner}>

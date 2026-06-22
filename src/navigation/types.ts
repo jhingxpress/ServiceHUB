@@ -59,6 +59,13 @@ export type CustomerStackParamList = {
   MapboxDiscovery: undefined;
   ReportScreen: { reportedUserId: string; bookingId?: string; reportedUserName?: string };
   AllCategories: undefined;
+  LiveTracking: {
+    bookingId: string;
+    providerName: string;
+    customerLat?: number;
+    customerLng?: number;
+  };
+  SavedLocations: undefined;
 };
 
 export type CustomerTabParamList = {
@@ -90,6 +97,12 @@ export type ProviderStackParamList = {
   HistoricalAnalytics: undefined;
   EarningsSummary: undefined;
   ReportScreen: { reportedUserId: string; bookingId?: string; reportedUserName?: string };
+  ProviderLiveTracking: {
+    bookingId: string;
+    customerName: string;
+    customerLat?: number;
+    customerLng?: number;
+  };
 };
 
 export type ProviderTabParamList = {

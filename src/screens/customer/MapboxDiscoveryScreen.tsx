@@ -22,11 +22,14 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   ActivityIndicator,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,12 +38,35 @@ import * as Location from 'expo-location';
 
 import MapboxMap, { MapboxMapHandle } from '../../components/maps/MapboxMap';
 import MapboxBottomSheet, { SheetState } from '../../components/maps/MapboxBottomSheet';
+import MapSortSheet, { SortOption } from '../../components/maps/MapSortSheet';
 import { ProviderMarkerData } from '../../components/maps/ProviderMarker';
 import { CustomerStackParamList } from '../../navigation/types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 
 type Props = NativeStackScreenProps<CustomerStackParamList, 'MapboxDiscovery'>;
+
+type QuickFilter = 'all' | 'featured' | 'open_now' | 'top_rated';
+
+const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'featured', label: 'Featured' },
+  { key: 'open_now', label: 'Open Now' },
+  { key: 'top_rated', label: 'Top Rated' },
+];
+
+const CATEGORIES: string[] = [
+  'All',
+  'Home Services',
+  'Cleaning',
+  'Technology',
+  'Events',
+  'Transport',
+  'Rentals',
+  'Construction',
+  'Beauty',
+  'Automotive',
+];
 
 // Default center: Manila, Philippines
 const DEFAULT_LAT = 14.5995;
@@ -81,15 +107,85 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
   const [routeDistanceKm, setRouteDistanceKm] = useState<number | null>(null);
   const [routeEtaMin, setRouteEtaMin] = useState<number | null>(null);
 
+  // ── Sprint 6.5: filter / search / sort state ───────────────────────────────
+  const [searchText, setSearchText] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedFilter, setSelectedFilter] = useState<QuickFilter>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [selectedSort, setSelectedSort] = useState<SortOption>('nearest');
+  const [sortSheetOpen, setSortSheetOpen] = useState(false);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const animatedFabBottom = useRef(new Animated.Value(80)).current;
+  const animatedZoomBottom = useRef(new Animated.Value(140)).current;
+
+  // ─── Sprint 6.5: derived filtered markers (no new queries) ─────────────────
+  const filteredMarkers = useMemo<ProviderMarkerData[]>(() => {
+    let result = [...markers];
+
+    // Search
+    const q = debouncedSearch.trim().toLowerCase();
+    if (q) {
+      result = result.filter(
+        (m) =>
+          (m.name ?? '').toLowerCase().includes(q) ||
+          (m.category ?? '').toLowerCase().includes(q),
+      );
+    }
+
+    // Quick filter
+    if (selectedFilter === 'featured') {
+      result = result.filter((m) => m.isFeatured);
+    } else if (selectedFilter === 'open_now') {
+      result = result.filter((m) => m.openStatus === 'open');
+    } else if (selectedFilter === 'top_rated') {
+      result = result.filter((m) => m.rating >= 4.0);
+    }
+
+    // Category
+    if (selectedCategory !== 'All') {
+      result = result.filter(
+        (m) => (m.category ?? '').toLowerCase() === selectedCategory.toLowerCase(),
+      );
+    }
+
+    // Sort
+    switch (selectedSort) {
+      case 'nearest':
+        result.sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
+        break;
+      case 'top_rated':
+        result.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+        break;
+      case 'most_reviews':
+        result.sort((a, b) => (b.totalReviews ?? 0) - (a.totalReviews ?? 0));
+        break;
+      case 'featured_first':
+        result.sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured));
+        break;
+      case 'open_now':
+        result.sort((a, b) => Number(b.openStatus === 'open') - Number(a.openStatus === 'open'));
+        break;
+    }
+
+    return result;
+  }, [markers, debouncedSearch, selectedFilter, selectedCategory, selectedSort]);
+
+  const hasActiveFilters =
+    selectedFilter !== 'all' ||
+    selectedCategory !== 'All' ||
+    debouncedSearch.trim().length > 0 ||
+    selectedSort !== 'nearest';
+
   // ─── Location ────────────────────────────────────────────────────────────────
   const statusText = useMemo(() => {
     if (selectedProvider) return selectedProvider.name;
     if (markersLoading || locationState === 'requesting') return 'Loading…';
-    if (markers.length > 0)
-      return `${markers.length} provider${markers.length !== 1 ? 's' : ''} nearby`;
+    if (filteredMarkers.length > 0)
+      return `${filteredMarkers.length} provider${filteredMarkers.length !== 1 ? 's' : ''} nearby`;
     if (locationState === 'denied') return 'Location unavailable';
     return 'Explore nearby services';
-  }, [selectedProvider, markersLoading, locationState, markers.length]);
+  }, [selectedProvider, markersLoading, locationState, filteredMarkers.length]);
 
   const requestLocation = useCallback(async () => {
     setLocationState('requesting');
@@ -178,12 +274,12 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
     if (mapReady) loadProviders();
   }, [mapReady, loadProviders]);
 
-  // Inject markers whenever the markers array changes (after map is ready)
+  // Inject filtered markers whenever derived array changes
   useEffect(() => {
-    if (mapReady && markers.length > 0) {
-      mapRef.current?.setMarkers(markers);
+    if (mapReady) {
+      mapRef.current?.setMarkers(filteredMarkers);
     }
-  }, [mapReady, markers]);
+  }, [mapReady, filteredMarkers]);
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
   const handleLocateMe = useCallback(() => {
@@ -197,6 +293,14 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
   const handleMapReady = useCallback(() => {
     setMapReady(true);
   }, []);
+
+  useEffect(() => {
+    const base = sheetState === 'full' ? 340 : 80;
+    Animated.parallel([
+      Animated.timing(animatedFabBottom, { toValue: base + insets.bottom, duration: 220, useNativeDriver: false }),
+      Animated.timing(animatedZoomBottom, { toValue: base + insets.bottom + 60, duration: 220, useNativeDriver: false }),
+    ]).start();
+  }, [sheetState, insets.bottom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchRoute = useCallback(async (
     fromLat: number, fromLng: number,
@@ -223,7 +327,7 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
 
   const handleMarkerPress = useCallback(
     (providerId: string) => {
-      const found = markers.find((m) => m.id === providerId) ?? null;
+      const found = filteredMarkers.find((m) => m.id === providerId) ?? null;
       setSelectedProvider(found);
       if (found) {
         setSheetState('full');
@@ -236,8 +340,30 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
         }
       }
     },
-    [markers, userLocation, fetchRoute],
+    [filteredMarkers, userLocation, fetchRoute],
   );
+
+  // ─── Sprint 6.5: search debounce ────────────────────────────────────────────
+  const handleSearchChange = useCallback((text: string) => {
+    setSearchText(text);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => setDebouncedSearch(text), 300);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, []);
+
+  // ─── Sprint 6.5: reset filters ─────────────────────────────────────────────
+  const resetFilters = useCallback(() => {
+    setSelectedFilter('all');
+    setSelectedCategory('All');
+    setSelectedSort('nearest');
+    setSearchText('');
+    setDebouncedSearch('');
+  }, []);
 
   const handleSheetStateChange = useCallback(
     (state: SheetState) => {
@@ -288,8 +414,8 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
 
       {/* ── Top overlay ────────────────────────────────────────────────── */}
       <SafeAreaView edges={['top']} style={styles.topOverlay} pointerEvents="box-none">
+        {/* Row 1: back + title pill + sort */}
         <View style={[styles.topRow, { marginTop: SPACING.sm }]}>
-          {/* Back */}
           <TouchableOpacity
             style={styles.iconBtn}
             onPress={() => navigation.goBack()}
@@ -298,18 +424,104 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
             <Ionicons name="arrow-back" size={20} color={COLORS.text} />
           </TouchableOpacity>
 
-          {/* Title pill */}
+          {/* Title pill with count */}
           <View style={styles.titlePill}>
             <Ionicons name="map" size={14} color={COLORS.primary} />
             <Text style={styles.titleText}>Discover</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{filteredMarkers.length}</Text>
+            </View>
             <View style={styles.osmBadge}>
-              <Text style={styles.osmBadgeText}>OSM</Text>
+              <Text style={styles.osmBadgeText}>CARTO</Text>
             </View>
           </View>
 
-          {/* Placeholder for symmetry */}
-          <View style={{ width: 40 }} />
+          {/* Sort button */}
+          <TouchableOpacity
+            style={[styles.iconBtn, selectedSort !== 'nearest' && styles.iconBtnActive]}
+            onPress={() => setSortSheetOpen(true)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="funnel-outline" size={18} color={selectedSort !== 'nearest' ? COLORS.primary : COLORS.text} />
+          </TouchableOpacity>
         </View>
+
+        {/* Active filter indicator */}
+        {hasActiveFilters && (
+          <TouchableOpacity style={styles.filterChipRow} onPress={resetFilters} activeOpacity={0.8}>
+            <View style={styles.filterChip}>
+              <Text style={styles.filterChipText}>
+                {filteredMarkers.length} providers{' '}
+                {selectedFilter !== 'all' && `• ${QUICK_FILTERS.find(f => f.key === selectedFilter)?.label}`}
+                {selectedCategory !== 'All' && `• ${selectedCategory}`}
+                {debouncedSearch && `• "${debouncedSearch}"`}
+              </Text>
+              <Ionicons name="close-circle" size={14} color={COLORS.textLight} />
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {/* Search */}
+        <View style={styles.searchRow}>
+          <Ionicons name="search" size={16} color={COLORS.textLight} />
+          <TextInput
+            style={styles.searchInput}
+            value={searchText}
+            onChangeText={handleSearchChange}
+            placeholder="Search provider or category…"
+            placeholderTextColor={COLORS.textLight}
+            returnKeyType="search"
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => { setSearchText(''); setDebouncedSearch(''); }}>
+              <Ionicons name="close-circle" size={18} color={COLORS.textLight} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Quick filter chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsWrap}
+          pointerEvents="auto"
+        >
+          {QUICK_FILTERS.map((f) => {
+            const active = selectedFilter === f.key;
+            return (
+              <TouchableOpacity
+                key={f.key}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => setSelectedFilter(f.key)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Category chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsWrap}
+          pointerEvents="auto"
+        >
+          {CATEGORIES.map((cat) => {
+            const active = selectedCategory === cat;
+            return (
+              <TouchableOpacity
+                key={cat}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => setSelectedCategory(active ? 'All' : cat)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{cat}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
 
         {/* Location permission banner */}
         {locationState === 'denied' && (
@@ -330,24 +542,40 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
         </View>
       )}
 
+      {/* ── Empty state ───────────────────────────────────────────────── */}
+      {mapReady && !markersLoading && filteredMarkers.length === 0 && markers.length > 0 && (
+        <View style={styles.emptyOverlay} pointerEvents="box-none">
+          <View style={styles.emptyCard}>
+            <Ionicons name="search-outline" size={40} color={COLORS.textLight} />
+            <Text style={styles.emptyTitle}>No providers match your filters.</Text>
+            <TouchableOpacity style={styles.resetBtn} onPress={resetFilters} activeOpacity={0.85}>
+              <Ionicons name="refresh" size={14} color={COLORS.surface} />
+              <Text style={styles.resetBtnText}>Reset Filters</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {/* ── FAB: Locate Me ─────────────────────────────────────────────── */}
       {mapReady && (
-        <TouchableOpacity
-          style={[styles.fab, { bottom: 80 + insets.bottom }]}
-          onPress={handleLocateMe}
-          activeOpacity={0.85}
-        >
-          <Ionicons
-            name={locationState === 'granted' ? 'locate' : 'location-outline'}
-            size={20}
-            color={locationState === 'granted' ? COLORS.primary : COLORS.textSecondary}
-          />
-        </TouchableOpacity>
+        <Animated.View style={[styles.fab, { bottom: animatedFabBottom }]}>
+          <TouchableOpacity
+            onPress={handleLocateMe}
+            activeOpacity={0.85}
+            style={styles.fabInner}
+          >
+            <Ionicons
+              name={locationState === 'granted' ? 'locate' : 'location-outline'}
+              size={20}
+              color={locationState === 'granted' ? COLORS.primary : COLORS.textSecondary}
+            />
+          </TouchableOpacity>
+        </Animated.View>
       )}
 
       {/* ── Zoom controls ──────────────────────────────────────────────── */}
       {mapReady && (
-        <View style={[styles.zoomStack, { bottom: 80 + insets.bottom + 60 }]}>
+        <Animated.View style={[styles.zoomStack, { bottom: animatedZoomBottom }]}>
           <TouchableOpacity
             style={[styles.iconBtn, styles.zoomBtn]}
             onPress={() => mapRef.current?.zoomIn()}
@@ -363,7 +591,7 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
           >
             <Ionicons name="remove" size={20} color={COLORS.text} />
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       )}
 
       {/* ── Bottom Sheet ────────────────────────────────────────────────── */}
@@ -376,6 +604,14 @@ export default function MapboxDiscoveryScreen({ navigation }: Props) {
         onBookNow={handleBookNow}
         routeDistanceKm={routeDistanceKm}
         routeEtaMin={routeEtaMin}
+      />
+
+      {/* ── Sort Sheet ──────────────────────────────────────────────────── */}
+      <MapSortSheet
+        visible={sortSheetOpen}
+        current={selectedSort}
+        onApply={setSelectedSort}
+        onClose={() => setSortSheetOpen(false)}
       />
     </View>
   );
@@ -482,12 +718,17 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     backgroundColor: COLORS.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
     ...SHADOWS.medium,
     zIndex: 10,
+    overflow: 'hidden',
+  },
+  fabInner: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // Zoom controls
@@ -508,4 +749,133 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   zoomDivider: { height: 1, backgroundColor: COLORS.border },
+
+  // ── Sprint 6.5 styles ─────────────────────────────────────────────────────
+  countBadge: {
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    minWidth: 18,
+    alignItems: 'center',
+  },
+  countBadgeText: {
+    fontSize: 10,
+    fontFamily: FONTS.bold,
+    color: COLORS.surface,
+  },
+  filterChipRow: {
+    alignItems: 'center',
+    marginTop: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  filterChipText: {
+    fontSize: FONTS.sizes.xs,
+    fontFamily: FONTS.medium,
+    color: COLORS.primary,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: COLORS.surface,
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.xs + 2,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.small,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: FONTS.regular,
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.text,
+    paddingVertical: 0,
+  },
+  chipsWrap: {
+    paddingHorizontal: SPACING.md,
+    gap: SPACING.xs,
+    paddingVertical: SPACING.xs,
+  },
+  chip: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.small,
+  },
+  chipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  chipText: {
+    fontSize: FONTS.sizes.xs,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.text,
+  },
+  chipTextActive: {
+    color: COLORS.surface,
+  },
+  emptyOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 15,
+  },
+  emptyCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+    alignItems: 'center',
+    gap: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.medium,
+    marginHorizontal: SPACING.xl,
+  },
+  emptyTitle: {
+    fontFamily: FONTS.semiBold,
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  resetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginTop: SPACING.xs,
+  },
+  resetBtnText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.surface,
+  },
+  iconBtnActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryLight,
+  },
 });

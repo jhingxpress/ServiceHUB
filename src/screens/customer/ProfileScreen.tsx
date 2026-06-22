@@ -97,6 +97,11 @@ export default function ProfileScreen() {
       onPress: () => navigation.navigate('MyFavorites'),
     },
     {
+      icon: 'bookmark-outline',
+      label: 'Saved Locations',
+      onPress: () => navigation.navigate('SavedLocations'),
+    },
+    {
       icon: 'star-outline',
       label: 'My Reviews',
       onPress: () => navigation.navigate('MyReviews'),
