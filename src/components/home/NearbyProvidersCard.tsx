@@ -57,6 +57,7 @@ interface NearbyProvider {
   rating: number;
   total_reviews: number;
   is_featured: boolean;
+  is_verified: boolean;
   profile_photo_url: string | null;
   business_logo: string | null;
   distanceKm: number;
@@ -82,7 +83,7 @@ export default function NearbyProvidersCard() {
       const { data, error } = await supabase
         .from('providers')
         .select(
-          'id, business_name, latitude, longitude, rating, total_reviews, is_featured, profile_photo_url, business_logo, categories(name)',
+          'id, business_name, latitude, longitude, rating, total_reviews, is_featured, is_verified, profile_photo_url, business_logo, categories(name)',
         )
         .eq('status', 'approved')
         .eq('is_verified', true)
@@ -109,6 +110,7 @@ export default function NearbyProvidersCard() {
           profile_photo_url: p.profile_photo_url ?? null,
           business_logo: p.business_logo ?? null,
           categoryName: (p.categories as any)?.name ?? null,
+          is_verified: p.is_verified ?? false,
           distanceKm: haversine(lat, lng, p.latitude, p.longitude),
         }))
         .filter((p) => p.distanceKm <= SEARCH_RADIUS_KM)
@@ -156,18 +158,26 @@ export default function NearbyProvidersCard() {
           name={item.business_name}
           size={60}
         />
-        {item.is_featured && (
-          <View style={styles.featuredBadge}>
-            <Ionicons name="sparkles" size={9} color={COLORS.warning} />
-            <Text style={styles.featuredText}>Featured</Text>
-          </View>
-        )}
+        <View style={styles.badgeStack}>
+          {item.is_featured && (
+            <View style={styles.featuredBadge}>
+              <Ionicons name="sparkles" size={9} color={COLORS.warning} />
+              <Text style={styles.featuredText}>Featured</Text>
+            </View>
+          )}
+          {item.is_verified && (
+            <View style={styles.verifiedBadge}>
+              <Ionicons name="checkmark-circle" size={9} color="#2563EB" />
+              <Text style={styles.verifiedText}>Verified</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       {/* Info */}
-      <Text style={styles.name} numberOfLines={2}>{item.business_name}</Text>
+      <Text style={styles.name} numberOfLines={2} ellipsizeMode="tail">{item.business_name}</Text>
       {item.categoryName ? (
-        <Text style={styles.category} numberOfLines={1}>
+        <Text style={styles.category} numberOfLines={1} ellipsizeMode="tail">
           {toTitleCase(item.categoryName)}
         </Text>
       ) : null}
@@ -189,18 +199,18 @@ export default function NearbyProvidersCard() {
       {/* Action buttons */}
       <View style={styles.btnRow}>
         <TouchableOpacity
-          style={styles.btnPrimary}
+          style={styles.btnOutline}
           onPress={() => navigation.navigate('ProviderStorefront', { providerId: item.id })}
           activeOpacity={0.8}
         >
-          <Text style={styles.btnPrimaryText}>View Profile</Text>
+          <Text style={styles.btnOutlineText}>Profile</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.btnOutline}
-          onPress={() => navigation.navigate('MapboxDiscovery')}
+          style={styles.btnPrimary}
+          onPress={() => navigation.navigate('BookService', { providerId: item.id })}
           activeOpacity={0.8}
         >
-          <Ionicons name="map-outline" size={13} color={COLORS.primary} />
+          <Text style={styles.btnPrimaryText}>Book</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -211,7 +221,7 @@ export default function NearbyProvidersCard() {
   const header = (
     <View style={styles.sectionHeader}>
       <View>
-        <Text style={styles.sectionTitle}>Nearby Providers</Text>
+        <Text style={styles.sectionTitle}>Featured Providers ⭐</Text>
         <Text style={styles.sectionSubtitle}>Discover services around you</Text>
       </View>
       <TouchableOpacity
@@ -421,14 +431,37 @@ const styles = StyleSheet.create({
     color: COLORS.surface,
   },
   btnOutline: {
-    width: 32,
-    height: 32,
+    flex: 1,
     borderRadius: BORDER_RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    paddingVertical: 7,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    backgroundColor: 'transparent',
+  },
+  btnOutlineText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: FONTS.sizes.xs,
+    color: COLORS.primary,
+  },
+  badgeStack: {
+    gap: 3,
+    alignItems: 'flex-end',
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#DBEAFE',
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  verifiedText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 8,
+    color: '#1E40AF',
   },
 
   // ── Empty / loading states ────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { COLORS, BORDER_RADIUS, FONTS } from '../../constants/theme';
 
@@ -31,11 +31,12 @@ function stringToColor(str: string): string {
 }
 
 export default React.memo(function Avatar({ uri, name, size = 40, borderColor }: AvatarProps) {
+  const [imageError, setImageError] = useState(false);
   const initials = name ? getInitials(name) : '?';
   const bgColor = name ? stringToColor(name) : COLORS.primary;
   const fontSize = size * 0.38;
 
-  if (uri) {
+  if (uri && !imageError) {
     return (
       <Image
         source={{ uri, cache: 'force-cache' }}
@@ -49,6 +50,8 @@ export default React.memo(function Avatar({ uri, name, size = 40, borderColor }:
             borderColor: borderColor,
           },
         ]}
+        resizeMode="cover"
+        onError={() => setImageError(true)}
       />
     );
   }

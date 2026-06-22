@@ -110,7 +110,7 @@ export const SHADOWS = {
 export const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   pending: { bg: '#FEF3C7', text: '#92400E' },
   accepted: { bg: '#DBEAFE', text: '#1E40AF' },
-  on_the_way: { bg: '#DBEAFE', text: '#1E40AF' },
+  on_the_way: { bg: '#EDE9FE', text: '#4C1D95' },
   arrived: { bg: '#EDE9FE', text: '#4C1D95' },
   in_progress: { bg: '#EDE9FE', text: '#4C1D95' },
   completed: { bg: '#DCFCE7', text: '#166534' },

@@ -274,113 +274,21 @@ export default function HomeScreen() {
           <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
         </TouchableOpacity>
 
-        {/* Nearby Providers */}
+        {/* Featured Providers ⭐ (NearbyProvidersCard) */}
         <NearbyProvidersCard />
-
-        {/* Banner */}
-        <View style={styles.banner}>
-          <View>
-            <Text style={styles.bannerTitle}>Find trusted{'\n'}professionals near you</Text>
-            <TouchableOpacity
-              style={styles.bannerBtn}
-              onPress={() => navigation.navigate('Search')}
-            >
-              <Text style={styles.bannerBtnText}>Explore</Text>
-              <Ionicons name="arrow-forward" size={14} color={COLORS.primary} />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.bannerIcon}>
-            <Ionicons name="construct" size={52} color="rgba(255,255,255,0.25)" />
-          </View>
-        </View>
-
-        {/* Featured Providers */}
-        {featuredProviders.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Featured Providers</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('ProviderList', {})}>
-                <Text style={styles.sectionLink}>See all</Text>
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={featuredProviders}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.hscroll}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.featuredProviderCard}
-                  onPress={() => navigation.navigate('ProviderStorefront', { providerId: item.id })}
-                  activeOpacity={0.8}
-                >
-                  <Avatar
-                    uri={item.profile_photo_url ?? item.business_logo}
-                    name={item.business_name}
-                    size={52}
-                  />
-                  <View style={styles.featuredBadge}>
-                    <Ionicons name="sparkles" size={10} color={COLORS.warning} />
-                    <Text style={styles.featuredBadgeText}>Featured</Text>
-                  </View>
-                  <Text style={styles.providerName} numberOfLines={1}>
-                    {item.business_name ?? 'Provider'}
-                  </Text>
-                  <Text style={styles.providerCategory} numberOfLines={1}>
-                    {toTitleCase(item.categories?.name) ?? 'Services'}
-                  </Text>
-                  <View style={styles.providerRating}>
-                    <Ionicons name="star" size={12} color="#F59E0B" />
-                    <Text style={styles.ratingText}>{Number(item.rating).toFixed(1)}</Text>
-                  </View>
-                  {item.hourly_rate && (
-                    <Text style={styles.providerRate}>₱{item.hourly_rate}/hr</Text>
-                  )}
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        )}
-
-        {/* Featured Services */}
-        {featuredServices.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Featured Services</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Search')}>
-                <Text style={styles.sectionLink}>See all</Text>
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={featuredServices}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.hscroll}
-              renderItem={({ item }) => (
-                <ServiceCard
-                  service={item}
-                  onPress={() => navigation.navigate('ServiceDetail', { serviceId: item.id })}
-                  style={{ width: 220 }}
-                />
-              )}
-            />
-          </View>
-        )}
 
         {/* Categories */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Browse by Category</Text>
-            {categories.length > 9 && (
+            {categories.length > 6 && (
               <TouchableOpacity onPress={() => navigation.navigate('AllCategories')}>
                 <Text style={styles.sectionLink}>See all</Text>
               </TouchableOpacity>
             )}
           </View>
           <View style={styles.categoryGrid}>
-            {categories.slice(0, 9).map((cat) => (
+            {categories.slice(0, 6).map((cat) => (
               <TouchableOpacity
                 key={cat.id}
                 style={styles.categoryCard}
@@ -396,10 +304,10 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Top Providers */}
+        {/* Top Providers 🏆 */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Top Providers</Text>
+            <Text style={styles.sectionTitle}>Top Providers 🏆</Text>
             <TouchableOpacity onPress={() => navigation.navigate('ProviderList', {})}>
               <Text style={styles.sectionLink}>See all</Text>
             </TouchableOpacity>
@@ -440,7 +348,39 @@ export default function HomeScreen() {
           />
         </View>
 
-        {/* Recently Booked Providers */}
+        {/* Favorites ❤️ */}
+        {favorites.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Favorites ❤️</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('MyFavorites')}>
+                <Text style={styles.sectionLink}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={favorites}
+              keyExtractor={(p) => p.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.hscroll}
+              renderItem={({ item: p }) => (
+                <TouchableOpacity
+                  style={styles.recentProvCard}
+                  onPress={() => navigation.navigate('ProviderStorefront', { providerId: p.id })}
+                  activeOpacity={0.8}
+                >
+                  <Avatar uri={p.profile_photo_url ?? p.business_logo} name={p.business_name} size={48} />
+                  <Text style={styles.recentProvName} numberOfLines={2} ellipsizeMode="tail">
+                    {p.business_name ?? 'Provider'}
+                  </Text>
+                  {p.is_featured && <FeaturedBadge style={{ marginTop: 2 }} />}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        )}
+
+        {/* Book Again 🔄 */}
         {recentBookings.length > 0 && (() => {
           const seen = new Set<string>();
           const recentProviders = recentBookings
@@ -455,7 +395,7 @@ export default function HomeScreen() {
           return (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Book Again</Text>
+                <Text style={styles.sectionTitle}>Book Again 🔄</Text>
                 <TouchableOpacity onPress={() => navigation.navigate('Bookings')}>
                   <Text style={styles.sectionLink}>See bookings</Text>
                 </TouchableOpacity>
@@ -479,7 +419,7 @@ export default function HomeScreen() {
                         name={prov?.business_name}
                         size={48}
                       />
-                      <Text style={styles.recentProvName} numberOfLines={2}>
+                      <Text style={styles.recentProvName} numberOfLines={2} ellipsizeMode="tail">
                         {prov?.business_name ?? 'Provider'}
                       </Text>
                       {prov?.is_featured && (
@@ -502,75 +442,11 @@ export default function HomeScreen() {
           );
         })()}
 
-        {/* Recently Viewed Providers */}
-        {recentlyViewed.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Recently Viewed</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Search')}>
-                <Text style={styles.sectionLink}>Browse</Text>
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={recentlyViewed}
-              keyExtractor={(p) => p.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.hscroll}
-              renderItem={({ item: p }) => (
-                <TouchableOpacity
-                  style={styles.recentProvCard}
-                  onPress={() => navigation.navigate('ProviderStorefront', { providerId: p.id })}
-                  activeOpacity={0.8}
-                >
-                  <Avatar uri={p.profile_photo_url ?? p.business_logo} name={p.business_name} size={48} />
-                  <Text style={styles.recentProvName} numberOfLines={2}>
-                    {p.business_name ?? 'Provider'}
-                  </Text>
-                  {p.is_featured && <FeaturedBadge style={{ marginTop: 2 }} />}
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        )}
-
-        {/* Your Favorites */}
-        {favorites.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Your Favorites</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('MyFavorites')}>
-                <Text style={styles.sectionLink}>See all</Text>
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={favorites}
-              keyExtractor={(p) => p.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.hscroll}
-              renderItem={({ item: p }) => (
-                <TouchableOpacity
-                  style={styles.recentProvCard}
-                  onPress={() => navigation.navigate('ProviderStorefront', { providerId: p.id })}
-                  activeOpacity={0.8}
-                >
-                  <Avatar uri={p.profile_photo_url ?? p.business_logo} name={p.business_name} size={48} />
-                  <Text style={styles.recentProvName} numberOfLines={2}>
-                    {p.business_name ?? 'Provider'}
-                  </Text>
-                  {p.is_featured && <FeaturedBadge style={{ marginTop: 2 }} />}
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        )}
-
-        {/* Recent Bookings */}
+        {/* Recent Bookings 📋 */}
         {recentBookings.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Recent Bookings</Text>
+              <Text style={styles.sectionTitle}>Recent Bookings 📋</Text>
               <TouchableOpacity onPress={() => navigation.navigate('Bookings')}>
                 <Text style={styles.sectionLink}>See all</Text>
               </TouchableOpacity>
