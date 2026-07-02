@@ -101,8 +101,6 @@ export default function ManageServicesScreen() {
 
   const openCatalog = async () => {
     if (!user) return;
-    console.log('[SERVICE] Build Audit v3');
-    console.log('[SERVICE] Current user.id', user?.id);
     setCatalogVisible(true);
     setSelectedTemplateIds(new Set());
     setCatalogLoading(true);
@@ -117,8 +115,6 @@ export default function ManageServicesScreen() {
       console.error('[SERVICE] provider_categories query error:', pcError);
     }
 
-    console.log('[SERVICE] Provider categories raw', pcData);
-
     // Fetch canonical parent categories to resolve old/demoted category rows
     const { data: catData } = await supabase.from('categories').select('id, name').eq('is_parent', true);
     const parentNameToId: Record<string, string> = {};
@@ -126,17 +122,17 @@ export default function ManageServicesScreen() {
 
     const allCategoryIds = [...new Set((pcData ?? []).map((c: any) => {
       const name = c.categories?.name;
+      // First try to resolve to parent category ID (for service_catalog compatibility)
       if (name && parentNameToId[name]) return parentNameToId[name];
+      // If category is a leaf, use its parent_id
       if (!c.categories?.is_parent && c.categories?.parent_id) return c.categories.parent_id;
+      // If category is already a parent, use its ID directly
+      if (c.categories?.is_parent) return c.category_id;
+      // Fallback to the category_id from provider_categories
       return c.category_id;
     }).filter(Boolean))];
-    const categoryNames = (pcData ?? []).map((c: any) => c.categories?.name).filter(Boolean);
-
-    console.log('[SERVICE] Category names', categoryNames);
-    console.log('[SERVICE] allCategoryIds', allCategoryIds);
 
     if (allCategoryIds.length === 0) {
-      console.log('[SERVICE] No linked categories in provider_categories');
       setCatalogServices([]);
       setCatalogLoading(false);
       return;
@@ -154,14 +150,11 @@ export default function ManageServicesScreen() {
       console.error('[SERVICE] service_catalog query error:', catalogErr);
     }
 
-    console.log('[SERVICE] catalogData', catalogData?.length);
-
     const map: Record<string, string> = {};
     (catData ?? []).forEach((c: any) => { map[c.id] = c.name; });
     setCategoryMap(map);
 
     setCatalogServices((catalogData ?? []) as CatalogService[]);
-    console.log('[SERVICE] setCatalogServices', catalogData?.length);
     setCatalogLoading(false);
   };
 
@@ -367,8 +360,6 @@ export default function ManageServicesScreen() {
   // =========================
 
   const renderCatalogContent = () => {
-    console.log('[SERVICE] renderCatalogContent — catalogLoading:', catalogLoading, 'catalogServices.length:', catalogServices.length);
-
     if (catalogLoading) {
       return (
         <View style={styles.catalogCenter}>
@@ -651,13 +642,6 @@ export default function ManageServicesScreen() {
 
       {/* Service Catalog Modal */}
       <Modal visible={catalogVisible} animationType="slide" transparent>
-        {(() => {
-          console.log('[SERVICE MODAL]', {
-            visible: catalogVisible,
-            catalogCount: catalogServices?.length,
-          });
-          return null;
-        })()}
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={[styles.modal, { maxHeight: '90%' }]}>
             <View style={styles.modalHeader}>
