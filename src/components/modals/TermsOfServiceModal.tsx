@@ -45,11 +45,11 @@ export default function TermsOfServiceModal({ visible, onClose }: TermsOfService
               <Text style={styles.lastUpdated}>Last Updated: June 5, 2026</Text>
 
               <Section title="1. Introduction">
-                Welcome to ServiceHub, a marketplace platform connecting customers with independent service providers. By accessing or using the ServiceHub mobile application or website, you agree to be bound by these Terms of Service.
+                Welcome to TAGA, a marketplace platform connecting customers with independent service providers. By accessing or using the TAGA mobile application or website, you agree to be bound by these Terms of Service.
               </Section>
 
               <Section title="2. Definitions">
-                <Bullet>"Platform" refers to the ServiceHub mobile application and related services.</Bullet>
+                <Bullet>"Platform" refers to the TAGA mobile application and related services.</Bullet>
                 <Bullet>"Customer" means a user who books services through the Platform.</Bullet>
                 <Bullet>"Provider" means an independent service provider who offers services through the Platform.</Bullet>
                 <Bullet>"User" refers to any individual who accesses or uses the Platform, including both Customers and Providers.</Bullet>
@@ -60,11 +60,11 @@ export default function TermsOfServiceModal({ visible, onClose }: TermsOfService
               </Section>
 
               <Section title="4. Account Registration & Security">
-                You are responsible for maintaining the confidentiality of your account credentials. You agree to notify us immediately of any unauthorized use of your account. ServiceHub is not liable for any loss or damage arising from your failure to safeguard your account.
+                You are responsible for maintaining the confidentiality of your account credentials. You agree to notify us immediately of any unauthorized use of your account. TAGA is not liable for any loss or damage arising from your failure to safeguard your account.
               </Section>
 
               <Section title="5. Service Description">
-                ServiceHub facilitates connections between Customers and Providers. We do not provide the services listed on the Platform. Providers are independent contractors, not employees or agents of ServiceHub.
+                TAGA facilitates connections between Customers and Providers. We do not provide the services listed on the Platform. Providers are independent contractors, not employees or agents of TAGA.
               </Section>
 
               <Section title="6. Provider Obligations">
@@ -85,7 +85,7 @@ export default function TermsOfServiceModal({ visible, onClose }: TermsOfService
               </Section>
 
               <Section title="8. Reviews & Content">
-                Users may submit reviews and photos. By submitting content, you grant ServiceHub a non-exclusive, royalty-free license to use, display, and distribute that content on the Platform. You are solely responsible for the content you submit.
+                Users may submit reviews and photos. By submitting content, you grant TAGA a non-exclusive, royalty-free license to use, display, and distribute that content on the Platform. You are solely responsible for the content you submit.
               </Section>
 
               <Section title="9. Prohibited Activities">
@@ -98,11 +98,11 @@ export default function TermsOfServiceModal({ visible, onClose }: TermsOfService
               </Section>
 
               <Section title="10. Termination">
-                ServiceHub reserves the right to suspend or terminate any account that violates these Terms. Users may delete their account at any time by contacting support.
+                TAGA reserves the right to suspend or terminate any account that violates these Terms. Users may delete their account at any time by contacting support.
               </Section>
 
               <Section title="11. Limitation of Liability">
-                ServiceHub is not liable for disputes between Customers and Providers. We do not guarantee the quality, safety, or legality of services provided. Users assume all risks associated with using the Platform.
+                TAGA is not liable for disputes between Customers and Providers. We do not guarantee the quality, safety, or legality of services provided. Users assume all risks associated with using the Platform.
               </Section>
 
               <Section title="12. Changes to Terms">
@@ -110,7 +110,7 @@ export default function TermsOfServiceModal({ visible, onClose }: TermsOfService
               </Section>
 
               <Section title="13. Contact">
-                For questions about these Terms, contact support@servicehub.ph.
+                For questions about these Terms, contact support@taga.ph.
               </Section>
 
               {/* Close button inside scroll so it never blocks content on small screens */}

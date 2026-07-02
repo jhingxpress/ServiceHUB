@@ -1065,7 +1065,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
             </View>
             <Text style={styles.successTitle}>Provider Approved</Text>
             <Text style={styles.successBody}>
-              {provider?.business_name ?? provider?.users?.full_name ?? 'Provider'} has been approved and can now offer services on ServiceHub.
+              {provider?.business_name ?? provider?.users?.full_name ?? 'Provider'} has been approved and can now offer services on TAGA.
             </Text>
             <View style={styles.successActions}>
               <TouchableOpacity

@@ -227,7 +227,7 @@ export default function AdminBroadcastScreen() {
               <View style={styles.previewCard}>
                 <View style={styles.previewHeader}>
                   <Ionicons name="notifications" size={16} color={COLORS.primary} />
-                  <Text style={styles.previewApp}>ServiceHub</Text>
+                  <Text style={styles.previewApp}>TAGA</Text>
                 </View>
                 <Text style={styles.previewTitle}>{title || 'Notification Title'}</Text>
                 <Text style={styles.previewBody} numberOfLines={3}>{body || 'Your message will appear here.'}</Text>

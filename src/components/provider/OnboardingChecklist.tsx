@@ -47,7 +47,7 @@ export default function OnboardingChecklist({ checklist, provider, onPublish }: 
           </View>
         </View>
         <Text style={styles.readyBody}>
-          Your services are now visible in the ServiceHub marketplace. Customers can discover and book your services.
+          Your services are now visible in the TAGA marketplace. Customers can discover and book your services.
         </Text>
         <View style={styles.statusBadge}>
           <Text style={styles.statusBadgeText}>LIVE IN MARKETPLACE</Text>

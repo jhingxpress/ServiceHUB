@@ -153,7 +153,7 @@ export default function UserDetailScreen({ route, navigation }: Props) {
               user_id: userId,
               type: 'system',
               title: 'Account Reactivated',
-              body: 'Your ServiceHub account has been reactivated and is now active again.',
+              body: 'Your TAGA account has been reactivated and is now active again.',
               data: {},
             });
             console.log('[ACTIVATE] Notification inserted');

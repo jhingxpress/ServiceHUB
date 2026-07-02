@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "ServiceHub",
+    "name": "TAGA",
     "slug": "servicehub",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -38,15 +38,15 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow ServiceHub to access your photos.",
-          "cameraPermission": "Allow ServiceHub to use your camera."
+          "photosPermission": "Allow TAGA to access your photos.",
+          "cameraPermission": "Allow TAGA to use your camera."
         }
       ],
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow ServiceHub to use your location.",
-          "locationWhenInUsePermission": "Allow ServiceHub to use your location while using the app."
+          "locationAlwaysAndWhenInUsePermission": "Allow TAGA to use your location.",
+          "locationWhenInUsePermission": "Allow TAGA to use your location while using the app."
         }
       ],
       "expo-font",

@@ -231,7 +231,7 @@ export default function ReviewScreen() {
           >
             <Text style={styles.tipCtaEmoji}>❤️</Text>
             <View style={styles.tipCtaText}>
-              <Text style={styles.tipCtaTitle}>Support ServiceHub</Text>
+              <Text style={styles.tipCtaTitle}>Support TAGA</Text>
               <Text style={styles.tipCtaSub}>Leave an optional tip to help us keep the platform running</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#E11D48" />

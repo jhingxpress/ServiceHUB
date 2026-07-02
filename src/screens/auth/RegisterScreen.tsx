@@ -86,7 +86,7 @@ export default function RegisterScreen({ navigation }: Props) {
           </TouchableOpacity>
 
           <Text style={styles.title}>Create account</Text>
-          <Text style={styles.subtitle}>Join the ServiceHub community</Text>
+          <Text style={styles.subtitle}>Join the TAGA community</Text>
 
           <View style={styles.form}>
             <Input

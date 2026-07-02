@@ -1313,7 +1313,7 @@ export default function ProviderOnboardingScreen() {
       <View style={styles.header}>
         <View style={styles.logoRow}>
           <View style={styles.logoDot} />
-          <Text style={styles.logoText}>ServiceHub</Text>
+          <Text style={styles.logoText}>TAGA</Text>
         </View>
         <Text style={styles.headerTitle}>Provider Application</Text>
       </View>

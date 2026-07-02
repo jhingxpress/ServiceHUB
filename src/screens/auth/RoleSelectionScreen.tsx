@@ -34,7 +34,7 @@ export default function RoleSelectionScreen({ route, navigation }: Props) {
 
   const handleContinue = async () => {
     if (!selected) {
-      Alert.alert('Select a role', 'Please choose how you want to use ServiceHub.');
+      Alert.alert('Select a role', 'Please choose how you want to use TAGA.');
       return;
     }
 
@@ -113,7 +113,7 @@ export default function RoleSelectionScreen({ route, navigation }: Props) {
       </TouchableOpacity>
 
       <View style={styles.content}>
-        <Text style={styles.title}>How will you use{'\n'}ServiceHub?</Text>
+        <Text style={styles.title}>How will you use{'\n'}TAGA?</Text>
         <Text style={styles.subtitle}>Choose your role — you can always change this later.</Text>
 
         <View style={styles.roles}>

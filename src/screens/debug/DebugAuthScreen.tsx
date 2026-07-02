@@ -38,7 +38,7 @@ export default function DebugAuthScreen({ onClose }: { onClose: () => void }) {
       .join('\n\n');
 
     await Share.share({
-      message: `ServiceHub Debug Logs\n\n${logText}`,
+      message: `TAGA Debug Logs\n\n${logText}`,
     });
   };
 

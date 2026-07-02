@@ -206,7 +206,7 @@ export default function ProfileScreen() {
           ))}
         </View>
 
-        <Text style={styles.version}>ServiceHub v1.0.0</Text>
+        <Text style={styles.version}>TAGA v1.0.0</Text>
         <View style={{ height: SPACING.xl }} />
       </ScrollView>
     </SafeAreaView>

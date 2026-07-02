@@ -91,7 +91,7 @@ export default function PendingApprovalScreen() {
       <View style={styles.topBar}>
         <View style={styles.logoRow}>
           <View style={styles.logoDot} />
-          <Text style={styles.logoText}>ServiceHub</Text>
+          <Text style={styles.logoText}>TAGA</Text>
         </View>
         <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
           <Ionicons name="log-out-outline" size={20} color={COLORS.textSecondary} />
@@ -212,7 +212,7 @@ export default function PendingApprovalScreen() {
           )}
 
           {status === 'suspended' && (
-            <TouchableOpacity style={styles.secondaryBtn} onPress={() => Alert.alert('Contact Support', 'Please email support@servicehub.com for assistance.')}>
+            <TouchableOpacity style={styles.secondaryBtn} onPress={() => Alert.alert('Contact Support', 'Please email support@taga.ph for assistance.')}>
               <Ionicons name="mail-outline" size={18} color={COLORS.primary} />
               <Text style={styles.secondaryBtnText}>Contact Support</Text>
             </TouchableOpacity>

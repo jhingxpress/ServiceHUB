@@ -159,9 +159,9 @@ function PromptView({
         <Text style={styles.heartIcon}>❤️</Text>
       </View>
 
-      <Text style={styles.heading}>Support ServiceHub</Text>
+      <Text style={styles.heading}>Support TAGA</Text>
       <Text style={styles.subText}>
-        Thank you for using ServiceHub.{'\n'}
+        Thank you for using TAGA.{'\n'}
         Your optional tip helps us maintain servers, improve security, and continue building new features for local communities.{'\n\n'}
         Every contribution helps.
       </Text>
@@ -235,7 +235,7 @@ function SuccessView({ onDone }: { onDone: () => void }) {
       <Text style={styles.heartIcon}>❤️</Text>
       <Text style={styles.heading}>Thank You!</Text>
       <Text style={styles.subText}>
-        Thank you for supporting ServiceHub.{'\n'}
+        Thank you for supporting TAGA.{'\n'}
         Your contribution helps us continue improving the platform for everyone.
       </Text>
       <TouchableOpacity style={styles.tipBtn} onPress={onDone} activeOpacity={0.85}>

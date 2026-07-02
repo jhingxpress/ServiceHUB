@@ -45,7 +45,7 @@ export default function PrivacyPolicyModal({ visible, onClose }: PrivacyPolicyMo
               <Text style={styles.lastUpdated}>Last Updated: June 5, 2026</Text>
 
               <Section title="1. Introduction">
-                ServiceHub ("we", "us", "our") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application and services.
+                TAGA ("we", "us", "our") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application and services.
               </Section>
 
               <Section title="2. Information We Collect">
@@ -99,7 +99,7 @@ export default function PrivacyPolicyModal({ visible, onClose }: PrivacyPolicyMo
                 <Bullet>Withdraw consent for data processing (where applicable).</Bullet>
                 <Bullet>Object to certain types of processing.</Bullet>
                 <Bullet>Request a copy of your data in a portable format.</Bullet>
-                Contact us at privacy@servicehub.ph to exercise these rights.
+                Contact us at privacy@taga.ph to exercise these rights.
               </Section>
 
               <Section title="9. Children's Privacy">
@@ -111,7 +111,7 @@ export default function PrivacyPolicyModal({ visible, onClose }: PrivacyPolicyMo
               </Section>
 
               <Section title="11. Contact Us">
-                For privacy-related questions, contact privacy@servicehub.ph.
+                For privacy-related questions, contact privacy@taga.ph.
               </Section>
 
               {/* Close button inside scroll so it never blocks content on small screens */}

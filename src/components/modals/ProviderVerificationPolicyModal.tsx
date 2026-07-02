@@ -44,7 +44,7 @@ export default function ProviderVerificationPolicyModal({ visible, onClose }: Pr
               <Text style={styles.lastUpdated}>Last Updated: June 5, 2026</Text>
 
               <Section title="1. Purpose">
-                ServiceHub is committed to maintaining a safe and trustworthy marketplace. The Provider Verification Policy ensures that all service providers on our platform are properly vetted, qualified, and accountable to our community of customers.
+                TAGA is committed to maintaining a safe and trustworthy marketplace. The Provider Verification Policy ensures that all service providers on our platform are properly vetted, qualified, and accountable to our community of customers.
               </Section>
 
               <Section title="2. Verification Process">
@@ -92,7 +92,7 @@ export default function ProviderVerificationPolicyModal({ visible, onClose }: Pr
               </Section>
 
               <Section title="7. Fraud Prevention">
-                ServiceHub employs multiple fraud prevention measures:
+                TAGA employs multiple fraud prevention measures:
                 <Bullet>Document authenticity checks using visual inspection and cross-referencing.</Bullet>
                 <Bullet>Duplicate account detection across email, phone, and device fingerprints.</Bullet>
                 <Bullet>Random audits of approved providers.</Bullet>
@@ -120,7 +120,7 @@ export default function ProviderVerificationPolicyModal({ visible, onClose }: Pr
               </Section>
 
               <Section title="11. Contact">
-                For verification-related inquiries, contact verification@servicehub.ph.
+                For verification-related inquiries, contact verification@taga.ph.
               </Section>
             </ScrollView>
 

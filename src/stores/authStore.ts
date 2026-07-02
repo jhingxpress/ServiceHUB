@@ -20,7 +20,7 @@ function showModerationAlert(error?: string) {
     _moderationAlertShown = true;
     Alert.alert(
       'Account Suspended',
-      'Your account has been temporarily suspended.\n\nPlease contact ServiceHub support for assistance.'
+      'Your account has been temporarily suspended.\n\nPlease contact TAGA support for assistance.'
     );
     return;
   }
@@ -28,7 +28,7 @@ function showModerationAlert(error?: string) {
     _moderationAlertShown = true;
     Alert.alert(
       'Account Banned',
-      'Your account has been permanently banned due to violations of ServiceHub policies.\n\nIf you believe this is a mistake, please contact ServiceHub support.'
+      'Your account has been permanently banned due to violations of TAGA policies.\n\nIf you believe this is a mistake, please contact TAGA support.'
     );
     return;
   }

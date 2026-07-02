@@ -80,7 +80,7 @@ export default function SplashScreen({ navigation }: Props) {
         </Animated.View>
 
         <Animated.Text style={[styles.appName, { opacity: textOpacity }]}>
-          ServiceHub
+          TAGA
         </Animated.Text>
 
         <Animated.Text style={[styles.tagline, { opacity: taglineOpacity }]}>

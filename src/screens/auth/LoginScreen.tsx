@@ -84,7 +84,7 @@ export default function LoginScreen({ navigation, route }: Props) {
               />
             </View>
             <Text style={styles.title}>Welcome back</Text>
-            <Text style={styles.subtitle}>Sign in to your ServiceHub account</Text>
+            <Text style={styles.subtitle}>Sign in to your TAGA account</Text>
           </View>
 
           {prefillEmail ? (
