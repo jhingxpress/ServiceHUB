@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,10 +42,10 @@ export default function MyReviewsScreen() {
   const { user } = useAuthStore();
   const [reviews, setReviews] = useState<MyReview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchReviews = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
     const { data, error } = await supabase
       .from('reviews')
       .select('id, rating, title, comment, photo_urls, created_at, provider:providers(id, business_name), booking:bookings(status, scheduled_date, service:services(name))')
@@ -55,7 +56,13 @@ export default function MyReviewsScreen() {
     }
     setReviews((data ?? []) as unknown as MyReview[]);
     setLoading(false);
+    setRefreshing(false);
   }, [user]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchReviews();
+  };
 
   useEffect(() => { fetchReviews(); }, [fetchReviews]);
 
@@ -128,6 +135,7 @@ export default function MyReviewsScreen() {
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
           ListEmptyComponent={
             <EmptyState
               icon="star-outline"

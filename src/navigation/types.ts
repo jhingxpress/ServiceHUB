@@ -1,4 +1,5 @@
 import { NavigatorScreenParams } from '@react-navigation/native';
+import { Notification } from '../types';
 
 export type RootStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
@@ -66,6 +67,7 @@ export type CustomerStackParamList = {
     customerLng?: number;
   };
   SavedLocations: undefined;
+  NotificationDetail: { notification: Notification };
 };
 
 export type CustomerTabParamList = {
@@ -103,6 +105,8 @@ export type ProviderStackParamList = {
     customerLat?: number;
     customerLng?: number;
   };
+  NotificationDetail: { notification: Notification };
+  BookingIncidentReport: { bookingId: string };
 };
 
 export type ProviderTabParamList = {
@@ -117,6 +121,7 @@ export type ProviderTabParamList = {
 
 export type AdminStackParamList = {
   AdminTabs: NavigatorScreenParams<AdminTabParamList>;
+  StaffTabs: NavigatorScreenParams<StaffTabParamList>;
   PendingProviders: undefined;
   AllProviders: undefined;
   ManageUsers: undefined;
@@ -125,6 +130,7 @@ export type AdminStackParamList = {
   BookingDetail: { bookingId: string };
   BookingManagement: undefined;
   DisputeDetail: { disputeId: string };
+  Disputes: undefined;
   AdminReports: undefined;
   AdminReviews: undefined;
   AdminNotifications: undefined;
@@ -133,6 +139,11 @@ export type AdminStackParamList = {
   TipsRevenue: undefined;
   ProviderEconomy: undefined;
   AdminBroadcast: undefined;
+  OperationsCenter: undefined;
+  StaffManagement: undefined;
+  StaffActionLogs: undefined;
+  StaffIncidentReports: undefined;
+  Escalations: undefined;
 };
 
 export type AdminTabParamList = {
@@ -142,4 +153,9 @@ export type AdminTabParamList = {
   Users: undefined;
   Analytics: undefined;
   Disputes: undefined;
+};
+
+export type StaffTabParamList = {
+  OperationsCenter: undefined;
+  Logs: undefined;
 };

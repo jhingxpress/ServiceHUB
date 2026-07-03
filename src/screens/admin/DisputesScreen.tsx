@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +15,10 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
+import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
+import { canManageDisputes } from '../../utils/roleUtils';
+import { logStaffAction } from '../../services/staffAuditService';
 import Avatar from '../../components/ui/Avatar';
 import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
@@ -47,11 +51,13 @@ const FILTERS = [
 
 export default function DisputesScreen() {
   const navigation = useNavigation<NavProp>();
+  const { user } = useAuthStore();
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [filter, setFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchDisputes = async () => {
+  const fetchDisputes = useCallback(async () => {
     let q = supabase
       .from('disputes')
       .select(`
@@ -64,21 +70,33 @@ export default function DisputesScreen() {
         )
       `)
       .order('created_at', { ascending: false });
-    
+
     if (filter !== 'all') q = q.eq('status', filter);
-    
+
     const { data } = await q;
     setDisputes((data ?? []) as Dispute[]);
     setLoading(false);
-  };
+    setRefreshing(false);
+  }, [filter]);
 
-  useEffect(() => { fetchDisputes(); }, [filter]);
+  useEffect(() => { fetchDisputes(); }, [fetchDisputes]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchDisputes();
+  };
 
   const updateStatus = async (disputeId: string, status: string, notes?: string) => {
     await supabase
       .from('disputes')
       .update({ status, resolution_notes: notes || null })
       .eq('id', disputeId);
+    await logStaffAction({
+      action: `dispute_status_${status}`,
+      targetTable: 'disputes',
+      targetRecordId: disputeId,
+      notes: notes?.trim() || undefined,
+    });
     fetchDisputes();
   };
 
@@ -146,7 +164,7 @@ export default function DisputesScreen() {
           <Text style={styles.metaText}>{format(new Date(item.created_at), 'MMM d, yyyy')}</Text>
         </View>
 
-        {item.status === 'open' && (
+        {canManageDisputes(user?.role) && item.status === 'open' && (
           <View style={styles.actionRow}>
             <TouchableOpacity style={styles.rejectBtn} onPress={() => handleReject(item.id)}>
               <Ionicons name="close" size={14} color={COLORS.error} />
@@ -203,6 +221,7 @@ export default function DisputesScreen() {
         renderItem={renderDispute}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
         ListEmptyComponent={
           <EmptyState
             icon="alert-circle-outline"

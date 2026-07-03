@@ -15,6 +15,7 @@ import Avatar from '../../components/ui/Avatar';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import { ProviderStackParamList } from '../../navigation/types';
+import { createNotification } from '../../services/notificationService';
 
 type NavProp = NativeStackNavigationProp<ProviderStackParamList>;
 type RouteType = RouteProp<ProviderStackParamList, 'BookingDetail'>;
@@ -72,6 +73,31 @@ export default function ProviderBookingDetailScreen() {
               setUpdating(false);
               return;
             }
+            
+            // Fetch booking to notify customer
+            const { data: booking } = await supabase.from('bookings').select('customer_id').eq('id', bookingId).maybeSingle();
+            if (booking?.customer_id) {
+              const notificationConfig: Record<string, { title: string; body: string }> = {
+                accepted: { title: 'Booking Accepted', body: 'Your booking has been accepted by the provider.' },
+                rejected: { title: 'Booking Rejected', body: 'Your booking has been rejected by the provider.' },
+                on_the_way: { title: 'Provider On The Way', body: 'Your provider is on the way to your location.' },
+                arrived: { title: 'Provider Arrived', body: 'Your provider has arrived at your location.' },
+                in_progress: { title: 'Service In Progress', body: 'Your service is now in progress.' },
+                completed: { title: 'Booking Completed', body: 'Your booking has been completed.' },
+              };
+              
+              const config = notificationConfig[status];
+              if (config) {
+                createNotification({
+                  userId: booking.customer_id,
+                  type: `booking_${status}`,
+                  title: config.title,
+                  body: config.body,
+                  data: { booking_id: bookingId }
+                });
+              }
+            }
+            
             await fetchBooking();
           } catch {
             Alert.alert('Error', 'An unexpected error occurred during status update.');
@@ -360,6 +386,15 @@ export default function ProviderBookingDetailScreen() {
               onPress={() => updateStatus('completed', 'Mark Complete', 'Mark this booking as completed?')}
               loading={updating}
               fullWidth
+              style={styles.actionBtn}
+            />
+          )}
+          {['arrived', 'in_progress', 'completed'].includes(booking.status) && (
+            <Button
+              title="Report an Incident"
+              onPress={() => navigation.navigate('BookingIncidentReport', { bookingId })}
+              fullWidth
+              variant="outline"
               style={styles.actionBtn}
             />
           )}

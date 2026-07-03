@@ -23,6 +23,7 @@ import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
 import { ProviderStackParamList } from '../../navigation/types';
 import { useErrorHandler } from '../../utils/errorHandler';
+import { createNotification } from '../../services/notificationService';
 
 type NavProp = NativeStackNavigationProp<ProviderStackParamList>;
 
@@ -66,6 +67,31 @@ export default function BookingRequestsScreen() {
       showError(error, 'Failed to update booking status.');
       return;
     }
+    
+    // Fetch booking to notify customer
+    const { data: booking } = await supabase.from('bookings').select('customer_id').eq('id', bookingId).maybeSingle();
+    if (booking?.customer_id) {
+      const notificationConfig: Record<string, { title: string; body: string }> = {
+        accepted: { title: 'Booking Accepted', body: 'Your booking has been accepted by the provider.' },
+        rejected: { title: 'Booking Rejected', body: 'Your booking has been rejected by the provider.' },
+        on_the_way: { title: 'Provider On The Way', body: 'Your provider is on the way to your location.' },
+        arrived: { title: 'Provider Arrived', body: 'Your provider has arrived at your location.' },
+        in_progress: { title: 'Service In Progress', body: 'Your service is now in progress.' },
+        completed: { title: 'Booking Completed', body: 'Your booking has been completed.' },
+      };
+      
+      const config = notificationConfig[status];
+      if (config) {
+        createNotification({
+          userId: booking.customer_id,
+          type: `booking_${status}`,
+          title: config.title,
+          body: config.body,
+          data: { booking_id: bookingId }
+        });
+      }
+    }
+    
     fetchBookings();
   };
 

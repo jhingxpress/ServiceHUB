@@ -16,8 +16,10 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
+import { useAuthStore } from '../../stores/authStore';
 import { AdminStackParamList } from '../../navigation/types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
+import { isAdmin } from '../../utils/roleUtils';
 import Avatar from '../../components/ui/Avatar';
 
 type NavProp = NativeStackNavigationProp<AdminStackParamList>;
@@ -56,6 +58,7 @@ const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
 
 export default function BookingManagementScreen() {
   const navigation = useNavigation<NavProp>();
+  const { user } = useAuthStore();
   const [bookings, setBookings] = useState<BookingItem[]>([]);
   const [filtered, setFiltered] = useState<BookingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,7 +152,7 @@ export default function BookingManagementScreen() {
             <Text style={styles.locText} numberOfLines={1}>{item.location}</Text>
           </View>
         )}
-        {item.status !== 'cancelled' && item.status !== 'completed' && (
+        {isAdmin(user?.role) && item.status !== 'cancelled' && item.status !== 'completed' && (
           <TouchableOpacity
             style={styles.cancelBtn}
             onPress={(e) => { e.stopPropagation(); handleCancel(item.id); }}

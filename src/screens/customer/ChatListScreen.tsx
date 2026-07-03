@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -36,6 +37,7 @@ export default function ChatListScreen() {
   const { user } = useAuthStore();
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const { showError } = useErrorHandler();
 
   const load = useCallback(async () => {
@@ -99,7 +101,13 @@ export default function ChatListScreen() {
         })
     );
     setLoading(false);
+    setRefreshing(false);
   }, [user, showError]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    load();
+  };
 
   useEffect(() => {
     load();
@@ -149,6 +157,7 @@ export default function ChatListScreen() {
         keyExtractor={(item) => item.bookingId}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.threadCard}

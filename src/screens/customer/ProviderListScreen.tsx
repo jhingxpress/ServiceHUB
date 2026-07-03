@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   TextInput,
   ScrollView,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,9 +44,10 @@ export default function ProviderListScreen({ route, navigation }: Props) {
   const [filtered, setFiltered] = useState<ProviderItem[]>([]);
   const [search, setSearch] = useState(initialSearch ?? '');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     let q = supabase
       .from('providers')
       .select(`
@@ -61,11 +63,18 @@ export default function ProviderListScreen({ route, navigation }: Props) {
 
     if (categoryId) q = q.eq('category_id', categoryId);
 
-    q.then(({ data }) => {
-      setProviders((data ?? []) as unknown as ProviderItem[]);
-      setLoading(false);
-    });
+    const { data } = await q;
+    setProviders((data ?? []) as unknown as ProviderItem[]);
+    setLoading(false);
+    setRefreshing(false);
   }, [categoryId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    load();
+  };
 
   useEffect(() => {
     if (!search.trim()) {
@@ -187,6 +196,7 @@ export default function ProviderListScreen({ route, navigation }: Props) {
           columnWrapperStyle={viewMode === 'grid' ? { gap: SPACING.sm } : undefined}
           contentContainerStyle={[styles.list, viewMode === 'grid' && styles.gridList]}
           showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
           ListEmptyComponent={
             <EmptyState
               icon="people-outline"

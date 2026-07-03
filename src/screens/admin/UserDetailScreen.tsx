@@ -16,6 +16,7 @@ import { AdminStackParamList } from '../../navigation/types';
 import { supabase } from '../../lib/supabase';
 import { adminSuspendProvider, adminBanUser, adminActivateUser } from '../../services/moderationService';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
+import { isAdmin } from '../../utils/roleUtils';
 import Avatar from '../../components/ui/Avatar';
 
 import { useAuthStore } from '../../stores/authStore';
@@ -271,38 +272,40 @@ export default function UserDetailScreen({ route, navigation }: Props) {
         )}
 
         {/* Moderation Actions */}
-        <View style={styles.modSection}>
-          <Text style={styles.sectionTitle}>Moderation Actions</Text>
-          <TouchableOpacity
-            style={[styles.toggleBtn, { backgroundColor: userData.status === 'active' ? '#FEF3C7' : '#D1FAE5' }]}
-            onPress={handleToggleActive}
-          >
-            <Ionicons
-              name={userData.status === 'active' ? 'pause-circle-outline' : 'checkmark-circle-outline'}
-              size={18}
-              color={userData.status === 'active' ? COLORS.warning : COLORS.success}
-            />
-            <Text style={[styles.toggleBtnText, { color: userData.status === 'active' ? COLORS.warning : COLORS.success }]}>
-              {userData.status === 'active' ? 'Deactivate Account' : 'Activate Account'}
-            </Text>
-          </TouchableOpacity>
-          {userData.status === 'active' && (
+        {isAdmin(adminUser?.role) && (
+          <View style={styles.modSection}>
+            <Text style={styles.sectionTitle}>Moderation Actions</Text>
             <TouchableOpacity
-              style={[styles.toggleBtn, { backgroundColor: '#FEF3C7', marginTop: SPACING.sm }]}
-              onPress={handleSuspend}
+              style={[styles.toggleBtn, { backgroundColor: userData.status === 'active' ? '#FEF3C7' : '#D1FAE5' }]}
+              onPress={handleToggleActive}
             >
-              <Ionicons name="hourglass-outline" size={18} color={COLORS.warning} />
-              <Text style={[styles.toggleBtnText, { color: COLORS.warning }]}>Suspend (Temporary)</Text>
+              <Ionicons
+                name={userData.status === 'active' ? 'pause-circle-outline' : 'checkmark-circle-outline'}
+                size={18}
+                color={userData.status === 'active' ? COLORS.warning : COLORS.success}
+              />
+              <Text style={[styles.toggleBtnText, { color: userData.status === 'active' ? COLORS.warning : COLORS.success }]}>
+                {userData.status === 'active' ? 'Deactivate Account' : 'Activate Account'}
+              </Text>
             </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={[styles.toggleBtn, { backgroundColor: '#FEE2E2', marginTop: SPACING.sm }]}
-            onPress={handleBan}
-          >
-            <Ionicons name="ban-outline" size={18} color={COLORS.error} />
-            <Text style={[styles.toggleBtnText, { color: COLORS.error }]}>Ban User (Permanent)</Text>
-          </TouchableOpacity>
-        </View>
+            {userData.status === 'active' && (
+              <TouchableOpacity
+                style={[styles.toggleBtn, { backgroundColor: '#FEF3C7', marginTop: SPACING.sm }]}
+                onPress={handleSuspend}
+              >
+                <Ionicons name="hourglass-outline" size={18} color={COLORS.warning} />
+                <Text style={[styles.toggleBtnText, { color: COLORS.warning }]}>Suspend (Temporary)</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.toggleBtn, { backgroundColor: '#FEE2E2', marginTop: SPACING.sm }]}
+              onPress={handleBan}
+            >
+              <Ionicons name="ban-outline" size={18} color={COLORS.error} />
+              <Text style={[styles.toggleBtnText, { color: COLORS.error }]}>Ban User (Permanent)</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

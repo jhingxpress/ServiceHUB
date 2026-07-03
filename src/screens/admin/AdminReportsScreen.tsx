@@ -19,6 +19,8 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { AdminStackParamList } from '../../navigation/types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
+import { canUpdateSupportCases, isAdmin } from '../../utils/roleUtils';
+import { logStaffAction } from '../../services/staffAuditService';
 import Badge from '../../components/ui/Badge';
 import { Report, ReportStatus } from '../../types';
 
@@ -71,6 +73,12 @@ export default function AdminReportsScreen() {
       .eq('id', reportId);
 
     if (error) { Alert.alert('Error', error.message); return; }
+    await logStaffAction({
+      action: `report_status_${newStatus}`,
+      targetTable: 'reports',
+      targetRecordId: reportId,
+      notes: adminNotes?.trim() || undefined,
+    });
     await loadReports();
   };
 
@@ -179,7 +187,7 @@ export default function AdminReportsScreen() {
         ) : null}
 
         {/* Report status actions */}
-        {item.status === 'pending' && (
+        {canUpdateSupportCases(user?.role) && item.status === 'pending' && (
           <View style={styles.actions}>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: COLORS.infoLight }]}
@@ -197,7 +205,7 @@ export default function AdminReportsScreen() {
             </TouchableOpacity>
           </View>
         )}
-        {item.status === 'investigating' && (
+        {canUpdateSupportCases(user?.role) && item.status === 'investigating' && (
           <View style={styles.actions}>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: COLORS.successLight }]}
@@ -217,33 +225,37 @@ export default function AdminReportsScreen() {
         )}
 
         {/* User actions */}
-        <View style={styles.userActionDivider}>
-          <Text style={styles.userActionLabel}>User Actions</Text>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.userActionsRow}>
-          <TouchableOpacity style={styles.userActionBtn} onPress={() => openUserProfile(item)}>
-            <Ionicons name="person-circle-outline" size={14} color={COLORS.primary} />
-            <Text style={[styles.userActionText, { color: COLORS.primary }]}>View Profile</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.userActionBtn} onPress={() => handleWarnUser(item)}>
-            <Ionicons name="warning-outline" size={14} color={COLORS.warning} />
-            <Text style={[styles.userActionText, { color: '#92400E' }]}>Warn</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.userActionBtn} onPress={() => handleSuspendUser(item)}>
-            <Ionicons name="ban-outline" size={14} color={COLORS.error} />
-            <Text style={[styles.userActionText, { color: COLORS.error }]}>Suspend</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.userActionBtn} onPress={() => handleToggleUserActive(item)}>
-            <Ionicons
-              name={reportedUser?.status !== 'active' ? 'checkmark-circle-outline' : 'person-remove-outline'}
-              size={14}
-              color={reportedUser?.status !== 'active' ? COLORS.success : COLORS.error}
-            />
-            <Text style={[styles.userActionText, { color: reportedUser?.status !== 'active' ? COLORS.success : COLORS.error }]}>
-              {reportedUser?.status !== 'active' ? 'Reactivate' : 'Deactivate'}
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
+        {isAdmin(user?.role) && (
+          <>
+            <View style={styles.userActionDivider}>
+              <Text style={styles.userActionLabel}>User Actions</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.userActionsRow}>
+              <TouchableOpacity style={styles.userActionBtn} onPress={() => openUserProfile(item)}>
+                <Ionicons name="person-circle-outline" size={14} color={COLORS.primary} />
+                <Text style={[styles.userActionText, { color: COLORS.primary }]}>View Profile</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.userActionBtn} onPress={() => handleWarnUser(item)}>
+                <Ionicons name="warning-outline" size={14} color={COLORS.warning} />
+                <Text style={[styles.userActionText, { color: '#92400E' }]}>Warn</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.userActionBtn} onPress={() => handleSuspendUser(item)}>
+                <Ionicons name="ban-outline" size={14} color={COLORS.error} />
+                <Text style={[styles.userActionText, { color: COLORS.error }]}>Suspend</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.userActionBtn} onPress={() => handleToggleUserActive(item)}>
+                <Ionicons
+                  name={reportedUser?.status !== 'active' ? 'checkmark-circle-outline' : 'person-remove-outline'}
+                  size={14}
+                  color={reportedUser?.status !== 'active' ? COLORS.success : COLORS.error}
+                />
+                <Text style={[styles.userActionText, { color: reportedUser?.status !== 'active' ? COLORS.success : COLORS.error }]}>
+                  {reportedUser?.status !== 'active' ? 'Reactivate' : 'Deactivate'}
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </>
+        )}
       </View>
     );
   };

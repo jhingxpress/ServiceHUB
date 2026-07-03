@@ -30,6 +30,7 @@ import Button from '../../components/ui/Button';
 import { CustomerStackParamList } from '../../navigation/types';
 import { validators, validateForm } from '../../utils/validation';
 import { useErrorHandler } from '../../utils/errorHandler';
+import { createNotification } from '../../services/notificationService';
 
 type NavProp = NativeStackNavigationProp<CustomerStackParamList>;
 type RouteType = RouteProp<CustomerStackParamList, 'BookService'>;
@@ -225,21 +226,46 @@ export default function BookingScreen() {
   const checkConflict = async (): Promise<boolean> => {
     const scheduledDate = format(date, 'yyyy-MM-dd');
     const scheduledTime = format(time, 'HH:mm:ss');
-    const { data, error } = await supabase
+    
+    // Check for existing booking conflicts (1-hour window)
+    const { data: bookingData, error: bookingError } = await supabase
       .from('bookings')
       .select('id, scheduled_time')
       .eq('provider_id', providerId)
       .eq('scheduled_date', scheduledDate)
       .in('status', ['pending', 'accepted']);
 
-    if (error || !data || data.length === 0) return false;
-
-    const selectedMinutes = time.getHours() * 60 + time.getMinutes();
-    for (const b of data) {
-      const [h, m] = (b.scheduled_time as string).split(':').map(Number);
-      const existingMinutes = h * 60 + m;
-      if (Math.abs(selectedMinutes - existingMinutes) <= 60) return true;
+    if (!bookingError && bookingData && bookingData.length > 0) {
+      const selectedMinutes = time.getHours() * 60 + time.getMinutes();
+      for (const b of bookingData) {
+        const [h, m] = (b.scheduled_time as string).split(':').map(Number);
+        const existingMinutes = h * 60 + m;
+        if (Math.abs(selectedMinutes - existingMinutes) <= 60) return true;
+      }
     }
+
+    // Check provider availability schedule
+    const dayOfWeek = date.getDay();
+    const { data: availability } = await supabase
+      .from('availability')
+      .select('start_time, end_time')
+      .eq('provider_id', providerId)
+      .eq('day_of_week', dayOfWeek)
+      .eq('is_available', true)
+      .maybeSingle();
+
+    if (availability) {
+      const selectedMinutes = time.getHours() * 60 + time.getMinutes();
+      const [startH, startM] = availability.start_time.split(':').map(Number);
+      const [endH, endM] = availability.end_time.split(':').map(Number);
+      const startMinutes = startH * 60 + startM;
+      const endMinutes = endH * 60 + endM;
+      
+      if (selectedMinutes < startMinutes || selectedMinutes >= endMinutes) {
+        return true; // Outside available hours
+      }
+    }
+
     return false;
   };
 
@@ -332,6 +358,15 @@ export default function BookingScreen() {
         .single();
 
       if (error) throw error;
+
+      // Notify provider of new booking request
+      createNotification({
+        userId: providerId,
+        type: 'booking_submitted',
+        title: 'New Booking Request',
+        body: `You have a new booking request for ${serviceName || 'a service'}.`,
+        data: { booking_id: data.id }
+      });
 
       showSuccess('Booking sent successfully!');
       navigation.navigate('BookingDetail', { bookingId: data.id });

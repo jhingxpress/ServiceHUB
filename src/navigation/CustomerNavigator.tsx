@@ -33,6 +33,7 @@ import AllCategoriesScreen from '../screens/customer/AllCategoriesScreen';
 import ReportScreen from '../screens/shared/ReportScreen';
 import LiveTrackingScreen from '../screens/customer/LiveTrackingScreen';
 import SavedLocationsScreen from '../screens/customer/SavedLocationsScreen';
+import NotificationDetailScreen from '../screens/shared/NotificationDetailScreen';
 
 const Stack = createNativeStackNavigator<CustomerStackParamList>();
 const Tab = createBottomTabNavigator<CustomerTabParamList>();
@@ -171,6 +172,7 @@ export default function CustomerNavigator() {
       <Stack.Screen name="ReportScreen" component={ReportScreen} />
       <Stack.Screen name="LiveTracking" component={LiveTrackingScreen} options={{ headerShown: false, animation: 'slide_from_bottom' }} />
       <Stack.Screen name="SavedLocations" component={SavedLocationsScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} />
     </Stack.Navigator>
   );
 }

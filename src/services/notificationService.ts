@@ -202,3 +202,30 @@ export async function getLastNotificationResponse(): Promise<Notifications.Notif
 export async function setBadgeCount(count: number): Promise<void> {
   await Notifications.setBadgeCountAsync(count);
 }
+
+// ─────────────────────────────────────────────
+// Create a notification in the database
+// Safe error handling - does not throw, only logs
+// ─────────────────────────────────────────────
+export async function createNotification(params: {
+  userId: string;
+  type: string;
+  title: string;
+  body: string;
+  data?: Record<string, unknown>;
+}): Promise<void> {
+  try {
+    const { error } = await supabase.from('notifications').insert({
+      user_id: params.userId,
+      type: params.type,
+      title: params.title,
+      body: params.body,
+      data: params.data ?? {},
+    });
+    if (error) {
+      console.error('[Notification] Failed to create notification:', error.message);
+    }
+  } catch (err) {
+    console.error('[Notification] Unexpected error creating notification:', err instanceof Error ? err.message : String(err));
+  }
+}

@@ -1,4 +1,5 @@
-export type UserRole = 'customer' | 'provider' | 'admin';
+export type UserRole = 'customer' | 'provider' | 'admin' | 'moderator' | 'support_agent' | 'operations_staff';
+export type StaffRole = 'moderator' | 'support_agent' | 'operations_staff';
 export type ProviderStatus = 'draft' | 'pending_review' | 'approved' | 'rejected' | 'suspended';
 export type DocumentStatus = 'pending' | 'approved' | 'rejected';
 export type DocumentCategoryType = 'valid_id' | 'permit_certificate';
@@ -47,6 +48,61 @@ export type ReportType =
   | 'inappropriate_content'
   | 'other';
 export type ReportStatus = 'pending' | 'investigating' | 'resolved' | 'dismissed';
+export type BookingIncidentReason =
+  | 'customer_not_present'
+  | 'wrong_address'
+  | 'customer_refused_service'
+  | 'unsafe_location'
+  | 'other';
+export type BookingIncidentStatus = 'open' | 'reviewed' | 'dismissed';
+
+export interface BookingIncidentReport {
+  id: string;
+  booking_id: string;
+  provider_id: string;
+  reason: BookingIncidentReason;
+  notes: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  photo_url: string | null;
+  status: BookingIncidentStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export type EmploymentStatus = 'active' | 'suspended' | 'inactive' | 'resigned';
+export type EscalationStatus = 'open' | 'in_progress' | 'resolved' | 'dismissed';
+
+export interface StaffActionLog {
+  id: string;
+  staff_id: string;
+  staff?: { full_name: string | null; email: string | null; role: UserRole } | null;
+  action: string;
+  target_table: string | null;
+  target_record_id: string | null;
+  target_user_id: string | null;
+  target_user?: { full_name: string | null; email: string | null } | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface Escalation {
+  id: string;
+  created_by: string;
+  created_by_user?: { full_name: string | null; email: string | null; role: UserRole } | null;
+  assigned_to: string | null;
+  assigned_to_user?: { full_name: string | null; email: string | null; role: UserRole } | null;
+  target_table: string | null;
+  target_record_id: string | null;
+  target_user_id: string | null;
+  target_user?: { full_name: string | null; email: string | null } | null;
+  status: EscalationStatus;
+  reason: string;
+  notes: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
 
 export interface User {
   id: string;
@@ -56,6 +112,9 @@ export interface User {
   avatar_url: string | null;
   role: UserRole;
   status: 'active' | 'suspended' | 'banned';
+  is_active: boolean;
+  employment_status: EmploymentStatus;
+  internal_notes: string | null;
   email_verified: boolean;
   city: string | null;
   province: string | null;
@@ -376,7 +435,7 @@ export interface Dispute {
 export interface Notification {
   id: string;
   user_id: string;
-  type: 'booking_submitted' | 'booking_accepted' | 'booking_rejected' | 'booking_cancelled' | 'booking_completed' | 'booking_reminder' | 'provider_on_the_way' | 'provider_arrived' | 'service_completed' | 'chat_message' | 'new_message' | 'review_received' | 'review_reminder' | 'verification_approved' | 'verification_rejected' | 'document_approved' | 'document_rejected' | 'dispute_opened' | 'dispute_updated' | 'dispute_resolved' | 'announcement' | 'maintenance' | 'policy_update' | 'marketing' | 'system';
+  type: 'booking_submitted' | 'booking_accepted' | 'booking_rejected' | 'booking_cancelled' | 'booking_on_the_way' | 'booking_arrived' | 'booking_in_progress' | 'booking_completed' | 'booking_reminder' | 'provider_on_the_way' | 'provider_arrived' | 'service_completed' | 'chat_message' | 'new_message' | 'review_received' | 'review_reminder' | 'verification_approved' | 'verification_rejected' | 'document_approved' | 'document_rejected' | 'featured_approved' | 'dispute_opened' | 'dispute_updated' | 'dispute_resolved' | 'announcement' | 'maintenance' | 'policy_update' | 'marketing' | 'system';
   title: string;
   body: string;
   data: Record<string, unknown>;

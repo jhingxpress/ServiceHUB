@@ -6,6 +6,7 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +17,8 @@ import { useNotificationStore } from '../../stores/notificationStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import EmptyState from '../../components/ui/EmptyState';
 import { Notification } from '../../types';
+import { navigateFromNotification } from '../../utils/notificationNavigation';
+import { useErrorHandler } from '../../utils/errorHandler';
 
 const TYPE_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
   booking_submitted: 'calendar-outline',
@@ -23,6 +26,8 @@ const TYPE_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> 
   booking_rejected: 'close-circle-outline',
   booking_cancelled: 'close-circle-outline',
   booking_completed: 'checkbox-outline',
+  booking_on_the_way: 'navigate-outline',
+  booking_arrived: 'location-outline',
   provider_on_the_way: 'navigate-outline',
   provider_arrived: 'location-outline',
   service_completed: 'checkbox-outline',
@@ -32,6 +37,7 @@ const TYPE_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> 
   document_rejected: 'document-outline',
   verification_approved: 'shield-checkmark-outline',
   verification_rejected: 'shield-outline',
+  featured_approved: 'ribbon-outline',
   chat_message: 'chatbubble-outline',
   new_message: 'chatbubble-outline',
   announcement: 'megaphone-outline',
@@ -68,19 +74,27 @@ export default function NotificationCenterScreen() {
   const storeMarkAllRead = useNotificationStore((s) => s.markAllRead);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread'>('all');
+  const { showError } = useErrorHandler();
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('notifications')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
+    if (error) showError(error, 'Failed to load notifications.');
     setNotifications((data ?? []) as Notification[]);
     setLoading(false);
-  }, [user]);
+    setRefreshing(false);
+  }, [user, showError]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchNotifications();
+  };
 
   const markAsRead = async (id: string) => {
     if (!user) return;
@@ -123,7 +137,10 @@ export default function NotificationCenterScreen() {
     return (
       <TouchableOpacity
         style={[styles.card, !item.is_read && styles.cardUnread]}
-        onPress={() => markAsRead(item.id)}
+        onPress={() => {
+          markAsRead(item.id);
+          navigateFromNotification(item, navigation as never);
+        }}
         activeOpacity={0.8}
       >
         <View style={[styles.iconWrap, !item.is_read && styles.iconWrapUnread]}>
@@ -190,6 +207,7 @@ export default function NotificationCenterScreen() {
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
           ListEmptyComponent={
             <EmptyState
               icon="notifications-outline"

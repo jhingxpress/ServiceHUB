@@ -16,6 +16,8 @@ import { format } from 'date-fns';
 import { AdminStackParamList } from '../../navigation/types';
 import { supabase } from '../../lib/supabase';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
+import { canReviewProviders } from '../../utils/roleUtils';
+import { logStaffAction } from '../../services/staffAuditService';
 import Avatar from '../../components/ui/Avatar';
 import EmptyState from '../../components/ui/EmptyState';
 import { useAuthStore } from '../../stores/authStore';
@@ -99,6 +101,12 @@ export default function PendingProvidersScreen() {
               action: 'approved',
               performed_by: user?.id ?? null,
             });
+            await logStaffAction({
+              action: 'provider_approved',
+              targetTable: 'providers',
+              targetRecordId: id,
+              notes: `Approved provider ${name ?? id}`,
+            });
 
             await fetchPending();
           } catch (err) {
@@ -137,6 +145,12 @@ export default function PendingProvidersScreen() {
             action: 'rejected',
             performed_by: user?.id ?? null,
             notes: reason.trim(),
+          });
+          await logStaffAction({
+            action: 'provider_rejected',
+            targetTable: 'providers',
+            targetRecordId: id,
+            notes: `Rejected provider ${name ?? id}: ${reason.trim()}`,
           });
 
           await fetchPending();
@@ -206,22 +220,24 @@ export default function PendingProvidersScreen() {
             <Text style={styles.appliedDate}>
               Submitted {format(new Date(item.updated_at), 'MMM d, yyyy h:mm a')}
             </Text>
-            <View style={styles.actions}>
-              <TouchableOpacity
-                style={styles.rejectBtn}
-                onPress={() => handleReject(item.id, item.users?.full_name)}
-              >
-                <Ionicons name="close" size={16} color={COLORS.error} />
-                <Text style={styles.rejectText}>Reject</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.approveBtn}
-                onPress={() => handleApprove(item.id, item.users?.full_name)}
-              >
-                <Ionicons name="checkmark" size={16} color={COLORS.white} />
-                <Text style={styles.approveText}>Approve</Text>
-              </TouchableOpacity>
-            </View>
+            {canReviewProviders(user?.role) && (
+              <View style={styles.actions}>
+                <TouchableOpacity
+                  style={styles.rejectBtn}
+                  onPress={() => handleReject(item.id, item.users?.full_name)}
+                >
+                  <Ionicons name="close" size={16} color={COLORS.error} />
+                  <Text style={styles.rejectText}>Reject</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.approveBtn}
+                  onPress={() => handleApprove(item.id, item.users?.full_name)}
+                >
+                  <Ionicons name="checkmark" size={16} color={COLORS.white} />
+                  <Text style={styles.approveText}>Approve</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </TouchableOpacity>
         )}
         ListEmptyComponent={

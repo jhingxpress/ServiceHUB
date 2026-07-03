@@ -30,6 +30,8 @@ import ProviderAnalyticsScreen from '../screens/provider/ProviderAnalyticsScreen
 import HistoricalAnalyticsScreen from '../screens/provider/HistoricalAnalyticsScreen';
 import EarningsSummaryScreen from '../screens/provider/EarningsSummaryScreen';
 import ProviderLiveTrackingScreen from '../screens/provider/ProviderLiveTrackingScreen';
+import NotificationDetailScreen from '../screens/shared/NotificationDetailScreen';
+import BookingIncidentReportScreen from '../screens/provider/BookingIncidentReportScreen';
 
 const Stack = createNativeStackNavigator<ProviderStackParamList>();
 const Tab = createBottomTabNavigator<ProviderTabParamList>();
@@ -153,6 +155,8 @@ export default function ProviderNavigator() {
           <Stack.Screen name="EarningsSummary" component={EarningsSummaryScreen} />
           <Stack.Screen name="ReportScreen" component={ReportScreen} />
           <Stack.Screen name="ProviderLiveTracking" component={ProviderLiveTrackingScreen} options={{ headerShown: false, animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} />
+          <Stack.Screen name="BookingIncidentReport" component={BookingIncidentReportScreen} />
         </>
       ) : isPending ? (
         <Stack.Screen name="PendingApproval" component={PendingApprovalScreen} />

@@ -3,9 +3,11 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet } from 'react-native';
-import { AdminStackParamList, AdminTabParamList } from './types';
+import { AdminStackParamList, AdminTabParamList, StaffTabParamList } from './types';
 import { COLORS, FONTS } from '../constants/theme';
 import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../stores/authStore';
+import { isAdmin } from '../utils/roleUtils';
 
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
 import PendingProvidersScreen from '../screens/admin/PendingProvidersScreen';
@@ -26,9 +28,15 @@ import TipsRevenueScreen from '../screens/admin/TipsRevenueScreen';
 import ProviderEconomyScreen from '../screens/admin/ProviderEconomyScreen';
 import AdminBroadcastScreen from '../screens/admin/AdminBroadcastScreen';
 import AdminKYCScreen from '../screens/admin/AdminKYCScreen';
+import OperationsCenterScreen from '../screens/admin/OperationsCenterScreen';
+import StaffManagementScreen from '../screens/admin/StaffManagementScreen';
+import StaffActionLogsScreen from '../screens/admin/StaffActionLogsScreen';
+import StaffIncidentReportsScreen from '../screens/admin/StaffIncidentReportsScreen';
+import EscalationsScreen from '../screens/admin/EscalationsScreen';
 
 const Stack = createNativeStackNavigator<AdminStackParamList>();
 const Tab = createBottomTabNavigator<AdminTabParamList>();
+const StaffTab = createBottomTabNavigator<StaffTabParamList>();
 
 function AdminTabs() {
   const [providerBadge, setProviderBadge] = useState(0);
@@ -121,7 +129,77 @@ function AdminTabs() {
   );
 }
 
+function StaffTabs() {
+  const [incidentBadge, setIncidentBadge] = useState(0);
+  const [reportBadge, setReportBadge] = useState(0);
+
+  useEffect(() => {
+    const fetchBadges = async () => {
+      const [incidentRes, repRes] = await Promise.all([
+        supabase
+          .from('booking_incident_reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'open'),
+        supabase
+          .from('reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'pending'),
+      ]);
+      setIncidentBadge(incidentRes.count ?? 0);
+      setReportBadge(repRes.count ?? 0);
+    };
+
+    fetchBadges();
+
+    const channel = supabase
+      .channel('staff-badges')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_incident_reports' }, fetchBadges)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, fetchBadges)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  const badge = (n: number) => (n > 0 ? (n > 99 ? '99+' : n) : undefined);
+
+  return (
+    <StaffTab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: COLORS.textLight,
+        tabBarStyle: styles.tabBar,
+        tabBarLabelStyle: styles.tabLabel,
+        tabBarIcon: ({ color, size, focused }) => {
+          let iconName: React.ComponentProps<typeof Ionicons>['name'];
+          switch (route.name) {
+            case 'OperationsCenter':
+              iconName = focused ? 'speedometer' : 'speedometer-outline';
+              break;
+            case 'Logs':
+              iconName = focused ? 'document-text' : 'document-text-outline';
+              break;
+            default:
+              iconName = focused ? 'settings' : 'settings-outline';
+          }
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+      })}
+    >
+      <StaffTab.Screen
+        name="OperationsCenter"
+        component={OperationsCenterScreen}
+        options={{ tabBarBadge: badge(incidentBadge + reportBadge) }}
+      />
+      <StaffTab.Screen name="Logs" component={StaffActionLogsScreen} />
+    </StaffTab.Navigator>
+  );
+}
+
 export default function AdminNavigator() {
+  const { user } = useAuthStore();
+  const isAdminUser = isAdmin(user?.role);
+
   return (
     <Stack.Navigator
       screenOptions={{
@@ -131,7 +209,11 @@ export default function AdminNavigator() {
         gestureDirection: 'horizontal',
       }}
     >
-      <Stack.Screen name="AdminTabs" component={AdminTabs} />
+      {isAdminUser ? (
+        <Stack.Screen name="AdminTabs" component={AdminTabs} />
+      ) : (
+        <Stack.Screen name="StaffTabs" component={StaffTabs} />
+      )}
       <Stack.Screen name="PendingProviders" component={PendingProvidersScreen} />
       <Stack.Screen name="AllProviders" component={AdminKYCScreen} />
       <Stack.Screen name="ManageUsers" component={UsersScreen} />
@@ -148,6 +230,12 @@ export default function AdminNavigator() {
       <Stack.Screen name="TipsRevenue" component={TipsRevenueScreen} />
       <Stack.Screen name="ProviderEconomy" component={ProviderEconomyScreen} />
       <Stack.Screen name="AdminBroadcast" component={AdminBroadcastScreen} />
+      <Stack.Screen name="Disputes" component={DisputesScreen} />
+      <Stack.Screen name="OperationsCenter" component={OperationsCenterScreen} />
+      <Stack.Screen name="StaffManagement" component={StaffManagementScreen} />
+      <Stack.Screen name="StaffActionLogs" component={StaffActionLogsScreen} />
+      <Stack.Screen name="StaffIncidentReports" component={StaffIncidentReportsScreen} />
+      <Stack.Screen name="Escalations" component={EscalationsScreen} />
     </Stack.Navigator>
   );
 }
