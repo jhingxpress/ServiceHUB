@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
+import { isStaff } from '../../utils/roleUtils';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../../constants/theme';
 import TermsOfServiceModal from '../../components/modals/TermsOfServiceModal';
 import PrivacyPolicyModal from '../../components/modals/PrivacyPolicyModal';
@@ -21,6 +22,28 @@ const TERMS_VERSION = '1.0';
 
 export default function ProfileCompletionScreen() {
   const { user, completeProfileSetup } = useAuthStore();
+
+  useEffect(() => {
+    if (isStaff(user?.role)) {
+      console.error('[PROFILE] ProfileCompletionScreen rendered for staff role', {
+        userId: user?.id,
+        role: user?.role,
+      });
+      Alert.alert('Error', 'Staff accounts do not use marketplace onboarding.');
+    }
+  }, [user?.id, user?.role]);
+
+  // Defensive: staff should never reach this screen; RootNavigator routes them to AdminNavigator
+  if (isStaff(user?.role)) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}>
+          <Text style={styles.title}>Redirecting to Staff Operations Center...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const [fullName, setFullName] = useState(user?.full_name ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [role, setRole] = useState<'customer' | 'provider'>('customer');
@@ -215,6 +238,7 @@ export default function ProfileCompletionScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.lg },
   kav: { flex: 1 },
   scroll: { flexGrow: 1, padding: SPACING.lg },
   header: { alignItems: 'center', marginBottom: SPACING.xl },

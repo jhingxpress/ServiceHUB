@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../stores/authStore';
 import { RootStackParamList } from './types';
 import { COLORS } from '../constants/theme';
+import { isStaff } from '../utils/roleUtils';
 import AuthNavigator from './AuthNavigator';
 import CustomerNavigator from './CustomerNavigator';
 import ProviderNavigator from './ProviderNavigator';
@@ -38,6 +39,7 @@ export default function RootNavigator() {
   }
 
   const profileComplete = isProfileComplete(user);
+  const isStaffRole = isStaff(user?.role);
 
   const decision = {
     isInitialized,
@@ -46,16 +48,25 @@ export default function RootNavigator() {
     userId: user?.id ?? null,
     email: user?.email ?? null,
     role: user?.role ?? null,
+    mustChangePassword: user?.must_change_password ?? null,
+    isStaffRole,
     emailVerified: user?.email_verified ?? null,
     acceptedTerms: user?.accepted_terms_at ?? null,
     profileComplete,
     emailJustVerified,
     passwordResetMode,
-    mustChangePassword,
+    storeMustChangePassword: mustChangePassword,
   };
 
   console.log('[ROOT DECISION]', decision);
   debugLogger.log('RootNavigator_decision', decision);
+  console.log('[ROOT DIAGNOSTIC]', {
+    role: user?.role,
+    must_change_password: user?.must_change_password,
+    isStaffRole,
+    isProfileComplete: profileComplete,
+    selectedRootRoute: null,
+  });
 
   let screenName = '';
   if (passwordResetMode) {
@@ -64,6 +75,8 @@ export default function RootNavigator() {
     screenName = 'AuthNavigator';
   } else if (mustChangePassword) {
     screenName = 'MustChangePasswordScreen';
+  } else if (isStaffRole) {
+    screenName = 'AdminNavigator';
   } else if (emailJustVerified) {
     screenName = 'EmailVerifiedScreen';
   } else if (!profileComplete) {
@@ -76,6 +89,14 @@ export default function RootNavigator() {
     screenName = 'AdminNavigator';
   }
 
+  console.log('[ROOT DIAGNOSTIC]', {
+    role: user?.role,
+    must_change_password: user?.must_change_password,
+    isStaffRole,
+    isProfileComplete: profileComplete,
+    selectedRootRoute: screenName,
+  });
+
   debugLogger.log('RootNavigator_screen', { screen: screenName });
   console.log('[ROOT SCREEN]', screenName);
 
@@ -87,6 +108,8 @@ export default function RootNavigator() {
         <Stack.Screen name="Auth" component={AuthNavigator} />
       ) : mustChangePassword ? (
         <Stack.Screen name="MustChangePassword" component={StaffChangePasswordScreen} />
+      ) : isStaffRole ? (
+        <Stack.Screen name="Admin" component={AdminNavigator} />
       ) : emailJustVerified ? (
         <Stack.Screen name="EmailVerified" component={EmailVerifiedScreen} />
       ) : !profileComplete ? (

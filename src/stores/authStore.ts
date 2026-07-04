@@ -1012,7 +1012,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         target_record_id: user.id,
         notes: 'Staff changed their password on first login',
       });
-      set({ user: { ...user, must_change_password: false }, mustChangePassword: false, currentPassword: null });
+      // Refresh profile from DB so RootNavigator sees the latest role and must_change_password state
+      console.log('[TRACE][changePassword] Before refresh', {
+        role: user.role,
+        mustChangePassword: user.must_change_password,
+      });
+      const { data: refreshedProfile, error: refreshError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      if (refreshError) {
+        console.error('[AUTH] changePassword: failed to refresh profile', refreshError);
+      }
+      const updatedUser = refreshedProfile ? (refreshedProfile as User) : { ...user, must_change_password: false };
+      console.log('[TRACE][changePassword] After refresh', {
+        role: updatedUser.role,
+        mustChangePassword: updatedUser.must_change_password,
+      });
+      set({ user: updatedUser, mustChangePassword: false, currentPassword: null });
       return { success: true };
     } catch (err) {
       console.error('[AUTH] changePassword error:', err);
