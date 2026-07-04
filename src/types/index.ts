@@ -115,6 +115,7 @@ export interface User {
   is_active: boolean;
   employment_status: EmploymentStatus;
   internal_notes: string | null;
+  must_change_password: boolean;
   email_verified: boolean;
   city: string | null;
   province: string | null;

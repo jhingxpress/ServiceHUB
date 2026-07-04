@@ -134,7 +134,7 @@ export async function checkUserStatus(userId: string, caller?: string): Promise<
   debugLogger.log('checkUserStatus_before_query', { caller: callerLabel, userId, t: Date.now() });
   const { data, error, status } = await supabase
     .from('users')
-    .select('status')
+    .select('status, employment_status, role')
     .eq('id', userId)
     .single();
   debugLogger.log('checkUserStatus_after_query', { caller: callerLabel, userId, t: Date.now() });
@@ -185,6 +185,20 @@ export async function checkUserStatus(userId: string, caller?: string): Promise<
   if (data.status === 'banned') {
     debugLogger.log('checkUserStatus_banned', { userId, allowed: false });
     return { allowed: false, error: 'Your account has been banned.' };
+  }
+
+  const staffRoles = ['moderator', 'support_agent', 'operations_staff'];
+  if (staffRoles.includes(data.role ?? '') && data.employment_status !== 'active') {
+    const friendly = {
+      inactive: 'Your staff account is inactive. Please contact your administrator.',
+      suspended: 'Your staff account is suspended. Please contact your administrator.',
+      resigned: 'Your staff account has been marked as resigned. Access is no longer available.',
+    };
+    debugLogger.log('checkUserStatus_employment_status', { userId, status: data.employment_status, allowed: false });
+    return {
+      allowed: false,
+      error: friendly[data.employment_status as keyof typeof friendly] ?? 'Your staff account is not active. Please contact your administrator.',
+    };
   }
 
   debugLogger.log('checkUserStatus_allowed', { userId, status: data.status, allowed: true });

@@ -10,6 +10,7 @@ import {
   TextInput,
   Modal,
   Alert,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +23,6 @@ import { AdminStackParamList } from '../../navigation/types';
 import { StaffRole, User, EmploymentStatus } from '../../types';
 import { STAFF_ROLES, getStaffRoleLabel, isValidStaffRole } from '../../utils/roleUtils';
 import { logStaffAction } from '../../services/staffAuditService';
-import { validators } from '../../utils/validation';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
 import Badge from '../../components/ui/Badge';
@@ -38,8 +38,7 @@ export default function StaffManagementScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
-  const [form, setForm] = useState({ email: '', password: '', full_name: '', role: 'support_agent' as StaffRole });
-  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [form, setForm] = useState({ email: '', full_name: '', role: 'support_agent' as StaffRole });
   const [creating, setCreating] = useState(false);
   const [notesModal, setNotesModal] = useState<{ visible: boolean; member: StaffUser | null; notes: string }>({
     visible: false,
@@ -47,6 +46,11 @@ export default function StaffManagementScreen() {
     notes: '',
   });
   const [savingNotes, setSavingNotes] = useState(false);
+  const [tempPasswordModal, setTempPasswordModal] = useState<{ visible: boolean; password: string; staffName: string }>({
+    visible: false,
+    password: '',
+    staffName: '',
+  });
 
   const fetchStaff = useCallback(async () => {
     try {
@@ -73,7 +77,7 @@ export default function StaffManagementScreen() {
   };
 
   const handleCreate = async () => {
-    if (!form.email.trim() || !form.password || !form.full_name.trim()) {
+    if (!form.email.trim() || !form.full_name.trim()) {
       Alert.alert('Missing fields', 'Please fill in all fields.');
       return;
     }
@@ -81,17 +85,11 @@ export default function StaffManagementScreen() {
       Alert.alert('Invalid role', 'Please select a valid staff role.');
       return;
     }
-    const passwordValidation = validators.password(form.password);
-    if (passwordValidation) {
-      Alert.alert('Invalid password', passwordValidation);
-      return;
-    }
     setCreating(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-staff', {
         body: {
           email: form.email.trim(),
-          password: form.password,
           full_name: form.full_name.trim(),
           role: form.role,
         },
@@ -106,10 +104,14 @@ export default function StaffManagementScreen() {
         targetRecordId: data.user_id,
         notes: `Created ${form.role} account`,
       });
-      setForm({ email: '', password: '', full_name: '', role: 'support_agent' });
+      setForm({ email: '', full_name: '', role: 'support_agent' });
       setModalVisible(false);
       await fetchStaff();
-      Alert.alert('Success', 'Staff account created.');
+      setTempPasswordModal({
+        visible: true,
+        password: data.temporary_password ?? '',
+        staffName: form.full_name.trim(),
+      });
     } catch (err) {
       console.error('[StaffManagement] create error:', err);
       Alert.alert('Error', 'Failed to create staff account.');
@@ -118,22 +120,82 @@ export default function StaffManagementScreen() {
     }
   };
 
-  const toggleActive = async (member: StaffUser) => {
-    const newValue = !member.is_active;
+  const handleResetPassword = (member: StaffUser) => {
+    Alert.alert(
+      'Reset Password',
+      `Issue a new temporary password for ${member.full_name ?? 'this staff member'}? Their current password will stop working immediately.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { data, error } = await supabase.functions.invoke('reset-staff-password', {
+                body: { user_id: member.id },
+              });
+              if (error || !data?.success) {
+                Alert.alert('Error', error?.message ?? data?.error ?? 'Failed to reset password');
+                return;
+              }
+              setTempPasswordModal({
+                visible: true,
+                password: data.temporary_password ?? '',
+                staffName: member.full_name ?? 'Staff',
+              });
+            } catch (err) {
+              console.error('[StaffManagement] reset password error:', err);
+              Alert.alert('Error', 'Failed to reset password.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const closeTempPasswordModal = () => {
+    setTempPasswordModal({ visible: false, password: '', staffName: '' });
+  };
+
+  const shareTemporaryPassword = async () => {
     try {
-      const { error } = await supabase.from('users').update({ is_active: newValue }).eq('id', member.id);
-      if (error) throw error;
-      await logStaffAction({
-        action: newValue ? 'activate_staff' : 'deactivate_staff',
-        targetTable: 'users',
-        targetRecordId: member.id,
-        notes: `Staff account ${newValue ? 'activated' : 'deactivated'}`,
+      await Share.share({
+        message: `Your temporary TAGA password is: ${tempPasswordModal.password}\nPlease change it after your first login.`,
       });
-      setStaff((prev) => prev.map((s) => (s.id === member.id ? { ...s, is_active: newValue } : s)));
     } catch (err) {
-      console.error('[StaffManagement] toggle error:', err);
-      Alert.alert('Error', 'Failed to update staff status.');
+      // User dismissed the share sheet; no action needed
     }
+  };
+
+  const toggleActive = (member: StaffUser) => {
+    const newValue = !member.is_active;
+    Alert.alert(
+      newValue ? 'Activate Staff Account' : 'Deactivate Staff Account',
+      `Are you sure you want to ${newValue ? 'activate' : 'deactivate'} ${member.full_name ?? 'this staff member'}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: newValue ? 'Activate' : 'Deactivate',
+          style: newValue ? 'default' : 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase.from('users').update({ is_active: newValue }).eq('id', member.id);
+              if (error) throw error;
+              await logStaffAction({
+                action: newValue ? 'activate_staff' : 'deactivate_staff',
+                targetTable: 'users',
+                targetRecordId: member.id,
+                notes: `Staff account ${newValue ? 'activated' : 'deactivated'}`,
+              });
+              setStaff((prev) => prev.map((s) => (s.id === member.id ? { ...s, is_active: newValue } : s)));
+            } catch (err) {
+              console.error('[StaffManagement] toggle error:', err);
+              Alert.alert('Error', 'Failed to update staff status.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const changeRole = async (member: StaffUser) => {
@@ -172,26 +234,29 @@ export default function StaffManagementScreen() {
     Alert.alert(
       'Change Employment Status',
       'Select a new status',
-      EMPLOYMENT_STATUSES.map((status) => ({
-        text: status.charAt(0).toUpperCase() + status.slice(1),
-        onPress: async () => {
-          if (status === member.employment_status) return;
-          try {
-            const { error } = await supabase.from('users').update({ employment_status: status }).eq('id', member.id);
-            if (error) throw error;
-            await logStaffAction({
-              action: 'change_employment_status',
-              targetTable: 'users',
-              targetRecordId: member.id,
-              notes: `Employment status changed from ${member.employment_status} to ${status}`,
-            });
-            setStaff((prev) => prev.map((s) => (s.id === member.id ? { ...s, employment_status: status } : s)));
-          } catch (err) {
-            console.error('[StaffManagement] change employment status error:', err);
-            Alert.alert('Error', 'Failed to change employment status.');
-          }
-        },
-      }))
+      [
+        ...EMPLOYMENT_STATUSES.map((status) => ({
+          text: status.charAt(0).toUpperCase() + status.slice(1),
+          onPress: async () => {
+            if (status === member.employment_status) return;
+            try {
+              const { error } = await supabase.from('users').update({ employment_status: status }).eq('id', member.id);
+              if (error) throw error;
+              await logStaffAction({
+                action: 'change_employment_status',
+                targetTable: 'users',
+                targetRecordId: member.id,
+                notes: `Employment status changed from ${member.employment_status} to ${status}`,
+              });
+              setStaff((prev) => prev.map((s) => (s.id === member.id ? { ...s, employment_status: status } : s)));
+            } catch (err) {
+              console.error('[StaffManagement] change employment status error:', err);
+              Alert.alert('Error', 'Failed to change employment status.');
+            }
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' },
+      ]
     );
   };
 
@@ -276,8 +341,13 @@ export default function StaffManagementScreen() {
         <TouchableOpacity style={styles.actionBtn} onPress={() => openNotesModal(item)}>
           <Text style={styles.actionText}>Notes</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.actionBtn} onPress={() => handleResetPassword(item)}>
+          <Text style={styles.actionText}>Reset</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.cardActionsSecondary}>
         <TouchableOpacity
-          style={[styles.actionBtn, item.is_active && styles.deactivateBtn]}
+          style={[styles.actionBtn, item.is_active && styles.deactivateBtn, { flex: 1 }]}
           onPress={() => toggleActive(item)}
         >
           <Text style={[styles.actionText, item.is_active && styles.deactivateText]}>
@@ -357,21 +427,9 @@ export default function StaffManagementScreen() {
               value={form.email}
               onChangeText={(text) => setForm((f) => ({ ...f, email: text }))}
             />
-            <TextInput
-              style={styles.input}
-              placeholder="Temporary password"
-              placeholderTextColor={COLORS.textLight}
-              secureTextEntry
-              value={form.password}
-              onChangeText={(text) => {
-                setForm((f) => ({ ...f, password: text }));
-                setPasswordError(validators.password(text));
-              }}
-            />
             <Text style={styles.helperText}>
-              At least 8 characters, one uppercase, one lowercase, one number (e.g. Staff1234)
+              A secure temporary password will be generated automatically.
             </Text>
-            {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
 
             <Text style={styles.label}>Role</Text>
             <View style={styles.roleRow}>
@@ -394,6 +452,48 @@ export default function StaffManagementScreen() {
               loading={creating}
               fullWidth
               style={{ marginTop: SPACING.md }}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={tempPasswordModal.visible}
+        onRequestClose={closeTempPasswordModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Temporary Password</Text>
+              <TouchableOpacity onPress={closeTempPasswordModal}>
+                <Ionicons name="close" size={24} color={COLORS.text} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.label}>
+              Share this password with {tempPasswordModal.staffName} once. It will not be shown again.
+            </Text>
+            <View style={styles.passwordDisplay}>
+              <Text style={styles.passwordDisplayText} selectable>
+                {tempPasswordModal.password}
+              </Text>
+            </View>
+            <Text style={styles.passwordHint}>Long-press the password to copy, or use the button below.</Text>
+
+            <Button
+              title="Share Password"
+              onPress={shareTemporaryPassword}
+              fullWidth
+              style={{ marginTop: SPACING.md }}
+            />
+            <Button
+              title="Close"
+              onPress={closeTempPasswordModal}
+              variant="outline"
+              fullWidth
+              style={{ marginTop: SPACING.sm }}
             />
           </View>
         </View>
@@ -433,6 +533,13 @@ export default function StaffManagementScreen() {
               fullWidth
               style={{ marginTop: SPACING.md }}
             />
+            <Button
+              title="Cancel"
+              onPress={closeNotesModal}
+              variant="outline"
+              fullWidth
+              style={{ marginTop: SPACING.sm }}
+            />
           </View>
         </View>
       </Modal>
@@ -467,6 +574,7 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.sm },
   internalNotes: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, fontStyle: 'italic', marginBottom: SPACING.sm },
   cardActions: { flexDirection: 'row', gap: SPACING.sm },
+  cardActionsSecondary: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm },
   actionBtn: {
     flex: 1, backgroundColor: COLORS.primaryLight, borderRadius: BORDER_RADIUS.md,
     paddingVertical: SPACING.sm, alignItems: 'center',
@@ -505,4 +613,25 @@ const styles = StyleSheet.create({
   roleTextActive: { color: COLORS.white, fontFamily: FONTS.semiBold },
   helperText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginBottom: SPACING.sm, marginTop: -SPACING.xs },
   errorText: { fontSize: FONTS.sizes.xs, color: COLORS.error, marginBottom: SPACING.sm },
+  passwordDisplay: {
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+  },
+  passwordDisplayText: {
+    fontSize: FONTS.sizes.lg,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+    letterSpacing: 1,
+  },
+  passwordHint: {
+    fontSize: FONTS.sizes.xs,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.sm,
+  },
 });

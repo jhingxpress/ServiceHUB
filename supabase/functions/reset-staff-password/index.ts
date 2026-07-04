@@ -1,7 +1,7 @@
 // @ts-nocheck
-// Supabase Edge Function — create-staff
-// Allows an existing admin to create a staff account (moderator, support_agent, operations_staff).
-// Deploy: supabase functions deploy create-staff
+// Supabase Edge Function — reset-staff-password
+// Allows an admin to reset a staff account's password to a temporary one.
+// Deploy: supabase functions deploy reset-staff-password
 // Deno runtime
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -12,10 +12,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface CreateStaffPayload {
-  email: string;
-  full_name: string;
-  role: 'moderator' | 'support_agent' | 'operations_staff';
+interface ResetStaffPayload {
+  user_id: string;
 }
 
 const UPPER = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -32,7 +30,6 @@ function generateTemporaryPassword(): string {
   for (let i = 0; i < length; i++) {
     password += chars[array[i] % chars.length];
   }
-  // Ensure at least one of each required category
   password = `${UPPER[array[0] % UPPER.length]}${LOWER[array[1] % LOWER.length]}${DIGITS[array[2] % DIGITS.length]}${SPECIAL[array[3] % SPECIAL.length]}${password.slice(4)}`;
   return password;
 }
@@ -66,26 +63,16 @@ serve(async (req: Request) => {
   }
 
   try {
-    const payload: CreateStaffPayload = await req.json();
-    const { email, full_name, role } = payload;
+    const payload: ResetStaffPayload = await req.json();
+    const { user_id } = payload;
 
-    if (!email || !full_name || !role) {
+    if (!user_id) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: email, full_name, role' }),
+        JSON.stringify({ error: 'Missing required field: user_id' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    const temporaryPassword = generateTemporaryPassword();
-
-    if (!['moderator', 'support_agent', 'operations_staff'].includes(role)) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid staff role' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // Authenticated client to verify caller identity and role
     const authClient = createClient(supabaseUrl, anonKey ?? serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
       global: { headers: { Authorization: authHeader } },
@@ -101,7 +88,6 @@ serve(async (req: Request) => {
 
     const adminId = userData.user.id;
 
-    // Verify caller is admin
     const { data: adminProfile } = await authClient
       .from('users')
       .select('role')
@@ -110,83 +96,70 @@ serve(async (req: Request) => {
 
     if (adminProfile?.role !== 'admin') {
       return new Response(
-        JSON.stringify({ error: 'Only admin can create staff accounts' }),
+        JSON.stringify({ error: 'Only admin can reset staff passwords' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    // Service role client to create the new auth user
+    const { data: targetProfile } = await authClient
+      .from('users')
+      .select('role')
+      .eq('id', user_id)
+      .single();
+
+    const staffRoles = ['moderator', 'support_agent', 'operations_staff'];
+    if (!targetProfile || !staffRoles.includes(targetProfile.role)) {
+      return new Response(
+        JSON.stringify({ error: 'Target user is not a staff account' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
     const serviceClient = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const { data: createData, error: createError } = await serviceClient.auth.admin.createUser({
-      email,
+    const temporaryPassword = generateTemporaryPassword();
+
+    const { error: updateError } = await serviceClient.auth.admin.updateUserById(user_id, {
       password: temporaryPassword,
-      email_confirm: true,
-      user_metadata: { full_name: full_name, role },
-      app_metadata: { role },
     });
 
-    if (createError || !createData.user) {
+    if (updateError) {
+      console.error('[reset-staff-password] auth update error:', updateError);
       return new Response(
-        JSON.stringify({ error: createError?.message ?? 'Failed to create staff user' }),
+        JSON.stringify({ error: updateError.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    const newUserId = createData.user.id;
-
-    // Upsert public.users profile (the trigger may have created the row first)
-    const { error: profileError } = await serviceClient.from('users').upsert({
-      id: newUserId,
-      email,
-      full_name,
-      role,
-      status: 'active',
-      email_verified: true,
-      is_active: true,
-      must_change_password: true,
-    }, { onConflict: 'id' });
+    const { error: profileError } = await serviceClient
+      .from('users')
+      .update({ must_change_password: true, updated_at: new Date().toISOString() })
+      .eq('id', user_id);
 
     if (profileError) {
-      console.error('[create-staff] profile upsert error:', profileError);
+      console.error('[reset-staff-password] profile update error:', profileError);
       return new Response(
         JSON.stringify({ error: profileError.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    // Verify the role was stored correctly
-    const { data: profileCheck, error: profileCheckError } = await serviceClient
-      .from('users')
-      .select('role')
-      .eq('id', newUserId)
-      .single();
-
-    if (profileCheckError || profileCheck?.role !== role) {
-      console.error('[create-staff] role mismatch', { expected: role, got: profileCheck?.role, error: profileCheckError });
-      return new Response(
-        JSON.stringify({ error: 'Staff role was not stored correctly' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // Log admin action
     await serviceClient.from('staff_action_log').insert({
       staff_id: adminId,
-      action: 'create_staff',
+      action: 'reset_staff_password',
       target_table: 'users',
-      target_record_id: newUserId,
-      notes: `Created staff account with role ${role}`,
+      target_record_id: user_id,
+      notes: 'Admin reset staff password; temporary password issued',
     });
 
     return new Response(
-      JSON.stringify({ success: true, user_id: newUserId, temporary_password: temporaryPassword }),
+      JSON.stringify({ success: true, user_id, temporary_password: temporaryPassword }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (err) {
-    console.error('[create-staff] unexpected error:', err);
+    console.error('[reset-staff-password] unexpected error:', err);
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : 'Unexpected error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },

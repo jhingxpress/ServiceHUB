@@ -11,18 +11,23 @@ import AdminNavigator from './AdminNavigator';
 import ProfileCompletionScreen from '../screens/auth/ProfileCompletionScreen';
 import EmailVerifiedScreen from '../screens/auth/EmailVerifiedScreen';
 import ResetPasswordScreen from '../screens/auth/ResetPasswordScreen';
+import StaffChangePasswordScreen from '../screens/auth/StaffChangePasswordScreen';
 import { debugLogger } from '../services/debugLogger';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 function isProfileComplete(user: { accepted_terms_at: string | null; role: string } | null): boolean {
   if (!user) return false;
+  // Staff accounts skip marketplace onboarding entirely
+  if (user.role === 'moderator' || user.role === 'support_agent' || user.role === 'operations_staff') {
+    return true;
+  }
   // Profile is incomplete if user hasn't accepted terms (first-time Google sign-in)
   return user.accepted_terms_at != null;
 }
 
 export default function RootNavigator() {
-  const { user, isInitialized, isAuthenticating, emailJustVerified, passwordResetMode } = useAuthStore();
+  const { user, isInitialized, isAuthenticating, emailJustVerified, passwordResetMode, mustChangePassword } = useAuthStore();
 
   if (!isInitialized || isAuthenticating) {
     return (
@@ -46,6 +51,7 @@ export default function RootNavigator() {
     profileComplete,
     emailJustVerified,
     passwordResetMode,
+    mustChangePassword,
   };
 
   console.log('[ROOT DECISION]', decision);
@@ -56,6 +62,8 @@ export default function RootNavigator() {
     screenName = 'ResetPasswordScreen';
   } else if (!user) {
     screenName = 'AuthNavigator';
+  } else if (mustChangePassword) {
+    screenName = 'MustChangePasswordScreen';
   } else if (emailJustVerified) {
     screenName = 'EmailVerifiedScreen';
   } else if (!profileComplete) {
@@ -77,6 +85,8 @@ export default function RootNavigator() {
         <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
       ) : !user ? (
         <Stack.Screen name="Auth" component={AuthNavigator} />
+      ) : mustChangePassword ? (
+        <Stack.Screen name="MustChangePassword" component={StaffChangePasswordScreen} />
       ) : emailJustVerified ? (
         <Stack.Screen name="EmailVerified" component={EmailVerifiedScreen} />
       ) : !profileComplete ? (

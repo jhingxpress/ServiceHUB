@@ -42,6 +42,18 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
 
     setLoading(true);
     try {
+      const { data: isStaff, error: staffError } = await supabase.rpc('is_staff_email', {
+        p_email: email.trim().toLowerCase(),
+      });
+      if (staffError) throw staffError;
+
+      if (isStaff === true) {
+        setError(
+          'If this account belongs to TAGA Staff, please contact your Administrator for password assistance.'
+        );
+        return;
+      }
+
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
         { redirectTo: 'com.servicehub.app://reset-password' }

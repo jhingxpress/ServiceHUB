@@ -6,6 +6,7 @@ export type RootStackParamList = {
   ProfileCompletion: undefined;
   EmailVerified: undefined;
   ResetPassword: undefined;
+  MustChangePassword: undefined;
   Customer: NavigatorScreenParams<CustomerStackParamList>;
   Provider: NavigatorScreenParams<ProviderStackParamList>;
   Admin: NavigatorScreenParams<AdminStackParamList>;

@@ -118,6 +118,10 @@ interface AuthState {
   setEmailJustVerified: (val: boolean) => void;
   passwordResetMode: boolean;
   setPasswordResetMode: (val: boolean) => void;
+  mustChangePassword: boolean;
+  setMustChangePassword: (val: boolean) => void;
+  currentPassword: string | null;
+  changePassword: (newPassword: string, currentPassword?: string) => Promise<{ success: boolean; error?: string }>;
   initialize: () => Promise<void>;
   validateSession: () => Promise<void>;
   signIn: (email: string, password: string, captchaToken?: string) => Promise<void>;
@@ -248,14 +252,15 @@ async function bootstrapAuthenticatedUser(
       console.log('[MODERATION SIGNOUT]', { reason: statusCheck.error });
       unsubscribeFromModerationRealtime(get, set);
       await supabase.auth.signOut();
-      set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false });
+      set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false, mustChangePassword: false, currentPassword: null });
       useNotificationStore.getState().unsubscribeFromNotifications();
       return;
     }
     const { profile, providerProfile } = await syncUserProfile(sessionUser);
     debugLogger.log('bootstrapAuthenticatedUser_after_syncUserProfile', { hasProfile: !!profile, role: profile?.role, ms: Date.now() - _tb0 });
     resetModerationAlert();
-    set({ user: profile, providerProfile, sessionExpiresAt: sessionExpiresAt });
+    const needsPasswordChange = profile?.must_change_password === true;
+    set({ user: profile, providerProfile, sessionExpiresAt: sessionExpiresAt, mustChangePassword: needsPasswordChange });
     if (profile) {
       subscribeToModerationRealtime(profile.id, get, set);
       registerPushToken(profile.id)
@@ -284,6 +289,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setEmailJustVerified: (val: boolean) => set({ emailJustVerified: val }),
   passwordResetMode: false,
   setPasswordResetMode: (val: boolean) => set({ passwordResetMode: val }),
+  mustChangePassword: false,
+  setMustChangePassword: (val: boolean) => set({ mustChangePassword: val }),
+  currentPassword: null,
   authListenerUnsubscribe: null,
   realtimeModerationUnsubscribe: null,
 
@@ -396,7 +404,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               } else {
                 console.log('[GOOGLE-LISTENER] USER_UPDATED: email_confirmed_at is null — signing out');
                 await supabase.auth.signOut();
-                set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false });
+                set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false, mustChangePassword: false, currentPassword: null });
                 useNotificationStore.getState().unsubscribeFromNotifications();
                 debugLogger.log('USER_UPDATED_deferred_end', { reason: 'signOut_unverified', totalMs: Date.now() - _td0 });
                 return;
@@ -418,7 +426,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               console.log('[MODERATION SIGNOUT]', { reason: statusCheck.error });
               unsubscribeFromModerationRealtime(get, set);
               await supabase.auth.signOut();
-              set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false });
+              set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false, mustChangePassword: false, currentPassword: null });
               useNotificationStore.getState().unsubscribeFromNotifications();
               debugLogger.log('USER_UPDATED_deferred_end', { reason: 'signOut_status_check_failed', totalMs: Date.now() - _td0 });
               return;
@@ -427,7 +435,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             const { profile, providerProfile } = await syncUserProfile(updatedUser);
             debugLogger.log('USER_UPDATED_after_syncUserProfile', { hasProfile: !!profile, role: profile?.role, ms: Date.now() - _td0 });
             resetModerationAlert();
-            set({ user: profile, providerProfile, sessionExpiresAt: updatedExpiresAt });
+            const needsPasswordChange = profile?.must_change_password === true;
+            set({ user: profile, providerProfile, sessionExpiresAt: updatedExpiresAt, mustChangePassword: needsPasswordChange });
             if (profile) {
               subscribeToModerationRealtime(profile.id, get, set);
             }
@@ -447,7 +456,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         debugLogger.log('set_user_null', { file: 'authStore.ts', function: 'SIGNED_OUT_listener' });
         console.log('[GOOGLE-LISTENER] SIGNED_OUT — clearing user state');
         console.log('[TRACE][SIGNED_OUT] store user before clear', { currentUserId: get().user?.id ?? null });
-        set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false });
+        set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false, mustChangePassword: false, currentPassword: null });
         useNotificationStore.getState().unsubscribeFromNotifications();
         console.log('[TRACE][SIGNED_OUT] store user after clear', { currentUserId: get().user?.id ?? null });
       }
@@ -534,11 +543,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const expiresAt = session.expires_at ? session.expires_at * 1000 : null;
       debugLogger.log('initialize_after_syncUserProfile', { hasProfile: !!profile, role: profile?.role, ms: Date.now() - _ti0 });
       resetModerationAlert();
+      const needsPasswordChange = profile?.must_change_password === true;
       set({
         user: profile,
         providerProfile,
         isInitialized: true,
         sessionExpiresAt: expiresAt,
+        mustChangePassword: needsPasswordChange,
       });
       if (profile) {
         subscribeToModerationRealtime(profile.id, get, set);
@@ -621,7 +632,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           providerPresent: !!providerProfile,
         });
         resetModerationAlert();
-        set({ user: profile, providerProfile });
+        const needsPasswordChange = profile?.must_change_password === true;
+        set({ user: profile, providerProfile, mustChangePassword: needsPasswordChange });
         if (profile) {
           subscribeToModerationRealtime(profile.id, get, set);
           registerPushToken(profile.id).catch((e) => console.error('[AUTH] registerPushToken error:', e instanceof Error ? e.message : String(e)));
@@ -684,7 +696,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const { profile, providerProfile } = await syncUserProfile(data.user);
         console.log('[TRACE][signIn] sync result', { profilePresent: !!profile, providerPresent: !!providerProfile, expiresAt });
         resetModerationAlert();
-        set({ user: profile, providerProfile, sessionExpiresAt: expiresAt });
+        const needsPasswordChange = profile?.must_change_password === true;
+        set({
+          user: profile,
+          providerProfile,
+          sessionExpiresAt: expiresAt,
+          mustChangePassword: needsPasswordChange,
+          currentPassword: needsPasswordChange ? password : null,
+        });
         if (profile) {
           subscribeToModerationRealtime(profile.id, get, set);
         }
@@ -937,7 +956,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { data: { session } } = await supabase.auth.getSession();
       const expiresAt = session?.expires_at ? session.expires_at * 1000 : null;
       console.log('[VERIFY] Setting user state — role:', profile?.role, 'email_verified:', profile?.email_verified, 'accepted_terms_at:', profile?.accepted_terms_at);
-      set({ user: profile, providerProfile, sessionExpiresAt: expiresAt });
+      const needsPasswordChange = profile?.must_change_password === true;
+      set({ user: profile, providerProfile, sessionExpiresAt: expiresAt, mustChangePassword: needsPasswordChange });
       console.log('[VERIFY] State updated via set()');
       if (profile) {
         registerPushToken(profile.id).catch((e) => console.error('[AUTH] registerPushToken error:', e instanceof Error ? e.message : String(e)));
@@ -963,8 +983,41 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await supabase.auth.signOut();
     resetModerationAlert();
     unsubscribeFromModerationRealtime(get, set);
-    set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false });
+    set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false, mustChangePassword: false, currentPassword: null });
     console.log('[TRACE][signOut] state cleared');
+  },
+
+  changePassword: async (newPassword: string, currentPassword?: string) => {
+    const { user } = get();
+    if (!user) return { success: false, error: 'Not authenticated' };
+    if (currentPassword && newPassword === currentPassword) {
+      return { success: false, error: 'New password cannot be the same as your temporary password' };
+    }
+    try {
+      const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
+      if (authError) {
+        return { success: false, error: authError.message };
+      }
+      const { error: dbError } = await supabase
+        .from('users')
+        .update({ must_change_password: false, updated_at: new Date().toISOString() })
+        .eq('id', user.id);
+      if (dbError) {
+        console.error('[AUTH] changePassword: failed to clear must_change_password flag', dbError);
+      }
+      await supabase.from('staff_action_log').insert({
+        staff_id: user.id,
+        action: 'change_password',
+        target_table: 'users',
+        target_record_id: user.id,
+        notes: 'Staff changed their password on first login',
+      });
+      set({ user: { ...user, must_change_password: false }, mustChangePassword: false, currentPassword: null });
+      return { success: true };
+    } catch (err) {
+      console.error('[AUTH] changePassword error:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to change password' };
+    }
   },
 
   updateProfile: async (updates) => {
@@ -1003,6 +1056,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!user) {
       console.error('[PROFILE] completeProfileSetup: user is null');
       throw new Error('Not authenticated');
+    }
+
+    const staffRoles = ['moderator', 'support_agent', 'operations_staff'];
+    if (staffRoles.includes(user.role ?? '')) {
+      console.error('[PROFILE] completeProfileSetup: staff accounts cannot use marketplace onboarding', { userId: user.id, role: user.role });
+      throw new Error('Staff onboarding is handled separately. Please contact your administrator.');
     }
 
     console.log('[PROFILE] completeProfileSetup start', {
@@ -1080,7 +1139,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         providerStatus: providerProfile?.status ?? 'none',
       });
       const expiresAt = session.expires_at ? session.expires_at * 1000 : null;
-      set({ user: profile, providerProfile, sessionExpiresAt: expiresAt });
+      const needsPasswordChange = profile?.must_change_password === true;
+      set({ user: profile, providerProfile, sessionExpiresAt: expiresAt, mustChangePassword: needsPasswordChange });
       console.log('[PROFILE] Store updated — RootNavigator should switch to', profile?.role);
       if (profile) {
         registerPushToken(profile.id).catch((e) => console.error('[AUTH] registerPushToken error:', e instanceof Error ? e.message : String(e)));
