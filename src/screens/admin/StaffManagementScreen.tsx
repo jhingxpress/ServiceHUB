@@ -22,6 +22,7 @@ import { AdminStackParamList } from '../../navigation/types';
 import { StaffRole, User, EmploymentStatus } from '../../types';
 import { STAFF_ROLES, getStaffRoleLabel, isValidStaffRole } from '../../utils/roleUtils';
 import { logStaffAction } from '../../services/staffAuditService';
+import { validators } from '../../utils/validation';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
 import Badge from '../../components/ui/Badge';
@@ -38,6 +39,7 @@ export default function StaffManagementScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', full_name: '', role: 'support_agent' as StaffRole });
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [notesModal, setNotesModal] = useState<{ visible: boolean; member: StaffUser | null; notes: string }>({
     visible: false,
@@ -77,6 +79,11 @@ export default function StaffManagementScreen() {
     }
     if (!isValidStaffRole(form.role)) {
       Alert.alert('Invalid role', 'Please select a valid staff role.');
+      return;
+    }
+    const passwordValidation = validators.password(form.password);
+    if (passwordValidation) {
+      Alert.alert('Invalid password', passwordValidation);
       return;
     }
     setCreating(true);
@@ -133,26 +140,29 @@ export default function StaffManagementScreen() {
     Alert.alert(
       'Change Role',
       'Select a new role',
-      STAFF_ROLES.map((role) => ({
-        text: getStaffRoleLabel(role),
-        onPress: async () => {
-          if (role === member.role) return;
-          try {
-            const { error } = await supabase.from('users').update({ role }).eq('id', member.id);
-            if (error) throw error;
-            await logStaffAction({
-              action: 'change_staff_role',
-              targetTable: 'users',
-              targetRecordId: member.id,
-              notes: `Changed role from ${member.role} to ${role}`,
-            });
-            setStaff((prev) => prev.map((s) => (s.id === member.id ? { ...s, role } : s)));
-          } catch (err) {
-            console.error('[StaffManagement] change role error:', err);
-            Alert.alert('Error', 'Failed to change role.');
-          }
-        },
-      }))
+      [
+        ...STAFF_ROLES.map((role) => ({
+          text: getStaffRoleLabel(role),
+          onPress: async () => {
+            if (role === member.role) return;
+            try {
+              const { error } = await supabase.from('users').update({ role }).eq('id', member.id);
+              if (error) throw error;
+              await logStaffAction({
+                action: 'change_staff_role',
+                targetTable: 'users',
+                targetRecordId: member.id,
+                notes: `Changed role from ${member.role} to ${role}`,
+              });
+              setStaff((prev) => prev.map((s) => (s.id === member.id ? { ...s, role } : s)));
+            } catch (err) {
+              console.error('[StaffManagement] change role error:', err);
+              Alert.alert('Error', 'Failed to change role.');
+            }
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' },
+      ]
     );
   };
 
@@ -353,8 +363,15 @@ export default function StaffManagementScreen() {
               placeholderTextColor={COLORS.textLight}
               secureTextEntry
               value={form.password}
-              onChangeText={(text) => setForm((f) => ({ ...f, password: text }))}
+              onChangeText={(text) => {
+                setForm((f) => ({ ...f, password: text }));
+                setPasswordError(validators.password(text));
+              }}
             />
+            <Text style={styles.helperText}>
+              At least 8 characters, one uppercase, one lowercase, one number (e.g. Staff1234)
+            </Text>
+            {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
 
             <Text style={styles.label}>Role</Text>
             <View style={styles.roleRow}>
@@ -486,4 +503,6 @@ const styles = StyleSheet.create({
   roleTabActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   roleText: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, fontFamily: FONTS.medium },
   roleTextActive: { color: COLORS.white, fontFamily: FONTS.semiBold },
+  helperText: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginBottom: SPACING.sm, marginTop: -SPACING.xs },
+  errorText: { fontSize: FONTS.sizes.xs, color: COLORS.error, marginBottom: SPACING.sm },
 });
