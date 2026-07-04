@@ -152,7 +152,7 @@ async function fetchProviderProfile(userId: string): Promise<Provider | null> {
   return data as Provider | null;
 }
 
-async function syncUserProfile(sessionUser: { id: string; email?: string; user_metadata?: Record<string, unknown>; email_confirmed_at?: string | null }): Promise<{ profile: User | null; providerProfile: Provider | null }> {
+async function syncUserProfile(sessionUser: { id: string; email?: string; user_metadata?: Record<string, unknown>; app_metadata?: Record<string, unknown>; email_confirmed_at?: string | null }): Promise<{ profile: User | null; providerProfile: Provider | null }> {
   const t0 = Date.now();
   debugLogger.log('syncUserProfile_enter', { userId: sessionUser.id, t: t0 });
   console.log('[TRACE][syncUserProfile] start', {
@@ -171,22 +171,36 @@ async function syncUserProfile(sessionUser: { id: string; email?: string; user_m
   debugLogger.log('syncUserProfile_after_select', { hasProfile: !!profile, error: selectError?.code, ms: Date.now() - t0 });
 
   if (!profile) {
-    // Trigger may not have fired; create profile manually
-    debugLogger.log('syncUserProfile_before_upsert', { userId: sessionUser.id, t: Date.now() });
-    const { data: newProfile, error: upsertError } = await supabase
-      .from('users')
-      .upsert({
-        id: sessionUser.id,
-        email: sessionUser.email ?? '',
-        full_name: (sessionUser.user_metadata?.full_name as string | undefined) ?? (sessionUser.user_metadata?.name as string | undefined) ?? '',
-        avatar_url: (sessionUser.user_metadata?.avatar_url as string | undefined) ?? (sessionUser.user_metadata?.picture as string | undefined) ?? null,
-        role: (sessionUser.user_metadata?.role as string | undefined) ?? 'customer',
-        email_verified: isVerified,
-      })
-      .select()
-      .single();
-    debugLogger.log('syncUserProfile_after_upsert', { hasProfile: !!newProfile, error: upsertError?.code, ms: Date.now() - t0 });
-    profile = newProfile as User | null;
+    // Trigger may not have fired; recover profile from auth metadata rather than defaulting to customer
+    const metadataRole =
+      (sessionUser.user_metadata?.role as string | undefined) ??
+      (sessionUser.app_metadata?.role as string | undefined);
+    const validRoles = ['customer', 'provider', 'moderator', 'support_agent', 'operations_staff'];
+    const fallbackRole = metadataRole && validRoles.includes(metadataRole) ? metadataRole : null;
+
+    debugLogger.log('syncUserProfile_before_upsert', { userId: sessionUser.id, fallbackRole, t: Date.now() });
+    if (fallbackRole) {
+      const { data: newProfile, error: upsertError } = await supabase
+        .from('users')
+        .upsert({
+          id: sessionUser.id,
+          email: sessionUser.email ?? '',
+          full_name: (sessionUser.user_metadata?.full_name as string | undefined) ?? (sessionUser.user_metadata?.name as string | undefined) ?? '',
+          avatar_url: (sessionUser.user_metadata?.avatar_url as string | undefined) ?? (sessionUser.user_metadata?.picture as string | undefined) ?? null,
+          role: fallbackRole,
+          email_verified: isVerified,
+        })
+        .select()
+        .single();
+      debugLogger.log('syncUserProfile_after_upsert', { hasProfile: !!newProfile, error: upsertError?.code, ms: Date.now() - t0 });
+      profile = newProfile as User | null;
+    } else {
+      console.error('[AUTH] syncUserProfile: no public.users row and no valid role in metadata; not creating fallback profile', {
+        userId: sessionUser.id,
+        metadataRole,
+      });
+      return { profile: null, providerProfile: null };
+    }
   } else if (profile.email_verified !== isVerified) {
     // public.users.email_verified is stale (e.g. user verified email after initial signup)
     console.log('[AUTH] syncUserProfile: syncing email_verified', {
@@ -435,6 +449,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             const { profile, providerProfile } = await syncUserProfile(updatedUser);
             debugLogger.log('USER_UPDATED_after_syncUserProfile', { hasProfile: !!profile, role: profile?.role, ms: Date.now() - _td0 });
             resetModerationAlert();
+            const currentUser = get().user;
+            if (profile == null && currentUser != null) {
+              // Don't overwrite a known user (especially staff) with a null fallback profile.
+              // This can happen during USER_UPDATED after a password change if the public.users
+              // row is temporarily unreadable.
+              console.error('[GOOGLE-LISTENER] USER_UPDATED: syncUserProfile returned null; preserving current user', {
+                userId: currentUser.id,
+                role: currentUser.role,
+              });
+              set({ sessionExpiresAt: updatedExpiresAt });
+              debugLogger.log('USER_UPDATED_deferred_end', { reason: 'preserved_current_user', totalMs: Date.now() - _td0 });
+              return;
+            } else if (profile == null) {
+              // No profile and no existing user: this is a broken authentication state.
+              console.error('[GOOGLE-LISTENER] USER_UPDATED: no profile and no current user; signing out');
+              await supabase.auth.signOut();
+              set({ user: null, providerProfile: null, sessionExpiresAt: null, emailJustVerified: false, passwordResetMode: false, mustChangePassword: false, currentPassword: null });
+              useNotificationStore.getState().unsubscribeFromNotifications();
+              debugLogger.log('USER_UPDATED_deferred_end', { reason: 'signOut_null_profile', totalMs: Date.now() - _td0 });
+              return;
+            }
             const needsPasswordChange = profile?.must_change_password === true;
             set({ user: profile, providerProfile, sessionExpiresAt: updatedExpiresAt, mustChangePassword: needsPasswordChange });
             if (profile) {
