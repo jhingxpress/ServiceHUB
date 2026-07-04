@@ -101,7 +101,7 @@ export default function StaffManagementScreen() {
       });
       setForm({ email: '', password: '', full_name: '', role: 'support_agent' });
       setModalVisible(false);
-      fetchStaff();
+      await fetchStaff();
       Alert.alert('Success', 'Staff account created.');
     } catch (err) {
       console.error('[StaffManagement] create error:', err);

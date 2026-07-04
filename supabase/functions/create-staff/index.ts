@@ -117,8 +117,8 @@ serve(async (req: Request) => {
 
     const newUserId = createData.user.id;
 
-    // Insert public.users profile
-    const { error: profileError } = await serviceClient.from('users').insert({
+    // Upsert public.users profile (the trigger may have created the row first)
+    const { error: profileError } = await serviceClient.from('users').upsert({
       id: newUserId,
       email,
       full_name,
@@ -126,12 +126,27 @@ serve(async (req: Request) => {
       status: 'active',
       email_verified: true,
       is_active: true,
-    });
+    }, { onConflict: 'id' });
 
     if (profileError) {
-      console.error('[create-staff] profile insert error:', profileError);
+      console.error('[create-staff] profile upsert error:', profileError);
       return new Response(
         JSON.stringify({ error: profileError.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // Verify the role was stored correctly
+    const { data: profileCheck, error: profileCheckError } = await serviceClient
+      .from('users')
+      .select('role')
+      .eq('id', newUserId)
+      .single();
+
+    if (profileCheckError || profileCheck?.role !== role) {
+      console.error('[create-staff] role mismatch', { expected: role, got: profileCheck?.role, error: profileCheckError });
+      return new Response(
+        JSON.stringify({ error: 'Staff role was not stored correctly' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
