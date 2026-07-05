@@ -33,6 +33,7 @@ import StaffManagementScreen from '../screens/admin/StaffManagementScreen';
 import StaffActionLogsScreen from '../screens/admin/StaffActionLogsScreen';
 import StaffIncidentReportsScreen from '../screens/admin/StaffIncidentReportsScreen';
 import EscalationsScreen from '../screens/admin/EscalationsScreen';
+import AdminPlatformFeesScreen from '../screens/admin/AdminPlatformFeesScreen';
 
 const Stack = createNativeStackNavigator<AdminStackParamList>();
 const Tab = createBottomTabNavigator<AdminTabParamList>();
@@ -236,6 +237,7 @@ export default function AdminNavigator() {
       <Stack.Screen name="StaffActionLogs" component={StaffActionLogsScreen} />
       <Stack.Screen name="StaffIncidentReports" component={StaffIncidentReportsScreen} />
       <Stack.Screen name="Escalations" component={EscalationsScreen} />
+      <Stack.Screen name="AdminPlatformFees" component={AdminPlatformFeesScreen} />
     </Stack.Navigator>
   );
 }

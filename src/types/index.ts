@@ -36,6 +36,8 @@ export type BookingStatus =
   | 'rejected'
   | 'disputed';
 export type PaymentStatus = 'pending' | 'completed' | 'refunded' | 'failed';
+export type PlatformFeeStatus = 'unpaid' | 'paid' | 'waived' | 'disputed';
+export type BalanceStatus = 'clear' | 'warning' | 'overdue' | 'review';
 export type DisputeStatus = 'open' | 'investigating' | 'resolved' | 'closed';
 export type MediaType = 'photo' | 'video';
 export type ReportType =
@@ -526,4 +528,34 @@ export interface ChatRoom {
   last_message: Message | null;
   unread_count: number;
   booking: Booking;
+}
+
+export interface PlatformFee {
+  id: string;
+  provider_id: string;
+  booking_id: string;
+  booking_amount: number;
+  platform_fee: number;
+  status: PlatformFeeStatus;
+  due_date: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderFeeBalance {
+  total_unpaid: number;
+  oldest_due_date: string | null;
+  days_since_oldest: number;
+  balance_status: BalanceStatus;
+}
+
+export interface AdminProviderFeeRow {
+  provider_id: string;
+  business_name: string | null;
+  full_name: string | null;
+  total_unpaid: number;
+  oldest_due_date: string | null;
+  fee_count: number;
+  balance_status: BalanceStatus;
 }

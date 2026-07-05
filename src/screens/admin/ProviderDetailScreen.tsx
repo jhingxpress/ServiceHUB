@@ -7,9 +7,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { AdminStackParamList } from '../../navigation/types';
 import { supabase } from '../../lib/supabase';
+import { PlatformFee, PlatformFeeStatus } from '../../types';
 import { useAuthStore } from '../../stores/authStore';
 import { adminSuspendProvider } from '../../services/moderationService';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
@@ -220,12 +221,13 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
   const [processingDoc, setProcessingDoc] = useState<string | null>(null);
   const [showFeaturedCancelForm, setShowFeaturedCancelForm] = useState(false);
   const [featuredCancelReason, setFeaturedCancelReason] = useState('');
+  const [platformFees, setPlatformFees] = useState<PlatformFee[]>([]);
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [provRes, docsRes, logsRes, featReqRes, featPayRes] = await Promise.all([
+      const [provRes, docsRes, logsRes, featReqRes, featPayRes, feesRes] = await Promise.all([
         supabase.from('providers').select(`
           id, business_name, business_address, city, province, business_email, business_phone,
           service_description, service_area, years_of_experience, status, is_verified, is_featured, featured_until,
@@ -249,6 +251,12 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
+        supabase
+          .from('provider_platform_fees')
+          .select('*')
+          .eq('provider_id', providerId)
+          .order('created_at', { ascending: false })
+          .limit(20),
       ]);
       if (provRes.error) throw provRes.error;
 
@@ -262,6 +270,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
       setLogs((logsRes.data ?? []) as unknown as LogEntry[]);
       setHasPendingRequest(!!featReqRes.data);
       setFeaturedPayment((featPayRes as { data: FeaturedPaymentRecord | null }).data ?? null);
+      setPlatformFees((feesRes.data ?? []) as PlatformFee[]);
 
       // Generate signed URLs for private bucket images
       const urlMap: Record<string, string> = {};
@@ -991,6 +1000,68 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           </View>
         )}
 
+        {/* Platform Fees Section */}
+        {(() => {
+          const FEE_STATUS: Record<PlatformFeeStatus, { label: string; color: string; bg: string }> = {
+            unpaid:   { label: 'Unpaid',   color: '#DC2626', bg: '#FEE2E2' },
+            paid:     { label: 'Paid',     color: '#059669', bg: '#D1FAE5' },
+            waived:   { label: 'Waived',   color: '#7C3AED', bg: '#EDE9FE' },
+            disputed: { label: 'Disputed', color: '#D97706', bg: '#FEF3C7' },
+          };
+          const unpaidTotal = platformFees
+            .filter((f) => f.status === 'unpaid')
+            .reduce((s, f) => s + Number(f.platform_fee), 0);
+          return (
+            <View style={styles.section}>
+              <View style={[styles.feeSectionHeader]}>
+                <Text style={styles.sectionTitle}>Platform Fees</Text>
+                {unpaidTotal > 0 && (
+                  <View style={styles.feeUnpaidBadge}>
+                    <Text style={styles.feeUnpaidBadgeText}>
+                      ₱{unpaidTotal.toLocaleString('en-PH', { minimumFractionDigits: 2 })} unpaid
+                    </Text>
+                  </View>
+                )}
+              </View>
+              {platformFees.length === 0 ? (
+                <Text style={styles.emptyText}>No platform fees recorded yet.</Text>
+              ) : (
+                platformFees.map((fee) => {
+                  const sc = FEE_STATUS[fee.status] ?? FEE_STATUS.unpaid;
+                  const isPastDue = fee.status === 'unpaid' && new Date(fee.due_date) < new Date();
+                  return (
+                    <View key={fee.id} style={styles.feeCard}>
+                      <View style={styles.feeCardRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.feeBookingRef} numberOfLines={1}>
+                            #{fee.booking_id.slice(0, 8).toUpperCase()}
+                          </Text>
+                          <Text style={styles.feeMeta}>
+                            Booking: ₱{Number(fee.booking_amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                          </Text>
+                          <Text style={[styles.feeMeta, isPastDue && { color: COLORS.error }]}>
+                            Due: {format(parseISO(fee.due_date), 'MMM d, yyyy')}
+                            {isPastDue ? ' · PAST DUE' : ''}
+                          </Text>
+                          {fee.notes ? <Text style={styles.feeNotes}>{fee.notes}</Text> : null}
+                        </View>
+                        <View style={styles.feeCardRight}>
+                          <Text style={styles.feeAmount}>
+                            ₱{Number(fee.platform_fee).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                          </Text>
+                          <View style={[styles.feeBadge, { backgroundColor: sc.bg }]}>
+                            <Text style={[styles.feeBadgeText, { color: sc.color }]}>{sc.label}</Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          );
+        })()}
+
         {/* Moderation Timeline */}
         {logs.length > 0 && (
           <View style={styles.section}>
@@ -1312,4 +1383,22 @@ const styles = StyleSheet.create({
   verifyChecklstSub: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: COLORS.text, marginBottom: 3 },
   verifyChecklstPass: { fontSize: FONTS.sizes.xs, color: COLORS.success },
   verifyChecklstFail: { fontSize: FONTS.sizes.xs, color: COLORS.error },
+  feeSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.sm },
+  feeUnpaidBadge: {
+    backgroundColor: '#FEE2E2', borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: SPACING.sm, paddingVertical: 3,
+  },
+  feeUnpaidBadgeText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: '#DC2626' },
+  feeCard: {
+    backgroundColor: COLORS.background, borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.sm, borderWidth: 1, borderColor: COLORS.border, marginBottom: SPACING.xs,
+  },
+  feeCardRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm },
+  feeBookingRef: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
+  feeMeta:      { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginTop: 2 },
+  feeNotes:     { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontStyle: 'italic', marginTop: 2 },
+  feeCardRight: { alignItems: 'flex-end', gap: 4 },
+  feeAmount:    { fontSize: FONTS.sizes.sm, fontFamily: FONTS.bold, color: COLORS.text },
+  feeBadge:     { borderRadius: BORDER_RADIUS.full, paddingHorizontal: 8, paddingVertical: 2 },
+  feeBadgeText: { fontSize: 10, fontFamily: FONTS.semiBold },
 });

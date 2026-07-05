@@ -27,6 +27,9 @@ interface PlatformStats {
   totalBookings: number;
   completedBookings: number;
   totalRevenue: number;
+  outstandingFees: number;
+  feesThisMonth: number;
+  providersUnderReview: number;
 }
 
 interface FeaturedRequestItem {
@@ -44,6 +47,9 @@ export default function AdminDashboardScreen() {
     totalBookings: 0,
     completedBookings: 0,
     totalRevenue: 0,
+    outstandingFees: 0,
+    feesThisMonth: 0,
+    providersUnderReview: 0,
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,7 +67,7 @@ export default function AdminDashboardScreen() {
   };
 
   const loadStats = async () => {
-    const [usersRes, provRes, pendingRes, bookingsRes, completedRes, revenueRes, featPayRes] =
+    const [usersRes, provRes, pendingRes, bookingsRes, completedRes, revenueRes, featPayRes, feeRes] =
       await Promise.all([
         supabase.from('users').select('id', { count: 'exact', head: true }),
         supabase.from('providers').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
@@ -76,6 +82,10 @@ export default function AdminDashboardScreen() {
           .select('provider_id, created_at, providers!provider_id(id, business_name)')
           .eq('status', 'pending')
           .order('created_at', { ascending: false }),
+        supabase
+          .from('provider_platform_fees')
+          .select('platform_fee, due_date, created_at')
+          .eq('status', 'unpaid'),
       ]);
 
     const revenue = (revenueRes.data ?? []).reduce(
@@ -93,6 +103,24 @@ export default function AdminDashboardScreen() {
     }));
     setFeaturedRequests(deduped);
 
+    const feeRows = feeRes.data ?? [];
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    let outstandingFees = 0;
+    let feesThisMonth = 0;
+    for (const f of feeRows) {
+      outstandingFees += Number(f.platform_fee);
+      if (new Date(f.created_at) >= monthStart) feesThisMonth += Number(f.platform_fee);
+    }
+    // Count providers with oldest unpaid fee > 60 days ("review" status)
+    const underReviewFees = await supabase
+      .from('provider_platform_fees')
+      .select('provider_id, due_date')
+      .eq('status', 'unpaid')
+      .lt('due_date', new Date(Date.now() - 60 * 86400000).toISOString());
+    const underReviewProviders = new Set((underReviewFees.data ?? []).map((r: any) => r.provider_id)).size;
+
     setStats({
       totalUsers: usersRes.count ?? 0,
       totalProviders: provRes.count ?? 0,
@@ -100,6 +128,9 @@ export default function AdminDashboardScreen() {
       totalBookings: bookingsRes.count ?? 0,
       completedBookings: completedRes.count ?? 0,
       totalRevenue: revenue,
+      outstandingFees,
+      feesThisMonth,
+      providersUnderReview: underReviewProviders,
     });
     setLoading(false);
     setRefreshing(false);
@@ -116,6 +147,12 @@ export default function AdminDashboardScreen() {
     { label: 'Revenue', value: `$${Number(stats.totalRevenue).toFixed(0)}`, icon: 'cash-outline', color: '#F59E0B' },
   ];
 
+  const FEE_CARDS = [
+    { label: 'Outstanding Fees', value: `₱${Math.round(stats.outstandingFees).toLocaleString()}`, icon: 'receipt-outline', color: '#DC2626', action: () => navigation.navigate('AdminPlatformFees') },
+    { label: 'Fees This Month', value: `₱${Math.round(stats.feesThisMonth).toLocaleString()}`, icon: 'calendar-outline', color: '#3B82F6' },
+    { label: 'Under Review', value: stats.providersUnderReview, icon: 'eye-outline', color: '#7C3AED', action: () => navigation.navigate('AdminPlatformFees') },
+  ];
+
   const QUICK_LINKS = [
     { label: 'Admin Alerts', icon: 'notifications-outline', screen: 'AdminNotifications' as const, badge: stats.pendingProviders, isTab: false as const },
     { label: 'Pending Providers', icon: 'shield-checkmark-outline', screen: 'PendingProviders' as const, isTab: false as const },
@@ -127,6 +164,7 @@ export default function AdminDashboardScreen() {
     { label: 'Staff Management', icon: 'people-circle-outline', screen: 'StaffManagement' as const, isTab: false as const },
     { label: 'Staff Action Logs', icon: 'document-text-outline', screen: 'StaffActionLogs' as const, isTab: false as const },
     { label: 'Escalations', icon: 'trending-up-outline', screen: 'Escalations' as const, isTab: false as const },
+    { label: 'Platform Fees', icon: 'receipt-outline', screen: 'AdminPlatformFees' as const, isTab: false as const },
     { label: 'Manage Users', icon: 'people-outline', screen: 'Users' as const, isTab: true as const },
     { label: 'Disputes', icon: 'alert-circle-outline', screen: 'Disputes' as const, isTab: true as const },
     { label: 'Analytics', icon: 'bar-chart-outline', screen: 'Analytics' as const, isTab: true as const },
@@ -172,7 +210,7 @@ export default function AdminDashboardScreen() {
 
         {/* Stats grid */}
         <View style={styles.statsGrid}>
-          {STAT_CARDS.map((s) => (
+          {[...STAT_CARDS, ...FEE_CARDS].map((s) => (
             <TouchableOpacity
               key={s.label}
               style={styles.statCard}

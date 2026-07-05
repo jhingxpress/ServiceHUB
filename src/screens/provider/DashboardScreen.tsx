@@ -21,7 +21,7 @@ import { REVIEWS_LAST_SEEN_KEY } from './ProviderReviewsScreen';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { useNotificationStore, formatBadgeCount } from '../../stores/notificationStore';
-import { Booking, Provider, ProviderChecklist, ProviderPerformance, ProviderScore, BusinessStatus } from '../../types';
+import { Booking, Provider, ProviderChecklist, ProviderPerformance, ProviderScore, BusinessStatus, ProviderFeeBalance, BalanceStatus } from '../../types';
 import { computeReputationBadges } from '../../utils/reputationHelpers';
 import { generateDashboardInsights } from '../../utils/providerAnalyticsHelpers';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
@@ -75,12 +75,13 @@ export default function ProviderDashboard() {
   const [featuredReqLoading, setFeaturedReqLoading] = useState(false);
   const [featuredPayment, setFeaturedPayment] = useState<FeaturedPaymentData | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [feeBalance, setFeeBalance] = useState<ProviderFeeBalance | null>(null);
   const ONBOARDING_KEY = 'provider_onboarding_seen';
 
   const loadData = useCallback(async () => {
     if (!user) return;
 
-    const [bookingsRes, providerRes, checklistRes, perfRes, scoreRes, featReqRes, paymentRes] = await Promise.all([
+    const [bookingsRes, providerRes, checklistRes, perfRes, scoreRes, featReqRes, paymentRes, feeBalRes] = await Promise.all([
       supabase
         .from('bookings')
         .select('*, service:services(name)')
@@ -99,6 +100,7 @@ export default function ProviderDashboard() {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase.rpc('get_provider_fee_balance', { p_provider_id: user.id }),
     ]);
 
     const bookings: Booking[] = bookingsRes.data ?? [];
@@ -117,6 +119,12 @@ export default function ProviderDashboard() {
     setScore(scoreRes.data ?? null);
     setHasPendingRequest(!!featReqRes.data);
     setFeaturedPayment((paymentRes as { data: FeaturedPaymentData | null }).data ?? null);
+    const feeBalData = (feeBalRes as any).data;
+    if (feeBalData && feeBalData.length > 0) {
+      setFeeBalance(feeBalData[0] as ProviderFeeBalance);
+    } else {
+      setFeeBalance(null);
+    }
 
     // Load new-review badge count
     const lastSeen = await AsyncStorage.getItem(REVIEWS_LAST_SEEN_KEY);
@@ -531,6 +539,48 @@ export default function ProviderDashboard() {
           </View>
         )}
 
+        {/* Platform Fee Balance Card — hidden when balance is zero */}
+        {feeBalance && feeBalance.total_unpaid > 0 && (() => {
+          const FEE_STATUS: Record<BalanceStatus, { color: string; bg: string; icon: string; label: string }> = {
+            clear:   { color: '#059669', bg: '#D1FAE5', icon: 'checkmark-circle-outline', label: 'Clear'   },
+            warning: { color: '#D97706', bg: '#FEF3C7', icon: 'warning-outline',           label: 'Warning' },
+            overdue: { color: '#DC2626', bg: '#FEE2E2', icon: 'alert-circle-outline',       label: 'Overdue' },
+            review:  { color: '#7C3AED', bg: '#EDE9FE', icon: 'eye-outline',                label: 'Review'  },
+          };
+          const sc = FEE_STATUS[feeBalance.balance_status];
+          const daysLeft = Math.max(0, 30 - feeBalance.days_since_oldest);
+          return (
+            <TouchableOpacity
+              style={[styles.feeBalCard, { borderColor: sc.color + '40' }]}
+              onPress={() => navigation.navigate('PlatformFeeBalance')}
+              activeOpacity={0.8}
+            >
+              <View style={styles.feeBalHeader}>
+                <View style={[styles.feeBalIcon, { backgroundColor: sc.bg }]}>
+                  <Ionicons name={sc.icon as any} size={20} color={sc.color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.feeBalTitle}>Platform Balance</Text>
+                  <Text style={[styles.feeBalAmount, { color: sc.color }]}>
+                    ₱{feeBalance.total_unpaid.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                  </Text>
+                </View>
+                <View style={styles.feeBalRight}>
+                  <View style={[styles.feeBalBadge, { backgroundColor: sc.bg }]}>
+                    <Text style={[styles.feeBalBadgeText, { color: sc.color }]}>{sc.label}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={COLORS.textLight} />
+                </View>
+              </View>
+              {daysLeft > 0 ? (
+                <Text style={styles.feeBalDue}>Due in {daysLeft} day{daysLeft !== 1 ? 's' : ''}</Text>
+              ) : (
+                <Text style={[styles.feeBalDue, { color: sc.color }]}>Payment past due — please contact support</Text>
+              )}
+            </TouchableOpacity>
+          );
+        })()}
+
         {/* Provider Health — compact summary */}
         {score && (
           <TouchableOpacity
@@ -939,4 +989,17 @@ const styles = StyleSheet.create({
   },
   insightRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm },
   insightText: { flex: 1, fontFamily: FONTS.regular, fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, lineHeight: 20 },
+  feeBalCard: {
+    marginHorizontal: SPACING.md, marginBottom: SPACING.md,
+    backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md, borderWidth: 1.5, ...SHADOWS.small,
+  },
+  feeBalHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.xs },
+  feeBalIcon: { width: 44, height: 44, borderRadius: BORDER_RADIUS.lg, alignItems: 'center', justifyContent: 'center' },
+  feeBalTitle: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, marginBottom: 2 },
+  feeBalAmount: { fontSize: FONTS.sizes.lg, fontFamily: FONTS.bold },
+  feeBalRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
+  feeBalBadge: { borderRadius: BORDER_RADIUS.full, paddingHorizontal: 8, paddingVertical: 3 },
+  feeBalBadgeText: { fontSize: 10, fontFamily: FONTS.semiBold },
+  feeBalDue: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
 });

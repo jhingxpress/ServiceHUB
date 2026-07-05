@@ -108,6 +108,7 @@ export type ProviderStackParamList = {
   };
   NotificationDetail: { notification: Notification };
   BookingIncidentReport: { bookingId: string };
+  PlatformFeeBalance: undefined;
 };
 
 export type ProviderTabParamList = {
@@ -145,6 +146,7 @@ export type AdminStackParamList = {
   StaffActionLogs: undefined;
   StaffIncidentReports: undefined;
   Escalations: undefined;
+  AdminPlatformFees: undefined;
 };
 
 export type AdminTabParamList = {
