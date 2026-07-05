@@ -22,6 +22,7 @@ import Avatar from '../../components/ui/Avatar';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import { CustomerStackParamList } from '../../navigation/types';
+import { calcBookingFee } from '../../utils/bookingFee';
 
 type NavProp = NativeStackNavigationProp<CustomerStackParamList>;
 type RouteType = RouteProp<CustomerStackParamList, 'BookingDetail'>;
@@ -136,6 +137,10 @@ export default function BookingDetailScreen() {
   const currentStep = STEPS.indexOf(booking.status);
   const isCompleted = booking.status === 'completed';
   const isCancellable = ['pending', 'accepted', 'on_the_way', 'arrived'].includes(booking.status);
+
+  const servicePrice = Number(booking.total_amount ?? 0);
+  const bookingFee   = servicePrice > 0 ? calcBookingFee(servicePrice) : 0;
+  const totalDue     = servicePrice + bookingFee;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -253,13 +258,20 @@ export default function BookingDetailScreen() {
               <Text style={styles.infoValue}>{booking.service.name}</Text>
             </View>
           )}
-          {booking.total_amount && (
-            <View style={[styles.infoRow, { borderTopWidth: 1, borderTopColor: COLORS.border, marginTop: SPACING.xs, paddingTop: SPACING.sm }]}>
-              <Ionicons name="cash-outline" size={16} color={COLORS.textSecondary} />
-              <Text style={styles.infoLabel}>Total</Text>
-              <Text style={[styles.infoValue, { color: COLORS.primary, fontFamily: FONTS.bold }]}>
-                ₱{booking.total_amount}
-              </Text>
+          {servicePrice > 0 && (
+            <View style={{ borderTopWidth: 1, borderTopColor: COLORS.border, marginTop: SPACING.xs, paddingTop: SPACING.sm }}>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>Service Price</Text>
+                <Text style={styles.priceValue}>₱{servicePrice.toLocaleString('en-PH')}</Text>
+              </View>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>TAGA Booking Fee</Text>
+                <Text style={styles.priceValue}>₱{bookingFee.toLocaleString('en-PH')}</Text>
+              </View>
+              <View style={[styles.priceRow, { marginTop: SPACING.xs }]}>
+                <Text style={styles.priceTotalLabel}>Total Cash Due</Text>
+                <Text style={styles.priceTotalValue}>₱{totalDue.toLocaleString('en-PH')}</Text>
+              </View>
             </View>
           )}
         </View>
@@ -378,6 +390,11 @@ const styles = StyleSheet.create({
   },
   infoLabel: { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary, width: 70 },
   infoValue: { flex: 1, fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
+  priceRow:        { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
+  priceLabel:      { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
+  priceValue:      { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
+  priceTotalLabel: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
+  priceTotalValue: { fontSize: FONTS.sizes.base, fontFamily: FONTS.bold, color: COLORS.primary },
   notesText: { fontSize: FONTS.sizes.base, color: COLORS.textSecondary, lineHeight: 22 },
   actions: { paddingHorizontal: SPACING.md, gap: SPACING.sm },
   actionBtn: { marginTop: 0 },

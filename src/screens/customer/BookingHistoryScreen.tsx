@@ -21,6 +21,7 @@ import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
 import { CustomerStackParamList } from '../../navigation/types';
 import { useErrorHandler } from '../../utils/errorHandler';
+import { calcBookingFee } from '../../utils/bookingFee';
 
 type NavProp = NativeStackNavigationProp<CustomerStackParamList>;
 
@@ -99,10 +100,12 @@ export default function BookingHistoryScreen() {
               <Text style={styles.dateText}>
                 {format(new Date(item.scheduled_date), 'MMM d, yyyy')}
               </Text>
-              {item.total_amount && (
+              {item.total_amount != null && item.total_amount > 0 && (
                 <>
                   <Text style={styles.dot}>•</Text>
-                  <Text style={styles.amountText}>₱{item.total_amount}</Text>
+                  <Text style={styles.amountText}>
+                    ₱{(item.total_amount + calcBookingFee(item.total_amount)).toLocaleString('en-PH')}
+                  </Text>
                 </>
               )}
             </View>

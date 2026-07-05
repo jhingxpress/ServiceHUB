@@ -16,6 +16,7 @@ import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import { ProviderStackParamList } from '../../navigation/types';
 import { createNotification } from '../../services/notificationService';
+import { calcBookingFee } from '../../utils/bookingFee';
 
 type NavProp = NativeStackNavigationProp<ProviderStackParamList>;
 type RouteType = RouteProp<ProviderStackParamList, 'BookingDetail'>;
@@ -75,15 +76,29 @@ export default function ProviderBookingDetailScreen() {
             }
             
             // Fetch booking to notify customer
-            const { data: booking } = await supabase.from('bookings').select('customer_id').eq('id', bookingId).maybeSingle();
+            const { data: booking } = await supabase
+              .from('bookings')
+              .select('customer_id, total_amount')
+              .eq('id', bookingId)
+              .maybeSingle();
             if (booking?.customer_id) {
+              const servicePrice = Number(booking.total_amount ?? 0);
+              const bookingFee = servicePrice > 0 ? calcBookingFee(servicePrice) : 0;
+              const totalDue = servicePrice + bookingFee;
+              const totalDueText = totalDue > 0
+                ? `Total Cash Due: ₱${totalDue.toLocaleString('en-PH')}.`
+                : '';
+
               const notificationConfig: Record<string, { title: string; body: string }> = {
                 accepted: { title: 'Booking Accepted', body: 'Your booking has been accepted by the provider.' },
                 rejected: { title: 'Booking Rejected', body: 'Your booking has been rejected by the provider.' },
                 on_the_way: { title: 'Provider On The Way', body: 'Your provider is on the way to your location.' },
                 arrived: { title: 'Provider Arrived', body: 'Your provider has arrived at your location.' },
                 in_progress: { title: 'Service In Progress', body: 'Your service is now in progress.' },
-                completed: { title: 'Booking Completed', body: 'Your booking has been completed.' },
+                completed: {
+                  title: 'Booking Completed',
+                  body: `Your booking has been completed.${totalDueText ? ' ' + totalDueText : ''}`,
+                },
               };
               
               const config = notificationConfig[status];
@@ -134,6 +149,9 @@ export default function ProviderBookingDetailScreen() {
   const customerName = booking.customer_name;
   const customerPhone = booking.customer_phone;
   const customerAvatar = booking.customer_avatar_url;
+
+  const svcPrice   = Number(booking.total_amount ?? 0);
+  const bookingFee = svcPrice > 0 ? calcBookingFee(svcPrice) : 0;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -286,13 +304,17 @@ export default function ProviderBookingDetailScreen() {
               <Text style={styles.infoValue}>{booking.service.name}</Text>
             </View>
           )}
-          {booking.total_amount !== null && (
-            <View style={[styles.infoRow, { borderTopWidth: 1, borderTopColor: COLORS.border, marginTop: SPACING.xs, paddingTop: SPACING.sm }]}>
-              <Ionicons name="cash-outline" size={16} color={COLORS.textSecondary} />
-              <Text style={styles.infoLabel}>Total</Text>
-              <Text style={[styles.infoValue, { color: COLORS.primary, fontFamily: FONTS.bold }]}>
-                ₱{(booking.total_amount ?? 0).toLocaleString('en-PH')}
-              </Text>
+          {svcPrice > 0 && (
+            <View style={{ borderTopWidth: 1, borderTopColor: COLORS.border, marginTop: SPACING.xs, paddingTop: SPACING.sm }}>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>Service Price</Text>
+                <Text style={[styles.priceValue, { color: COLORS.primary }]}>₱{svcPrice.toLocaleString('en-PH')}</Text>
+              </View>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>Platform Fee</Text>
+                <Text style={styles.priceValue}>₱{bookingFee.toLocaleString('en-PH')}</Text>
+              </View>
+              <Text style={styles.priceReminder}>Remit Platform Fee to TAGA when booking is completed</Text>
             </View>
           )}
         </View>
@@ -466,6 +488,10 @@ const styles = StyleSheet.create({
   },
   mapsBtnText: { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.primary },
   notesText: { fontSize: FONTS.sizes.base, color: COLORS.textSecondary, lineHeight: 22 },
+  priceRow:     { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
+  priceLabel:   { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
+  priceValue:   { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
+  priceReminder: { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontStyle: 'italic', marginTop: SPACING.xs },
   photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   photoThumb: { width: 80, height: 80, borderRadius: BORDER_RADIUS.md, backgroundColor: COLORS.background },
   actions: { paddingHorizontal: SPACING.md, gap: SPACING.sm },

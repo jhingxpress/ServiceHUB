@@ -31,6 +31,7 @@ import { CustomerStackParamList } from '../../navigation/types';
 import { validators, validateForm } from '../../utils/validation';
 import { useErrorHandler } from '../../utils/errorHandler';
 import { createNotification } from '../../services/notificationService';
+import { calcBookingFee } from '../../utils/bookingFee';
 
 type NavProp = NativeStackNavigationProp<CustomerStackParamList>;
 type RouteType = RouteProp<CustomerStackParamList, 'BookService'>;
@@ -57,6 +58,8 @@ export default function BookingScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RouteType>();
   const { providerId, serviceId, serviceName, price } = route.params;
+  const bookingFee = price ? calcBookingFee(price) : 0;
+  const totalDue   = (price ?? 0) + bookingFee;
   const { user } = useAuthStore();
 
   const [date, setDate] = useState(new Date());
@@ -789,10 +792,20 @@ export default function BookingScreen() {
               <Text style={styles.summaryValue}>{format(time, 'h:mm a')}</Text>
             </View>
             {price && (
-              <View style={[styles.summaryRow, styles.summaryTotal]}>
-                <Text style={styles.summaryTotalLabel}>Total</Text>
-                <Text style={styles.summaryTotalValue}>₱{price}</Text>
-              </View>
+              <>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Service Price</Text>
+                  <Text style={styles.summaryValue}>₱{price.toLocaleString('en-PH')}</Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>TAGA Booking Fee</Text>
+                  <Text style={styles.summaryValue}>₱{bookingFee.toLocaleString('en-PH')}</Text>
+                </View>
+                <View style={[styles.summaryRow, styles.summaryTotal]}>
+                  <Text style={styles.summaryTotalLabel}>Total Cash Due</Text>
+                  <Text style={styles.summaryTotalValue}>₱{totalDue.toLocaleString('en-PH')}</Text>
+                </View>
+              </>
             )}
           </View>
 
