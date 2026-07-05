@@ -26,7 +26,9 @@ export async function navigateFromNotification(
 
       case 'booking_accepted':
       case 'booking_rejected':
-      case 'booking_cancelled': {
+      case 'booking_cancelled':
+      case 'booking_in_progress':
+      case 'booking_reminder': {
         if (bookingId) navigation.navigate('BookingDetail', { bookingId });
         return;
       }
@@ -115,7 +117,15 @@ export async function navigateFromNotification(
       }
 
       case 'featured_approved': {
-        navigation.navigate('ProviderTabs', { screen: 'Dashboard' });
+        navigation.navigate('ProviderTabs', { screen: 'Dashboard' } as never);
+        return;
+      }
+
+      case 'platform_fee_added':
+      case 'platform_fee_reminder':
+      case 'platform_fee_overdue':
+      case 'platform_fee_paid': {
+        navigation.navigate('PlatformFeeBalance');
         return;
       }
 
@@ -127,6 +137,11 @@ export async function navigateFromNotification(
       case 'dispute_opened':
       case 'dispute_updated':
       case 'dispute_resolved':
+      case 'verification_approved':
+      case 'verification_rejected':
+      case 'document_approved':
+      case 'document_rejected':
+      case 'review_reminder':
       default: {
         navigation.navigate('NotificationDetail', { notification });
         return;

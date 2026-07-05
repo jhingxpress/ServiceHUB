@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Linking,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,10 +41,11 @@ export default function PlatformFeeBalanceScreen() {
   const navigation = useNavigation();
   const { user } = useAuthStore();
 
-  const [balance, setBalance]     = useState<ProviderFeeBalance | null>(null);
-  const [fees, setFees]           = useState<PlatformFee[]>([]);
-  const [loading, setLoading]     = useState(true);
+  const [balance, setBalance]       = useState<ProviderFeeBalance | null>(null);
+  const [fees, setFees]             = useState<PlatformFee[]>([]);
+  const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -67,6 +70,28 @@ export default function PlatformFeeBalanceScreen() {
     setLoading(false);
     setRefreshing(false);
   }, [user]);
+
+  const handlePay = async (feeIds: string[]) => {
+    if (checkoutLoading || feeIds.length === 0) return;
+    setCheckoutLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-platform-fee-checkout', {
+        body: { fee_ids: feeIds },
+      });
+      if (error || !data?.checkout_url) {
+        throw new Error(error?.message ?? data?.error ?? 'Failed to create checkout session');
+      }
+      await Linking.openURL(data.checkout_url);
+    } catch (err: any) {
+      Alert.alert(
+        'Payment Error',
+        err.message ?? 'Something went wrong. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -158,6 +183,31 @@ export default function PlatformFeeBalanceScreen() {
           )}
         </View>
 
+        {/* Pay All Fees button — only when there is an outstanding balance */}
+        {balance && balance.total_unpaid > 0 && (() => {
+          const unpaidIds = fees.filter((f) => f.status === 'unpaid').map((f) => f.id);
+          return (
+            <TouchableOpacity
+              style={[styles.payAllBtn, checkoutLoading && styles.payAllBtnDisabled]}
+              onPress={() => handlePay(unpaidIds)}
+              disabled={checkoutLoading}
+              activeOpacity={0.8}
+            >
+              {checkoutLoading ? (
+                <ActivityIndicator color={COLORS.white} size="small" />
+              ) : (
+                <>
+                  <Ionicons name="card-outline" size={18} color={COLORS.white} />
+                  <Text style={styles.payAllBtnText}>
+                    Pay All Fees · {fmtPHP(balance.total_unpaid)}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={COLORS.white + 'CC'} />
+                </>
+              )}
+            </TouchableOpacity>
+          );
+        })()}
+
         {/* Info Box */}
         <View style={styles.infoBox}>
           <Ionicons name="information-circle-outline" size={16} color={COLORS.primary} />
@@ -211,6 +261,17 @@ export default function PlatformFeeBalanceScreen() {
                 {fee.notes ? (
                   <Text style={styles.feeNotes}>{fee.notes}</Text>
                 ) : null}
+                {fee.status === 'unpaid' && (
+                  <TouchableOpacity
+                    style={[styles.payFeeBtn, checkoutLoading && styles.payAllBtnDisabled]}
+                    onPress={() => handlePay([fee.id])}
+                    disabled={checkoutLoading}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="card-outline" size={13} color={COLORS.primary} />
+                    <Text style={styles.payFeeBtnText}>Pay This Fee</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             );
           })
@@ -289,4 +350,18 @@ const styles = StyleSheet.create({
   feeService:   { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary },
   feeDue:       { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontFamily: FONTS.medium },
   feeNotes:     { fontSize: FONTS.sizes.xs, color: COLORS.textSecondary, fontStyle: 'italic', marginTop: 2 },
+  payAllBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: SPACING.xs, backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.md, paddingHorizontal: SPACING.lg,
+    ...SHADOWS.small,
+  },
+  payAllBtnDisabled: { opacity: 0.6 },
+  payAllBtnText: { fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.white },
+  payFeeBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end',
+    marginTop: SPACING.xs, borderWidth: 1, borderColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.full, paddingHorizontal: SPACING.sm, paddingVertical: 4,
+  },
+  payFeeBtnText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: COLORS.primary },
 });

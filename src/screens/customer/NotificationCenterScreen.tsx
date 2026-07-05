@@ -48,6 +48,11 @@ const TYPE_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> 
   dispute_opened: 'warning-outline',
   dispute_updated: 'warning-outline',
   dispute_resolved: 'checkmark-circle-outline',
+  platform_fee_added: 'receipt-outline',
+  platform_fee_reminder: 'time-outline',
+  platform_fee_overdue: 'alert-circle-outline',
+  platform_fee_paid: 'checkmark-circle-outline',
+  booking_in_progress: 'construct-outline',
 };
 
 const TYPE_EMOJIS: Record<string, string> = {
@@ -65,6 +70,10 @@ const TYPE_EMOJIS: Record<string, string> = {
   review_reminder: '⭐',
   chat_message: '💬',
   new_message: '💬',
+  platform_fee_added: '🧾',
+  platform_fee_reminder: '⏰',
+  platform_fee_overdue: '🚨',
+  platform_fee_paid: '✅',
 };
 
 export default function NotificationCenterScreen() {

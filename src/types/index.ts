@@ -438,7 +438,7 @@ export interface Dispute {
 export interface Notification {
   id: string;
   user_id: string;
-  type: 'booking_submitted' | 'booking_accepted' | 'booking_rejected' | 'booking_cancelled' | 'booking_on_the_way' | 'booking_arrived' | 'booking_in_progress' | 'booking_completed' | 'booking_reminder' | 'provider_on_the_way' | 'provider_arrived' | 'service_completed' | 'chat_message' | 'new_message' | 'review_received' | 'review_reminder' | 'verification_approved' | 'verification_rejected' | 'document_approved' | 'document_rejected' | 'featured_approved' | 'dispute_opened' | 'dispute_updated' | 'dispute_resolved' | 'announcement' | 'maintenance' | 'policy_update' | 'marketing' | 'system';
+  type: 'booking_submitted' | 'booking_accepted' | 'booking_rejected' | 'booking_cancelled' | 'booking_on_the_way' | 'booking_arrived' | 'booking_in_progress' | 'booking_completed' | 'booking_reminder' | 'provider_on_the_way' | 'provider_arrived' | 'service_completed' | 'chat_message' | 'new_message' | 'review_received' | 'review_reminder' | 'verification_approved' | 'verification_rejected' | 'document_approved' | 'document_rejected' | 'featured_approved' | 'dispute_opened' | 'dispute_updated' | 'dispute_resolved' | 'announcement' | 'maintenance' | 'policy_update' | 'marketing' | 'system' | 'platform_fee_added' | 'platform_fee_reminder' | 'platform_fee_overdue' | 'platform_fee_paid';
   title: string;
   body: string;
   data: Record<string, unknown>;

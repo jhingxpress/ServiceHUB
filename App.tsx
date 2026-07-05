@@ -77,11 +77,18 @@ async function handleNotificationTap(data: Record<string, unknown>) {
     case 'booking_submitted':
     case 'booking_accepted':
     case 'booking_rejected':
+    case 'booking_cancelled':
+    case 'booking_in_progress':
+    case 'booking_on_the_way':
+    case 'booking_arrived':
+    case 'booking_reminder':
     case 'provider_on_the_way':
     case 'provider_arrived':
     case 'service_completed':
     case 'booking_completed':
     case 'dispute_opened':
+    case 'dispute_updated':
+    case 'dispute_resolved':
       if (bookingId) {
         if (role === 'customer') {
           navigationRef.navigate('Customer', { screen: 'BookingDetail', params: { bookingId } });
@@ -122,10 +129,20 @@ async function handleNotificationTap(data: Record<string, unknown>) {
       }
       break;
 
+    case 'featured_approved':
     case 'verification_approved':
     case 'verification_rejected':
       if (role === 'provider') {
-        navigationRef.navigate('Provider', { screen: 'ProviderTabs', params: { screen: 'Dashboard' } });
+        navigationRef.navigate('Provider', { screen: 'ProviderTabs', params: { screen: 'Dashboard' } } as never);
+      }
+      break;
+
+    case 'platform_fee_added':
+    case 'platform_fee_reminder':
+    case 'platform_fee_overdue':
+    case 'platform_fee_paid':
+      if (role === 'provider') {
+        navigationRef.navigate('Provider', { screen: 'PlatformFeeBalance' } as never);
       }
       break;
 
@@ -386,6 +403,30 @@ export default function App() {
           'Payment Cancelled',
           'You cancelled the checkout. Your pending session is saved — tap "Open Checkout" on your Dashboard to complete payment.'
         );
+        return;
+      }
+
+      // PayMongo platform fee payment return — success
+      // com.servicehub.app://platform-fees/success
+      if (url.includes('platform-fees/success')) {
+        console.log('[DEEPLINK] platform-fees/success received');
+        if (navigationRef.isReady()) {
+          navigationRef.navigate('Provider', { screen: 'PlatformFeeBalance' } as any);
+        }
+        Alert.alert(
+          'Payment Submitted',
+          'Your platform fee payment is being processed. Your balance will update shortly.'
+        );
+        return;
+      }
+
+      // PayMongo platform fee payment return — cancel
+      // com.servicehub.app://platform-fees/cancel
+      if (url.includes('platform-fees/cancel')) {
+        console.log('[DEEPLINK] platform-fees/cancel received');
+        if (navigationRef.isReady()) {
+          navigationRef.navigate('Provider', { screen: 'PlatformFeeBalance' } as any);
+        }
         return;
       }
 
