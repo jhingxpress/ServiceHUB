@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -37,6 +37,26 @@ function fmtPHP(n: number) {
   return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+type PaymentState = 'idle' | 'verifying' | 'success' | 'cancelled';
+
+interface PaymentResult {
+  amount: number;
+  feeCount: number;
+  method: string | null;
+  paidAt: string | null;
+}
+
+function fmtMethod(method: string | null): string {
+  if (!method) return 'Online Payment';
+  const map: Record<string, string> = {
+    card:     'Credit/Debit Card',
+    gcash:    'GCash',
+    maya:     'Maya',
+    grab_pay: 'GrabPay',
+  };
+  return map[method.toLowerCase()] ?? method;
+}
+
 export default function PlatformFeeBalanceScreen() {
   const navigation = useNavigation();
   const { user } = useAuthStore();
@@ -46,6 +66,15 @@ export default function PlatformFeeBalanceScreen() {
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  const [paymentState, setPaymentState]   = useState<PaymentState>('idle');
+  const [paymentResult, setPaymentResult] = useState<PaymentResult | null>(null);
+
+  const paymentPendingRef = useRef(false);
+  const sessionIdRef      = useRef<string | null>(null);
+  const pollTimerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollCountRef      = useRef(0);
+  const paymentStateRef   = useRef<PaymentState>('idle');
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -71,9 +100,71 @@ export default function PlatformFeeBalanceScreen() {
     setRefreshing(false);
   }, [user]);
 
+  useEffect(() => { paymentStateRef.current = paymentState; }, [paymentState]);
+
+  const pollForConfirmation = useCallback(async () => {
+    const sessionId = sessionIdRef.current;
+    if (!sessionId) return;
+    pollCountRef.current += 1;
+
+    const { data } = await supabase
+      .from('platform_fee_payments')
+      .select('total_amount, payment_method, paid_at, platform_fee_ids')
+      .eq('id', sessionId)
+      .eq('status', 'paid')
+      .maybeSingle();
+
+    if (data) {
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+      setPaymentResult({
+        amount:   Number(data.total_amount),
+        feeCount: (data.platform_fee_ids as string[])?.length ?? 0,
+        method:   data.payment_method,
+        paidAt:   data.paid_at,
+      });
+      setPaymentState('success');
+      loadData();
+      return;
+    }
+
+    if (pollCountRef.current < 10) {
+      pollTimerRef.current = setTimeout(() => pollForConfirmation(), 3000);
+    }
+  }, [loadData]);
+
+  const handleDeepLink = useCallback(({ url }: { url: string }) => {
+    if (!paymentPendingRef.current) return;
+    paymentPendingRef.current = false;
+
+    if (url.includes('platform-fees/success')) {
+      pollCountRef.current = 0;
+      setPaymentState('verifying');
+      pollTimerRef.current = setTimeout(() => pollForConfirmation(), 3000);
+    } else if (url.includes('platform-fees/cancel')) {
+      setPaymentState('cancelled');
+      loadData();
+    }
+  }, [pollForConfirmation, loadData]);
+
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+    return () => {
+      subscription.remove();
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    };
+  }, [handleDeepLink]);
+
+  const dismissPaymentState = () => {
+    setPaymentState('idle');
+    setPaymentResult(null);
+  };
+
   const handlePay = async (feeIds: string[]) => {
     if (checkoutLoading || feeIds.length === 0) return;
     setCheckoutLoading(true);
+    setPaymentState('idle');
+    setPaymentResult(null);
     try {
       const { data, error } = await supabase.functions.invoke('create-platform-fee-checkout', {
         body: { fee_ids: feeIds },
@@ -97,8 +188,11 @@ export default function PlatformFeeBalanceScreen() {
         throw new Error(data?.error ?? 'No checkout URL returned. Please try again.');
       }
 
+      sessionIdRef.current = data.payment_id ?? null;
+      paymentPendingRef.current = true;
       await Linking.openURL(data.checkout_url);
     } catch (err: any) {
+      paymentPendingRef.current = false;
       Alert.alert(
         'Payment Error',
         err.message ?? 'Something went wrong. Please try again.',
@@ -112,7 +206,17 @@ export default function PlatformFeeBalanceScreen() {
   useFocusEffect(
     useCallback(() => {
       loadData();
-    }, [loadData])
+      if (paymentStateRef.current === 'verifying' && sessionIdRef.current) {
+        pollCountRef.current = 0;
+        pollForConfirmation();
+      }
+      return () => {
+        if (pollTimerRef.current) {
+          clearTimeout(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+      };
+    }, [loadData, pollForConfirmation])
   );
 
   const onRefresh = () => {
@@ -151,6 +255,64 @@ export default function PlatformFeeBalanceScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
         contentContainerStyle={styles.content}
       >
+        {/* Payment Status Banners */}
+        {paymentState === 'success' && paymentResult && (
+          <View style={styles.successBanner}>
+            <View style={styles.bannerTitleRow}>
+              <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
+              <Text style={styles.bannerSuccessTitle}>Platform fee payment successful.</Text>
+              <TouchableOpacity onPress={dismissPaymentState}>
+                <Ionicons name="close" size={18} color={COLORS.success} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.successDetails}>
+              <View style={styles.successRow}>
+                <Text style={styles.detailLabel}>Amount paid</Text>
+                <Text style={styles.detailValue}>{fmtPHP(paymentResult.amount)}</Text>
+              </View>
+              <View style={styles.successRow}>
+                <Text style={styles.detailLabel}>Fees paid</Text>
+                <Text style={styles.detailValue}>{paymentResult.feeCount} fee{paymentResult.feeCount !== 1 ? 's' : ''}</Text>
+              </View>
+              <View style={styles.successRow}>
+                <Text style={styles.detailLabel}>Payment method</Text>
+                <Text style={styles.detailValue}>{fmtMethod(paymentResult.method)}</Text>
+              </View>
+              {paymentResult.paidAt && (
+                <View style={styles.successRow}>
+                  <Text style={styles.detailLabel}>Payment date</Text>
+                  <Text style={styles.detailValue}>{format(parseISO(paymentResult.paidAt), 'MMM d, yyyy · h:mm a')}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
+        {paymentState === 'verifying' && (
+          <View style={styles.verifyingBanner}>
+            <View style={styles.bannerTitleRow}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+              <Text style={styles.bannerVerifyingTitle}>Payment Received</Text>
+            </View>
+            <Text style={styles.bannerVerifyingBody}>
+              Your payment is being verified.{'\n'}Your balance will update automatically in a few moments.
+            </Text>
+          </View>
+        )}
+
+        {paymentState === 'cancelled' && (
+          <View style={styles.cancelledBanner}>
+            <View style={styles.bannerTitleRow}>
+              <Ionicons name="information-circle" size={20} color={COLORS.textSecondary} />
+              <Text style={styles.bannerCancelledTitle}>Payment cancelled.</Text>
+              <TouchableOpacity onPress={dismissPaymentState}>
+                <Ionicons name="close" size={18} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.bannerCancelledBody}>No charges were applied.</Text>
+          </View>
+        )}
+
         {/* Balance Summary Card */}
         <View style={[styles.balanceCard, { borderColor: cfg.color + '40' }]}>
           <View style={styles.balanceTop}>
@@ -380,4 +542,36 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.full, paddingHorizontal: SPACING.sm, paddingVertical: 4,
   },
   payFeeBtnText: { fontSize: FONTS.sizes.xs, fontFamily: FONTS.semiBold, color: COLORS.primary },
+
+  successBanner: {
+    backgroundColor: COLORS.successLight,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.success + '40',
+  },
+  verifyingBanner: {
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '30',
+  },
+  cancelledBanner: {
+    backgroundColor: COLORS.surfaceSecondary,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  bannerTitleRow:       { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm },
+  bannerSuccessTitle:   { flex: 1, fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.success },
+  bannerVerifyingTitle: { flex: 1, fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.primary },
+  bannerCancelledTitle: { flex: 1, fontSize: FONTS.sizes.base, fontFamily: FONTS.semiBold, color: COLORS.text },
+  successDetails:       { gap: SPACING.xs, marginTop: SPACING.xs },
+  successRow:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  detailLabel:          { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
+  detailValue:          { fontSize: FONTS.sizes.sm, fontFamily: FONTS.semiBold, color: COLORS.text },
+  bannerVerifyingBody:  { fontSize: FONTS.sizes.sm, color: COLORS.primary, lineHeight: 20 },
+  bannerCancelledBody:  { fontSize: FONTS.sizes.sm, color: COLORS.textSecondary },
 });

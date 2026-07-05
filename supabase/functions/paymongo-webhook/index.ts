@@ -37,6 +37,8 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  console.log('[webhook] RECEIVED — method:', req.method, '| url:', req.url);
+
   if (req.method !== 'POST') {
     return json({ error: 'Method not allowed' }, 405);
   }
@@ -46,6 +48,8 @@ serve(async (req: Request) => {
   const serviceKey   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const webhookSecret = Deno.env.get('PAYMONGO_WEBHOOK_SECRET');
   const pushSecret    = Deno.env.get('PUSH_NOTIFICATION_SECRET') ?? '';
+
+  console.log('[webhook] Env — SUPABASE_URL:', !!supabaseUrl, '| SERVICE_KEY:', !!serviceKey, '| WEBHOOK_SECRET:', !!webhookSecret, '| PUSH_SECRET:', !!pushSecret);
 
   if (!supabaseUrl || !serviceKey) {
     return json({ error: 'Missing Supabase environment variables' }, 500);
@@ -58,9 +62,11 @@ serve(async (req: Request) => {
 
   // ── Read raw body (needed for signature verification) ─────
   const rawBody = await req.text();
+  console.log('[webhook] Raw body length:', rawBody.length, 'bytes');
 
   // ── Verify PayMongo signature ─────────────────────────────
   const sigHeader = req.headers.get('paymongo-signature');
+  console.log('[webhook] paymongo-signature header present:', !!sigHeader);
 
   if (!sigHeader) {
     console.error('[webhook] Missing paymongo-signature header');
@@ -78,6 +84,8 @@ serve(async (req: Request) => {
   const testSig   = sigParts['te'] || null;  // present in test-mode events
   const liveSig   = sigParts['li'] || null;  // present in live-mode events
 
+  console.log('[webhook] Sig parts — t:', timestamp ?? 'MISSING', '| te present:', !!testSig, '| li present:', !!liveSig);
+
   // Malformed if timestamp is missing or neither signature variant is present.
   if (!timestamp || (!testSig && !liveSig)) {
     console.error('[webhook] Malformed paymongo-signature header:', sigHeader);
@@ -88,8 +96,9 @@ serve(async (req: Request) => {
   // PayMongo retries failed webhooks at ~5 min, ~10 min, ~30 min using the
   // ORIGINAL timestamp — 300 s was rejecting every retry delivery.
   const eventAge = Math.abs(Date.now() / 1000 - parseInt(timestamp, 10));
+  console.log('[webhook] Event age:', Math.round(eventAge), 's (limit: 3600 s)');
   if (eventAge > 3600) {
-    console.error('[webhook] Event too old:', Math.round(eventAge), 'seconds — exceeds 3600 s limit');
+    console.error('[webhook] REJECTED: Event too old:', Math.round(eventAge), 'seconds — exceeds 3600 s limit');
     return json({ error: 'Event timestamp too old' }, 401);
   }
 
@@ -98,9 +107,10 @@ serve(async (req: Request) => {
 
   // Accept if the HMAC matches either the test sig or the live sig.
   const sigMatches = (testSig && expected === testSig) || (liveSig && expected === liveSig);
+  console.log('[webhook] HMAC verification — match:', sigMatches, '| te present:', !!testSig, '| li present:', !!liveSig);
   if (!sigMatches) {
     console.error(
-      '[webhook] Signature mismatch — te:', testSig ? 'present' : 'absent',
+      '[webhook] REJECTED: Signature mismatch — te:', testSig ? 'present' : 'absent',
       '| li:', liveSig ? 'present' : 'absent',
       '| verify PAYMONGO_WEBHOOK_SECRET is correct'
     );
@@ -137,8 +147,13 @@ serve(async (req: Request) => {
     return json({ error: 'Missing checkout session id' }, 400);
   }
 
-  console.log('[webhook] Checkout session id:', checkoutId);
-  console.log('[webhook] Metadata:', JSON.stringify(metadata));
+  console.log('[webhook] Checkout session id:', checkoutId, '| payment_type:', metadata?.payment_type ?? 'featured_payment');
+  console.log('[webhook] Payments count:', payments.length);
+  if (payments.length > 0) {
+    console.log('[webhook] Payment[0] — id:', payments[0]?.id, '| amount:', payments[0]?.attributes?.amount, '| method:', payments[0]?.attributes?.payment_method_used?.type ?? 'unknown');
+  } else {
+    console.warn('[webhook] payments array is EMPTY — amount validation will fail');
+  }
 
   // ── Database client (service role) ───────────────────────
   const db = createClient(supabaseUrl, serviceKey, {
@@ -421,50 +436,100 @@ async function processPlatformFeePayment(
   pushSecret: string,
   supabaseUrl: string
 ): Promise<Response> {
-  const sessionId = metadata?.session_id;
+  const _pfeeStart    = Date.now();
+  const sessionId      = metadata?.session_id;
+  const metaProviderId = metadata?.provider_id;
+  console.log('[webhook/pfee] START — checkout:', checkoutId, '| session:', sessionId ?? 'MISSING', '| provider:', metaProviderId ?? 'MISSING', '| payments:', payments.length);
 
   if (!sessionId) {
-    console.error('[webhook/pfee] No session_id in metadata');
+    console.error('[webhook/pfee] ABORT: No session_id in metadata');
     return json({ error: 'Missing session_id in metadata' }, 400);
   }
 
-  // ── Lookup session by checkout_id first, fallback by session_id ──
+  // ── Lookup by paymongo_checkout_id ────────────────────────
+  console.log('[webhook/pfee] DB lookup 1: paymongo_checkout_id =', checkoutId);
   let record: any = null;
   {
-    const { data } = await db
+    const { data, error } = await db
       .from('platform_fee_payments')
       .select('id, provider_id, platform_fee_ids, total_amount, status')
       .eq('paymongo_checkout_id', checkoutId)
       .maybeSingle();
+
+    if (error) {
+      console.error('[webhook/pfee] FATAL: DB lookup by checkout_id failed:', JSON.stringify(error));
+      return json({ error: 'DB lookup failed', details: error.message }, 500);
+    }
     record = data;
+    console.log('[webhook/pfee] Lookup 1 result:', record
+      ? `FOUND id=${record.id} status=${record.status}`
+      : 'NOT FOUND');
   }
 
+  // ── Fallback: lookup by session_id (metadata) ─────────────
   if (!record) {
-    const { data } = await db
+    console.log('[webhook/pfee] DB lookup 2 (fallback): id =', sessionId);
+    const { data, error } = await db
       .from('platform_fee_payments')
       .select('id, provider_id, platform_fee_ids, total_amount, status')
       .eq('id', sessionId)
       .maybeSingle();
+
+    if (error) {
+      console.error('[webhook/pfee] FATAL: DB fallback lookup failed:', JSON.stringify(error));
+      return json({ error: 'DB fallback lookup failed', details: error.message }, 500);
+    }
     record = data;
+    console.log('[webhook/pfee] Lookup 2 result:', record
+      ? `FOUND id=${record.id} status=${record.status}`
+      : 'NOT FOUND');
   }
 
   if (!record) {
-    console.error('[webhook/pfee] No platform_fee_payments record. checkout:', checkoutId, 'session_id:', sessionId);
+    console.error('[webhook/pfee] ABORT: No platform_fee_payments record found.',
+      'checkout_id:', checkoutId, '| session_id:', sessionId);
     return json({ error: 'Payment session not found' }, 404);
   }
 
+  console.log('[webhook/pfee] Session found — id:', record.id, '| status:', record.status, '| fees:', Array.isArray(record.platform_fee_ids) ? record.platform_fee_ids.length : 0, '| total:', record.total_amount);
+
   // ── Idempotency ───────────────────────────────────────────
   if (record.status === 'paid') {
-    console.log('[webhook/pfee] Already processed, ignoring duplicate event');
+    console.log('[webhook/pfee] IDEMPOTENT: already processed — skipping');
     return json({ received: true, handled: false, reason: 'already_paid' });
+  }
+
+  // ── Validate fee IDs ──────────────────────────────────────
+  // platform_fee_ids is UUID[] — PostgREST returns it as a JS string[].
+  const feeIds: string[] = Array.isArray(record.platform_fee_ids)
+    ? record.platform_fee_ids
+    : [];
+
+  console.log('[webhook/pfee] Fee IDs count:', feeIds.length);
+
+  if (feeIds.length === 0) {
+    console.error('[webhook/pfee] ABORT: platform_fee_ids is empty or non-array.',
+      'Raw value:', JSON.stringify(record.platform_fee_ids),
+      '| Type:', typeof record.platform_fee_ids);
+    return json({ error: 'No fee IDs in payment session' }, 500);
+  }
+
+  // ── Guard: payments array must be non-empty ───────────────
+  if (payments.length === 0) {
+    console.error('[webhook/pfee] ABORT: payments array is empty in webhook event — cannot validate amount');
+    return json({ error: 'No payment data in webhook event' }, 400);
   }
 
   // ── Amount validation ─────────────────────────────────────
   const expectedCentavos = Math.round(Number(record.total_amount) * 100);
   const paidCentavos     = payments[0]?.attributes?.amount ?? 0;
 
+  console.log('[webhook/pfee] Amount — total_amount raw:', record.total_amount,
+    '| expected centavos:', expectedCentavos,
+    '| paid centavos:', paidCentavos);
+
   if (paidCentavos < expectedCentavos) {
-    console.error(`[webhook/pfee] Amount mismatch: paid ${paidCentavos} centavos, expected ${expectedCentavos}`);
+    console.error('[webhook/pfee] ABORT: Amount mismatch — paid:', paidCentavos, 'expected:', expectedCentavos);
     await db.from('platform_fee_payments').update({ status: 'failed' }).eq('id', record.id);
     return json({ error: 'Payment amount mismatch' }, 400);
   }
@@ -473,7 +538,28 @@ async function processPlatformFeePayment(
   const paymentMethod = payments[0]?.attributes?.payment_method_used?.type ?? null;
   const paidAt        = new Date().toISOString();
 
-  // ── Mark payment session as paid ─────────────────────────
+  console.log('[webhook/pfee] pm_payment_id:', pmPaymentId ?? 'NULL');
+  console.log('[webhook/pfee] payment_method:', paymentMethod ?? 'unknown');
+  console.log('[webhook/pfee] paid_at:', paidAt);
+
+  // ── STEP 1: Mark individual fees as paid (FATAL) ──────────
+  // Fees first: if this fails, PayMongo retries and the idempotency gate
+  // (record.status === 'paid') has not yet fired, so the retry re-attempts.
+  console.log('[webhook/pfee] STEP 1: UPDATE provider_platform_fees WHERE id IN', JSON.stringify(feeIds));
+  const { error: feesErr } = await db
+    .from('provider_platform_fees')
+    .update({ status: 'paid', paid_at: paidAt, updated_at: paidAt })
+    .in('id', feeIds);
+
+  if (feesErr) {
+    console.error('[webhook/pfee] FATAL: provider_platform_fees UPDATE failed. Full error:', JSON.stringify(feesErr));
+    return json({ error: 'Failed to update fee records', details: feesErr.message }, 500);
+  }
+
+  console.log('[webhook/pfee] STEP 1 SUCCESS:', feeIds.length, 'fee(s) marked paid');
+
+  // ── STEP 2: Mark payment session as paid (FATAL) ──────────
+  console.log('[webhook/pfee] STEP 2: UPDATE platform_fee_payments id =', record.id);
   const { error: updateErr } = await db
     .from('platform_fee_payments')
     .update({
@@ -485,72 +571,81 @@ async function processPlatformFeePayment(
     .eq('id', record.id);
 
   if (updateErr) {
-    console.error('[webhook/pfee] platform_fee_payments update error:', updateErr);
-    return json({ error: 'Failed to update payment session' }, 500);
+    console.error('[webhook/pfee] FATAL: platform_fee_payments UPDATE failed. Full error:', JSON.stringify(updateErr));
+    return json({ error: 'Failed to update payment session', details: updateErr.message }, 500);
   }
 
-  // ── Mark all included fees as paid ───────────────────────
-  const feeIds: string[] = record.platform_fee_ids;
-  const { error: feesErr } = await db
-    .from('provider_platform_fees')
-    .update({ status: 'paid', paid_at: paidAt, updated_at: paidAt })
-    .in('id', feeIds);
+  console.log('[webhook/pfee] STEP 2 SUCCESS: session', record.id,
+    '— ₱' + Number(record.total_amount).toFixed(2),
+    '— method:', paymentMethod ?? 'unknown');
 
-  if (feesErr) {
-    // Non-fatal — session is already marked paid; fees reconcile on next load
-    console.error('[webhook/pfee] provider_platform_fees update error (non-fatal):', feesErr);
-  }
-
-  console.log(`[webhook/pfee] Session ${record.id} paid — ₱${record.total_amount} — ${feeIds.length} fee(s) — method: ${paymentMethod ?? 'unknown'}`);
-
-  // ── In-app notification (idempotent: skip if already sent for this session) ─
+  // ── In-app notification (non-fatal) ──────────────────────
+  // Idempotency: JSONB path filter (data->>'session_id') instead of LIKE
+  // which does not work correctly on binary JSONB columns.
   try {
-    const { data: existingNotif } = await db
+    const { data: existingNotif, error: notifCheckErr } = await db
       .from('notifications')
       .select('id')
       .eq('user_id', record.provider_id)
       .eq('type', 'platform_fee_paid')
-      .like('data', `%${record.id}%`)
+      .filter('data->>session_id', 'eq', record.id)
       .limit(1)
       .maybeSingle();
 
+    if (notifCheckErr) {
+      console.warn('[webhook/pfee] Notification idempotency check failed (non-fatal):', JSON.stringify(notifCheckErr));
+    }
+
     if (!existingNotif) {
-      await db.from('notifications').insert({
+      const { error: notifInsertErr } = await db.from('notifications').insert({
         user_id: record.provider_id,
         type:    'platform_fee_paid',
         title:   'Platform Fee Payment Confirmed',
         body:    `Your payment of ₱${Number(record.total_amount).toFixed(2)} for ${feeIds.length} platform fee${feeIds.length !== 1 ? 's' : ''} has been received.`,
-        data:    JSON.stringify({ session_id: record.id, fee_count: feeIds.length }),
+        data:    { session_id: record.id, fee_count: feeIds.length },
       });
+      if (notifInsertErr) {
+        console.warn('[webhook/pfee] Notification INSERT failed (non-fatal):', JSON.stringify(notifInsertErr));
+      } else {
+        console.log('[webhook/pfee] In-app notification inserted for provider', record.provider_id);
+      }
     } else {
       console.log('[webhook/pfee] In-app notification already exists for session', record.id, '— skipped');
     }
   } catch (notifErr) {
-    console.warn('[webhook/pfee] In-app notification failed (non-fatal):', notifErr);
+    console.warn('[webhook/pfee] In-app notification block threw (non-fatal):', notifErr);
   }
 
-  // ── Push notification to provider ────────────────────────
+  // ── Push notification (non-fatal) ─────────────────────────
   if (pushSecret) {
     try {
-      await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
+      const pushRes = await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', 'x-push-secret': pushSecret },
         body: JSON.stringify({
           user_id: record.provider_id,
-          title:   '✅ Platform Fee Payment Confirmed',
+          title:   'Platform Fee Payment Confirmed',
           body:    `Your payment of ₱${Number(record.total_amount).toFixed(2)} has been received. Thank you!`,
           data:    { type: 'platform_fee_paid', channelId: 'general' },
         }),
       });
+      if (!pushRes.ok) {
+        console.warn('[webhook/pfee] Push notification returned non-200:', pushRes.status);
+      } else {
+        console.log('[webhook/pfee] Push notification sent to provider', record.provider_id);
+      }
     } catch (pushErr) {
-      console.warn('[webhook/pfee] Push notification failed (non-fatal):', pushErr);
+      console.warn('[webhook/pfee] Push notification threw (non-fatal):', pushErr);
     }
   }
+
+  console.log('[webhook/pfee] COMPLETE — session:', record.id, '| fees:', feeIds.length, '| ms:', Date.now() - _pfeeStart);
 
   return json({
     received:   true,
     handled:    true,
     session_id: record.id,
+    fee_count:  feeIds.length,
     status:     'paid',
   });
 }

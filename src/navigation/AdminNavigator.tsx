@@ -132,11 +132,13 @@ function AdminTabs() {
 
 function StaffTabs() {
   const [incidentBadge, setIncidentBadge] = useState(0);
-  const [reportBadge, setReportBadge] = useState(0);
+  const [reportBadge, setReportBadge]     = useState(0);
+  const [providerBadge, setProviderBadge] = useState(0);
+  const [disputeBadge, setDisputeBadge]   = useState(0);
 
   useEffect(() => {
     const fetchBadges = async () => {
-      const [incidentRes, repRes] = await Promise.all([
+      const [incidentRes, repRes, provRes, dispRes] = await Promise.all([
         supabase
           .from('booking_incident_reports')
           .select('id', { count: 'exact', head: true })
@@ -145,9 +147,19 @@ function StaffTabs() {
           .from('reports')
           .select('id', { count: 'exact', head: true })
           .eq('status', 'pending'),
+        supabase
+          .from('providers')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'pending_review'),
+        supabase
+          .from('disputes')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'open'),
       ]);
       setIncidentBadge(incidentRes.count ?? 0);
       setReportBadge(repRes.count ?? 0);
+      setProviderBadge(provRes.count ?? 0);
+      setDisputeBadge(dispRes.count ?? 0);
     };
 
     fetchBadges();
@@ -156,12 +168,15 @@ function StaffTabs() {
       .channel('staff-badges')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_incident_reports' }, fetchBadges)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, fetchBadges)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'providers' }, fetchBadges)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'disputes' }, fetchBadges)
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, []);
 
   const badge = (n: number) => (n > 0 ? (n > 99 ? '99+' : n) : undefined);
+  const totalBadge = incidentBadge + reportBadge + providerBadge + disputeBadge;
 
   return (
     <StaffTab.Navigator
@@ -190,7 +205,7 @@ function StaffTabs() {
       <StaffTab.Screen
         name="OperationsCenter"
         component={OperationsCenterScreen}
-        options={{ tabBarBadge: badge(incidentBadge + reportBadge) }}
+        options={{ tabBarBadge: badge(totalBadge) }}
       />
       <StaffTab.Screen name="Logs" component={StaffActionLogsScreen} />
     </StaffTab.Navigator>

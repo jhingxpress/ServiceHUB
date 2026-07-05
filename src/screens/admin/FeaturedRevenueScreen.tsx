@@ -14,6 +14,8 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { format, startOfDay, startOfMonth } from 'date-fns';
 import { supabase } from '../../lib/supabase';
+import { useAuthStore } from '../../stores/authStore';
+import { isAdmin } from '../../utils/roleUtils';
 import { AdminStackParamList } from '../../navigation/types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 
@@ -41,6 +43,8 @@ function fmtPHP(n: number) {
 
 export default function FeaturedRevenueScreen() {
   const navigation = useNavigation<NavProp>();
+  const { user } = useAuthStore();
+  const isAdminUser = isAdmin(user?.role);
   const [loading, setLoading]         = useState(true);
   const [refreshing, setRefreshing]   = useState(false);
   const [todayRev, setTodayRev]       = useState(0);
@@ -152,7 +156,7 @@ export default function FeaturedRevenueScreen() {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={20} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>⭐ Featured Revenue</Text>
+        <Text style={styles.title}>{isAdminUser ? '⭐ Featured Revenue' : '⭐ Featured Providers'}</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -171,19 +175,21 @@ export default function FeaturedRevenueScreen() {
         contentContainerStyle={styles.list}
         ListHeaderComponent={(
           <View>
-            {/* Revenue summary */}
-            <View style={styles.revenueRow}>
-              {[
-                { label: 'Today',      value: fmtPHP(todayRev) },
-                { label: 'This Month', value: fmtPHP(monthRev) },
-                { label: 'Lifetime',   value: fmtPHP(lifetimeRev) },
-              ].map((c) => (
-                <View key={c.label} style={styles.revenueCard}>
-                  <Text style={styles.revenueValue}>{c.value}</Text>
-                  <Text style={styles.revenueLabel}>{c.label}</Text>
-                </View>
-              ))}
-            </View>
+            {/* Revenue summary — Admin only */}
+            {isAdminUser && (
+              <View style={styles.revenueRow}>
+                {[
+                  { label: 'Today',      value: fmtPHP(todayRev) },
+                  { label: 'This Month', value: fmtPHP(monthRev) },
+                  { label: 'Lifetime',   value: fmtPHP(lifetimeRev) },
+                ].map((c) => (
+                  <View key={c.label} style={styles.revenueCard}>
+                    <Text style={styles.revenueValue}>{c.value}</Text>
+                    <Text style={styles.revenueLabel}>{c.label}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {/* Metrics */}
             <Text style={styles.sectionLabel}>Metrics</Text>

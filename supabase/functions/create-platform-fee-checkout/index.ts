@@ -250,10 +250,17 @@ serve(async (req: Request) => {
   }
 
   // ── Persist checkout details on session ───────────────────
-  await db
+  const { error: persistErr } = await db
     .from('platform_fee_payments')
     .update({ paymongo_checkout_id: checkoutId, checkout_url: checkoutUrl })
     .eq('id', sessionId);
+
+  if (persistErr) {
+    console.warn(
+      `[pfee-checkout] Failed to persist paymongo_checkout_id on session ${sessionId} (non-fatal — webhook will fall back to session_id):`,
+      persistErr.message
+    );
+  }
 
   console.log(`[pfee-checkout] Checkout ${checkoutId} ready for session ${sessionId}`);
 

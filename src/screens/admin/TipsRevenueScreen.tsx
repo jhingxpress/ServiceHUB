@@ -14,6 +14,8 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { format, startOfDay, startOfMonth } from 'date-fns';
 import { supabase } from '../../lib/supabase';
+import { useAuthStore } from '../../stores/authStore';
+import { isAdmin } from '../../utils/roleUtils';
 import { AdminStackParamList } from '../../navigation/types';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 
@@ -34,6 +36,8 @@ function fmtPHP(centavos: number) {
 
 export default function TipsRevenueScreen() {
   const navigation = useNavigation<NavProp>();
+  const { user } = useAuthStore();
+  const isAdminUser = isAdmin(user?.role);
   const [loading, setLoading]         = useState(true);
   const [refreshing, setRefreshing]   = useState(false);
   const [todayRev, setTodayRev]       = useState(0);
@@ -122,7 +126,7 @@ export default function TipsRevenueScreen() {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={20} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>❤️ Tips Revenue</Text>
+        <Text style={styles.title}>{isAdminUser ? '❤️ Tips Revenue' : '❤️ Customer Tips'}</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -141,33 +145,36 @@ export default function TipsRevenueScreen() {
         contentContainerStyle={styles.list}
         ListHeaderComponent={(
           <View>
-            {/* Revenue summary */}
-            <View style={styles.revenueRow}>
-              {[
-                { label: 'Today',      value: fmtPHP(todayRev) },
-                { label: 'This Month', value: fmtPHP(monthRev) },
-                { label: 'Lifetime',   value: fmtPHP(lifetimeRev) },
-              ].map((c) => (
-                <View key={c.label} style={styles.revenueCard}>
-                  <Text style={styles.revenueValue}>{c.value}</Text>
-                  <Text style={styles.revenueLabel}>{c.label}</Text>
+            {/* Revenue summary — Admin only */}
+            {isAdminUser && (
+              <>
+                <View style={styles.revenueRow}>
+                  {[
+                    { label: 'Today',      value: fmtPHP(todayRev) },
+                    { label: 'This Month', value: fmtPHP(monthRev) },
+                    { label: 'Lifetime',   value: fmtPHP(lifetimeRev) },
+                  ].map((c) => (
+                    <View key={c.label} style={styles.revenueCard}>
+                      <Text style={styles.revenueValue}>{c.value}</Text>
+                      <Text style={styles.revenueLabel}>{c.label}</Text>
+                    </View>
+                  ))}
                 </View>
-              ))}
-            </View>
 
-            {/* Metrics */}
-            <Text style={styles.sectionLabel}>Metrics</Text>
-            <View style={styles.metricsRow}>
-              {METRICS.map((m) => (
-                <View key={m.label} style={styles.metricCard}>
-                  <View style={[styles.metricIcon, { backgroundColor: m.bg }]}>
-                    <Ionicons name={m.icon as React.ComponentProps<typeof Ionicons>['name']} size={18} color={m.color} />
-                  </View>
-                  <Text style={styles.metricValue}>{m.value}</Text>
-                  <Text style={styles.metricLabel}>{m.label}</Text>
+                <Text style={styles.sectionLabel}>Metrics</Text>
+                <View style={styles.metricsRow}>
+                  {METRICS.map((m) => (
+                    <View key={m.label} style={styles.metricCard}>
+                      <View style={[styles.metricIcon, { backgroundColor: m.bg }]}>
+                        <Ionicons name={m.icon as React.ComponentProps<typeof Ionicons>['name']} size={18} color={m.color} />
+                      </View>
+                      <Text style={styles.metricValue}>{m.value}</Text>
+                      <Text style={styles.metricLabel}>{m.label}</Text>
+                    </View>
+                  ))}
                 </View>
-              ))}
-            </View>
+              </>
+            )}
 
             <Text style={styles.sectionLabel}>Recent Contributions</Text>
           </View>
