@@ -78,9 +78,25 @@ export default function PlatformFeeBalanceScreen() {
       const { data, error } = await supabase.functions.invoke('create-platform-fee-checkout', {
         body: { fee_ids: feeIds },
       });
-      if (error || !data?.checkout_url) {
-        throw new Error(error?.message ?? data?.error ?? 'Failed to create checkout session');
+
+      if (error) {
+        // supabase.functions.invoke always sets error.message to the generic
+        // "Edge Function returned a non-2xx status code." string. The real
+        // message is in the JSON body of the response, accessible via error.context.
+        let message = 'Failed to create checkout session';
+        try {
+          const errBody = await (error as any).context?.json?.();
+          if (typeof errBody?.error === 'string') message = errBody.error;
+        } catch {
+          // context not readable or not JSON — fall through to generic message
+        }
+        throw new Error(message);
       }
+
+      if (!data?.checkout_url) {
+        throw new Error(data?.error ?? 'No checkout URL returned. Please try again.');
+      }
+
       await Linking.openURL(data.checkout_url);
     } catch (err: any) {
       Alert.alert(
