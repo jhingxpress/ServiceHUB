@@ -40,3 +40,13 @@ supabase/.temp/
 
 # Local schema dumps
 servicehub_schema_v1.sql
+
+# Beta reset generated artifacts
+reports/beta-reset/audit-*.md
+reports/beta-reset/beta-reset-report-*.md
+reports/beta-reset/beta-reset-resume-*.md
+reports/beta-reset/backup-*.sql
+
+# Keep permanent documentation
+!reports/beta-reset/DATABASE_AUDIT_REPORT.md
+!reports/beta-reset/POST_RESET_SAFETY_AUDIT.md
