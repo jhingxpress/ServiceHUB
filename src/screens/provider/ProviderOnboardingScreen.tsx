@@ -17,6 +17,8 @@ import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/
 import ProviderVerificationPolicyModal from '../../components/modals/ProviderVerificationPolicyModal';
 import TermsOfServiceModal from '../../components/modals/TermsOfServiceModal';
 import PrivacyPolicyModal from '../../components/modals/PrivacyPolicyModal';
+import { useRemoteFlag } from '../../config/remoteFlags';
+import LiveSelfieVerificationScreen, { LivenessResult } from './LiveSelfieVerificationScreen';
 
 
 const MAX_FILE_SIZE = 1024 * 1024 * 1024;
@@ -184,6 +186,9 @@ export default function ProviderOnboardingScreen() {
   // Step 3 — documents
   const [validId, setValidId] = useState<ValidIdDoc>(INITIAL_VALID_ID);
   const [selfie, setSelfie] = useState<ValidIdSide>({ uri: null, uploadedUrl: null, state: 'idle', error: null });
+  const [livenessResult, setLivenessResult] = useState<LivenessResult | null>(null);
+  const [showLiveSelfie, setShowLiveSelfie] = useState(false);
+  const { enabled: liveSelfieEnabled, loading: flagLoading } = useRemoteFlag('identity_live_selfie_enabled');
   const [permits, setPermits] = useState<PermitDoc[]>(
     PERMIT_TYPES.map(p => ({ ...p, checked: false, uri: null, uploadedUrl: null, state: 'idle' as UploadState, error: null }))
   );
@@ -348,7 +353,7 @@ export default function ProviderOnboardingScreen() {
           back: { uri: null, uploadedUrl: back?.file_url ?? null, state: back ? 'success' : 'idle', error: null },
         }));
       }
-      const selfieDoc = docs.find((d) => d.document_type === 'selfie_with_id');
+      const selfieDoc = docs.find((d) => d.document_type === 'verification_selfie' || d.document_type === 'selfie_with_id');
       if (selfieDoc?.file_url) {
         setSelfie({ uri: null, uploadedUrl: selfieDoc.file_url, state: 'success', error: null });
       }
@@ -407,8 +412,8 @@ export default function ProviderOnboardingScreen() {
     if (!validId.front.uploadedUrl) return 'Please capture the front of your Government ID.';
     if (!validId.back.uploadedUrl) return 'Please capture the back of your Government ID.';
     if (validId.front.state === 'uploading' || validId.back.state === 'uploading') return 'Please wait for your ID uploads to finish.';
-    if (!selfie.uploadedUrl) return 'Please take a selfie holding your Government ID.';
-    if (selfie.state === 'uploading') return 'Please wait for your selfie upload to finish.';
+    if (!selfie.uploadedUrl) return 'Please complete your verification selfie.';
+    if (selfie.state === 'uploading') return 'Please wait for your verification selfie upload to finish.';
     const uploading = permits.find(p => p.checked && p.state === 'uploading');
     if (uploading) return 'Please wait for all uploads to finish.';
     const checkedNoFile = permits.find(p => p.checked && !p.uploadedUrl);
@@ -526,23 +531,76 @@ export default function ProviderOnboardingScreen() {
 
   const doSelfieUpload = async (uri: string, mimeType: string) => {
     const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
-    const path = `${user!.id}/selfie_with_id_${Date.now()}.${ext}`;
+    const path = `${user!.id}/verification_selfie_${Date.now()}.${ext}`;
     setSelfie(prev => ({ ...prev, uri, state: 'uploading', error: null }));
     try {
       await ensureProviderRow();
-      console.log('[UPLOAD] provider_id being inserted (selfie):', user!.id);
+      console.log('[UPLOAD] provider_id being inserted (verification_selfie):', user!.id);
       const url = await uploadWithRetry(uri, path, mimeType);
       await supabase.from('provider_documents').delete()
-        .eq('provider_id', user!.id).eq('document_type', 'selfie_with_id');
-      const { error: insError } = await supabase.from('provider_documents').insert({
-        provider_id: user!.id, document_type: 'selfie_with_id', category_type: 'valid_id',
+        .eq('provider_id', user!.id).eq('document_type', 'selfie_with_id')
+        .eq('status', 'pending');
+      await supabase.from('provider_documents').delete()
+        .eq('provider_id', user!.id).eq('document_type', 'verification_selfie')
+        .eq('status', 'pending');
+      const insertData: Record<string, unknown> = {
+        provider_id: user!.id, document_type: 'verification_selfie', category_type: 'valid_id',
         file_url: url, status: 'pending',
-      });
+        verification_mode: 'legacy_manual',
+      };
+      const { error: insError } = await supabase.from('provider_documents').insert(insertData);
       if (insError) throw new Error(`Failed to save document record: ${insError.message}`);
       setSelfie(prev => ({ ...prev, uploadedUrl: url, state: 'success', error: null }));
     } catch (err) {
       const msg = err instanceof Error && err.message ? err.message : 'Network error. Please check your connection and try again.';
       setSelfie(prev => ({ ...prev, state: 'failed', error: msg }));
+    }
+  };
+
+  const completeLiveSelfieUpload = async (result: LivenessResult) => {
+    setSelfie(prev => ({ ...prev, state: 'uploading', error: null }));
+    try {
+      await ensureProviderRow();
+      const { data: signedData } = await supabase.storage
+        .from('provider-documents')
+        .createSignedUrl(result.storagePath, 3600);
+      const displayUrl = signedData?.signedUrl ?? '';
+      await supabase.from('provider_documents').delete()
+        .eq('provider_id', user!.id).eq('document_type', 'selfie_with_id')
+        .eq('status', 'pending');
+      await supabase.from('provider_documents').delete()
+        .eq('provider_id', user!.id).eq('document_type', 'verification_selfie')
+        .eq('status', 'pending');
+      const insertData: Record<string, unknown> = {
+        provider_id: user!.id, document_type: 'verification_selfie', category_type: 'valid_id',
+        file_url: result.storagePath, status: 'pending',
+        verification_mode: result.livenessData.liveness_status === 'passed' ? 'live_liveness' : 'manual_review',
+        liveness_status: result.livenessData.liveness_status,
+        blink_detected: result.livenessData.blink_detected,
+        left_turn_detected: result.livenessData.left_turn_detected,
+        right_turn_detected: result.livenessData.right_turn_detected,
+        capture_quality_score: result.livenessData.capture_quality_score,
+        best_selfie_storage_path: result.storagePath,
+        liveness_captured_at: result.livenessData.liveness_captured_at,
+        manual_review_required: result.livenessData.manual_review_required,
+        liveness_details: result.livenessData.liveness_details,
+        attempt_count: result.livenessData.attempt_count,
+        device_platform: result.livenessData.device_platform,
+      };
+      const { error: insError } = await supabase.from('provider_documents').insert(insertData);
+      if (insError) throw new Error(`Failed to save document record: ${insError.message}`);
+      setSelfie(prev => ({ ...prev, uploadedUrl: displayUrl, state: 'success', error: null }));
+    } catch (err) {
+      const msg = err instanceof Error && err.message ? err.message : 'Network error. Please check your connection and try again.';
+      setSelfie(prev => ({ ...prev, state: 'failed', error: msg }));
+    }
+  };
+
+  const retryLiveSelfieUpload = () => {
+    if (livenessResult) {
+      completeLiveSelfieUpload(livenessResult);
+    } else {
+      setShowLiveSelfie(true);
     }
   };
 
@@ -553,15 +611,24 @@ export default function ProviderOnboardingScreen() {
   };
 
   const retrySelfie = () => {
-    if (selfie.uri) doSelfieUpload(selfie.uri, getMimeType(selfie.uri));
+    if (livenessResult) {
+      completeLiveSelfieUpload(livenessResult);
+    } else if (selfie.uri) {
+      doSelfieUpload(selfie.uri, getMimeType(selfie.uri));
+    }
   };
 
   const removeSelfie = async () => {
     if (user) {
       await supabase.from('provider_documents').delete()
-        .eq('provider_id', user.id).eq('document_type', 'selfie_with_id');
+        .eq('provider_id', user.id).eq('document_type', 'selfie_with_id')
+        .eq('status', 'pending');
+      await supabase.from('provider_documents').delete()
+        .eq('provider_id', user.id).eq('document_type', 'verification_selfie')
+        .eq('status', 'pending');
     }
     setSelfie({ uri: null, uploadedUrl: null, state: 'idle', error: null });
+    setLivenessResult(null);
   };
 
   const retryValidIdSide = (side: 'front' | 'back') => {
@@ -572,7 +639,8 @@ export default function ProviderOnboardingScreen() {
   const removeValidIdSide = async (side: 'front' | 'back') => {
     if (user) {
       const { error: delError } = await supabase.from('provider_documents').delete()
-        .eq('provider_id', user.id).eq('document_type', 'valid_id').eq('side', side);
+        .eq('provider_id', user.id).eq('document_type', 'valid_id').eq('side', side)
+        .eq('status', 'pending');
       if (delError) throw new Error(`Failed to remove document: ${delError.message}`);
     }
     setValidId(prev => ({
@@ -1020,7 +1088,7 @@ export default function ProviderOnboardingScreen() {
     return (
       <View>
         <Text style={styles.stepHeading}>Verification Documents</Text>
-        <Text style={styles.stepSubheading}>All identity documents must be captured live with your camera. Supporting documents may use camera or gallery.</Text>
+        <Text style={styles.stepSubheading}>Your photos will be automatically checked for quality before they are submitted for review. Supporting documents may use camera or gallery.</Text>
 
 
         {/* --- Section 1: Identity Verification --- */}
@@ -1029,7 +1097,7 @@ export default function ProviderOnboardingScreen() {
             <View style={styles.docSectionIcon}><Ionicons name="card-outline" size={16} color={COLORS.primary} /></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.docSectionTitle}>Identity Verification <Text style={styles.reqBadge}>Required</Text></Text>
-              <Text style={styles.docSectionNote}>Select one Philippine government-issued ID. Front, back, and selfie must be captured with your camera.</Text>
+              <Text style={styles.docSectionNote}>Select one Philippine government-issued ID. Front, back, and verification selfie must be captured with your camera. Before your application is submitted, we'll automatically check that your photos are clear and complete to help speed up the review process.</Text>
             </View>
           </View>
 
@@ -1115,30 +1183,88 @@ export default function ProviderOnboardingScreen() {
               ? <Text style={styles.errorMsg}>{validId.back.error}</Text> : null}
           </View>
 
-          {/* Selfie with ID */}
+          {/* Verification Selfie */}
           <View style={styles.idFieldSection}>
             <View style={styles.idSideLabelRow}>
-              <Text style={styles.idSideLabel}>Upload Selfie With Valid ID</Text>
+              <Text style={styles.idSideLabel}>Verification Selfie</Text>
               <View style={styles.cameraBadge}><Ionicons name="camera" size={10} color={COLORS.white} /><Text style={styles.cameraBadgeText}>Camera Required</Text></View>
             </View>
-            <TouchableOpacity onPress={() => setSampleViewer(require('../../../assets/sample-selfie-id.png'))} activeOpacity={0.8}>
-              <Image source={require('../../../assets/sample-selfie-id.png')} style={styles.sampleThumb} resizeMode="contain" />
-            </TouchableOpacity>
-            <Text style={styles.sampleCaption}>Hold your ID beside your face.</Text>
-            <Text style={styles.sampleTapHint}>Tap image to preview</Text>
-            {['\u2022 Face visible', '\u2022 ID visible', '\u2022 No sunglasses', '\u2022 Camera capture only'].map(r => (
+            <Text style={styles.sampleCaption}>Your selfie will be checked for photo quality and capture completeness.</Text>
+            <Text style={styles.sampleTapHint}>This does not approve your identity — an administrator will review your application.</Text>
+            {['\u2022 Center your face', '\u2022 Blink once', '\u2022 Turn your head slightly left', '\u2022 Turn your head slightly right', '\u2022 Hold still'].map(r => (
               <Text key={r} style={styles.sampleReq}>{r}</Text>
             ))}
-            {renderUploadWidget(
-              selfie.state,
-              selfie.uploadedUrl,
-              pickAndUploadSelfie,
-              retrySelfie,
-              removeSelfie,
-              'Take Selfie',
+            <Text style={styles.sampleReq}>Your selfie will be captured automatically.</Text>
+            {liveSelfieEnabled ? (
+              <View>
+                {selfie.state === 'uploading' ? (
+                  <View style={styles.uploadStateRow}>
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                    <Text style={styles.uploadingText}>Uploading...</Text>
+                  </View>
+                ) : selfie.state === 'success' && selfie.uploadedUrl ? (
+                  renderUploadWidget(
+                    selfie.state,
+                    selfie.uploadedUrl,
+                    () => { removeSelfie(); setShowLiveSelfie(true); },
+                    retryLiveSelfieUpload,
+                    removeSelfie,
+                    'Retake Verification Selfie',
+                  )
+                ) : selfie.state === 'failed' ? (
+                  <View style={styles.uploadFailedBox}>
+                    <View style={styles.uploadFailedRow}>
+                      <Ionicons name="close-circle" size={15} color={COLORS.error} />
+                      <Text style={styles.uploadFailedText}>Upload failed</Text>
+                    </View>
+                    <View style={styles.uploadFailedBtns}>
+                      <TouchableOpacity style={styles.retryBtn} onPress={retryLiveSelfieUpload}>
+                        <Ionicons name="refresh" size={13} color={COLORS.white} />
+                        <Text style={styles.retryBtnText}>Retry</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.replaceBtn} onPress={() => setShowLiveSelfie(true)}>
+                        <Ionicons name="scan-outline" size={13} color={COLORS.primary} />
+                        <Text style={styles.replaceBtnText}>Restart Verification</Text>
+                      </TouchableOpacity>
+                    </View>
+                    {selfie.error ? <Text style={styles.errorMsg}>{selfie.error}</Text> : null}
+                  </View>
+                ) : flagLoading ? (
+                  <View style={styles.uploadStateRow}>
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                    <Text style={styles.uploadingText}>Loading...</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.uploadBtn}
+                    onPress={() => setShowLiveSelfie(true)}
+                  >
+                    <Ionicons name="scan-outline" size={16} color={COLORS.primary} />
+                    <Text style={styles.uploadBtnText}>Start Guided Verification</Text>
+                    <Text style={styles.uploadHint}>Camera · Auto-capture</Text>
+                  </TouchableOpacity>
+                )}
+                {selfie.state === 'success' && selfie.uploadedUrl && livenessResult ? (
+                  <View style={styles.uploadStateRow}>
+                    <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
+                    <Text style={styles.successNote}>Verification Selfie Captured — Your application is now ready for administrator review.</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : (
+              <>
+                {renderUploadWidget(
+                  selfie.state,
+                  selfie.uploadedUrl,
+                  pickAndUploadSelfie,
+                  retrySelfie,
+                  removeSelfie,
+                  'Take Verification Selfie',
+                )}
+                {selfie.state === 'failed' && selfie.error
+                  ? <Text style={styles.errorMsg}>{selfie.error}</Text> : null}
+              </>
             )}
-            {selfie.state === 'failed' && selfie.error
-              ? <Text style={styles.errorMsg}>{selfie.error}</Text> : null}
           </View>
         </View>
 
@@ -1240,7 +1366,7 @@ export default function ProviderOnboardingScreen() {
           {selfie.uploadedUrl && (
             <View style={styles.docCheck}>
               <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
-              <Text style={styles.docCheckText}>Selfie with ID</Text>
+              <Text style={styles.docCheckText}>Verification Selfie</Text>
             </View>
           )}
           {uploadedPermits.map(p => (
@@ -1253,7 +1379,7 @@ export default function ProviderOnboardingScreen() {
         <View style={styles.submitNote}>
           <Ionicons name="information-circle-outline" size={18} color={COLORS.primary} />
           <Text style={styles.submitNoteText}>
-            Your application will be reviewed by our team within 1–3 business days. You'll be notified once approved.
+            Your application will be reviewed by our team within 1–3 business days. The automated checks only help ensure photo quality — final approval is always decided by an administrator.
           </Text>
         </View>
 
@@ -1362,6 +1488,16 @@ export default function ProviderOnboardingScreen() {
       <ProviderVerificationPolicyModal visible={showVerificationPolicy} onClose={() => setShowVerificationPolicy(false)} />
       <TermsOfServiceModal visible={showTerms} onClose={() => setShowTerms(false)} />
       <PrivacyPolicyModal visible={showPrivacy} onClose={() => setShowPrivacy(false)} />
+      <LiveSelfieVerificationScreen
+        visible={showLiveSelfie}
+        userId={user?.id ?? ''}
+        onComplete={(result) => {
+          setLivenessResult(result);
+          setShowLiveSelfie(false);
+          completeLiveSelfieUpload(result);
+        }}
+        onCancel={() => setShowLiveSelfie(false)}
+      />
       <Modal
         visible={sampleViewer !== null}
         transparent
@@ -1508,6 +1644,7 @@ const styles = StyleSheet.create({
   retryBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 5, paddingHorizontal: 10, borderRadius: BORDER_RADIUS.sm, backgroundColor: COLORS.error },
   retryBtnText: { fontSize: 11, fontFamily: FONTS.semiBold, color: COLORS.white },
   errorMsg: { fontSize: FONTS.sizes.xs, color: COLORS.error, marginTop: 4, lineHeight: 16 },
+  successNote: { fontSize: FONTS.sizes.xs, color: COLORS.success, fontFamily: FONTS.medium, flex: 1, lineHeight: 16 },
   // Permit checklist
   permitRow: { borderRadius: BORDER_RADIUS.md, borderWidth: 1, borderColor: COLORS.border, marginBottom: SPACING.sm, overflow: 'hidden' },
   permitRowChecked: { borderColor: COLORS.primary },

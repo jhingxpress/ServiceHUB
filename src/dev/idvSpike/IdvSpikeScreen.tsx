@@ -91,11 +91,10 @@ export default function IdvSpikeScreen() {
     landmarkMode: 'none',
     contourMode: 'none',
     trackingEnabled: false,
-    autoMode: false, // we normalize by frame dims, not screen dims
-    cameraFacing: 'front',
+    autoScale: false, // we normalize by frame dims, not screen dims
   }).current;
 
-  const { detectFaces, stopListeners } = useFaceDetector(faceDetectionOptions);
+  const { detectFaces } = useFaceDetector(faceDetectionOptions);
 
   // Request permission on mount.
   useEffect(() => {
@@ -114,14 +113,10 @@ export default function IdvSpikeScreen() {
     return () => sub.remove();
   }, []);
 
-  // Release camera on unmount + stop face detector orientation listeners.
+  // Release camera on unmount.
   useEffect(() => {
-    return () => {
-      setIsActive(false);
-      // stopListeners is required on Android to release the orientation listener.
-      if (typeof stopListeners === 'function') stopListeners();
-    };
-  }, [stopListeners]);
+    return () => setIsActive(false);
+  }, []);
 
   const takeBestPhoto = useCallback(async () => {
     if (capturingRef.current) return;
@@ -164,8 +159,10 @@ export default function IdvSpikeScreen() {
             const centerX = frameWidth > 0 ? (b.x + b.width / 2) / frameWidth : null;
             const centerY = frameHeight > 0 ? (b.y + b.height / 2) / frameHeight : null;
             const sizeRatio = frameWidth > 0 ? b.width / frameWidth : null;
+            const heightRatio = frameHeight > 0 ? b.height / frameHeight : null;
             const rawYaw = typeof f.yawAngle === 'number' ? f.yawAngle : 0;
-            const yaw = cfg.invertYaw ? -rawYaw : rawYaw;
+            const rawPitch = typeof f.pitchAngle === 'number' ? f.pitchAngle : 0;
+            const rawRoll = typeof f.rollAngle === 'number' ? f.rollAngle : 0;
             const le = typeof f.leftEyeOpenProbability === 'number' ? f.leftEyeOpenProbability : -1;
             const re = typeof f.rightEyeOpenProbability === 'number' ? f.rightEyeOpenProbability : -1;
 
@@ -174,21 +171,27 @@ export default function IdvSpikeScreen() {
               centerX,
               centerY,
               sizeRatio,
+              heightRatio,
               leftEyeOpen: le,
               rightEyeOpen: re,
-              yaw,
+              yaw: rawYaw,
+              pitch: rawPitch,
+              roll: rawRoll,
               timestamp: now,
             };
-            setLive({ faces: count, yaw: Math.round(yaw), le, re });
+            setLive({ faces: count, yaw: Math.round(rawYaw), le, re });
           } else {
             sample = {
               faceCount: 0,
               centerX: null,
               centerY: null,
               sizeRatio: null,
+              heightRatio: null,
               leftEyeOpen: -1,
               rightEyeOpen: -1,
               yaw: 0,
+              pitch: 0,
+              roll: 0,
               timestamp: now,
             };
             setLive({ faces: 0, yaw: 0, le: -1, re: -1 });

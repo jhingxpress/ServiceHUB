@@ -9,9 +9,15 @@
  *
  * NOTE on yaw sign: ML Kit reports yaw (Euler Y) in degrees. With the FRONT
  * camera the preview is mirrored, so the sign of a "left" vs "right" turn can
- * appear inverted depending on device/orientation. Thresholds below are written
- * for the common case; if left/right feel swapped on your device, flip
+ * appear inverted depending on device/orientation. The state machine applies
+ * `invertYaw` internally via `normalizeYaw()` — FaceSample.yaw should be the
+ * RAW detector value. If left/right feel swapped on your device, flip
  * `invertYaw` to true rather than editing the thresholds.
+ *
+ * Normalized yaw convention (after invertYaw is applied):
+ *   negative = logical LEFT turn
+ *   positive = logical RIGHT turn
+ *   ~0       = neutral / facing forward
  */
 
 export interface SpikeThresholds {
@@ -27,6 +33,23 @@ export interface SpikeThresholds {
   minFaceSizeRatio: number;
   /** Maximum face width as a fraction of frame width (avoid too-close). */
   maxFaceSizeRatio: number;
+  /** Minimum face height as a fraction of frame height (rejects distant/poorly-framed faces). */
+  minFaceHeightRatio: number;
+  /** Maximum face height as a fraction of frame height (rejects too-close faces). */
+  maxFaceHeightRatio: number;
+
+  /**
+   * Maximum absolute pitch angle (degrees) allowed during positioning and hold-still.
+   * ML Kit convention: positive = face tilted up (looking up); negative = tilted down.
+   * Applied only during positioning and hold_still — not during turn steps.
+   */
+  maxPitchAngle: number;
+  /**
+   * Maximum absolute roll angle (degrees) allowed during positioning and hold-still.
+   * Roll is in-plane head tilt (phone not held level or head cocked sideways).
+   * Applied only during positioning and hold_still — not during turn steps.
+   */
+  maxRollAngle: number;
 
   /** Eye-open probability at/above which an eye is considered OPEN. */
   eyeOpenThreshold: number;
@@ -64,8 +87,13 @@ export const SPIKE_THRESHOLDS: SpikeThresholds = {
   faceCenteredToleranceX: 0.22,
   faceCenteredToleranceY: 0.24,
 
-  minFaceSizeRatio: 0.22,
-  maxFaceSizeRatio: 0.95,
+  minFaceSizeRatio: 0.32,
+  maxFaceSizeRatio: 0.55,
+  minFaceHeightRatio: 0.35,
+  maxFaceHeightRatio: 0.80,
+
+  maxPitchAngle: 15,
+  maxRollAngle: 12,
 
   eyeOpenThreshold: 0.6,
   eyeClosedThreshold: 0.35,

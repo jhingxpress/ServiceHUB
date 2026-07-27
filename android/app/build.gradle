@@ -114,8 +114,8 @@ android {
         applicationId 'com.servicehub.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 12
-        versionName "1.0.12"
+        versionCode 13
+        versionName "1.0.13"
     }
     signingConfigs {
         debug {
@@ -124,15 +124,38 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            def releaseStoreFile     = findProperty('SERVICEHUB_RELEASE_STORE_FILE')
+            def releaseKeyAlias      = findProperty('SERVICEHUB_RELEASE_KEY_ALIAS')
+            def releaseStorePassword = findProperty('SERVICEHUB_RELEASE_STORE_PASSWORD')
+            def releaseKeyPassword   = findProperty('SERVICEHUB_RELEASE_KEY_PASSWORD')
+
+            if (!releaseStoreFile || !releaseKeyAlias || !releaseStorePassword || !releaseKeyPassword) {
+                throw new GradleException(
+                    "\n" +
+                    "=== MISSING RELEASE SIGNING PROPERTIES ===\n" +
+                    "Add the following four entries to ~/.gradle/gradle.properties\n" +
+                    "(do NOT add them to the repository):\n" +
+                    "  SERVICEHUB_RELEASE_STORE_FILE\n" +
+                    "  SERVICEHUB_RELEASE_KEY_ALIAS\n" +
+                    "  SERVICEHUB_RELEASE_STORE_PASSWORD\n" +
+                    "  SERVICEHUB_RELEASE_KEY_PASSWORD\n" +
+                    "==========================================\n"
+                )
+            }
+
+            storeFile     file(releaseStoreFile)
+            storePassword releaseStorePassword
+            keyAlias      releaseKeyAlias
+            keyPassword   releaseKeyPassword
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"

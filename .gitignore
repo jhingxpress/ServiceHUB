@@ -50,3 +50,8 @@ reports/beta-reset/backup-*.sql
 # Keep permanent documentation
 !reports/beta-reset/DATABASE_AUDIT_REPORT.md
 !reports/beta-reset/POST_RESET_SAFETY_AUDIT.md
+
+# Android signing — never commit keystores or signing properties
+*.keystore
+keystore.properties
+release-signing.properties

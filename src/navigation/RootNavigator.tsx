@@ -13,7 +13,6 @@ import ProfileCompletionScreen from '../screens/auth/ProfileCompletionScreen';
 import EmailVerifiedScreen from '../screens/auth/EmailVerifiedScreen';
 import ResetPasswordScreen from '../screens/auth/ResetPasswordScreen';
 import StaffChangePasswordScreen from '../screens/auth/StaffChangePasswordScreen';
-import { debugLogger } from '../services/debugLogger';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -41,33 +40,6 @@ export default function RootNavigator() {
   const profileComplete = isProfileComplete(user);
   const isStaffRole = isStaff(user?.role);
 
-  const decision = {
-    isInitialized,
-    isAuthenticating,
-    hasUser: !!user,
-    userId: user?.id ?? null,
-    email: user?.email ?? null,
-    role: user?.role ?? null,
-    mustChangePassword: user?.must_change_password ?? null,
-    isStaffRole,
-    emailVerified: user?.email_verified ?? null,
-    acceptedTerms: user?.accepted_terms_at ?? null,
-    profileComplete,
-    emailJustVerified,
-    passwordResetMode,
-    storeMustChangePassword: mustChangePassword,
-  };
-
-  console.log('[ROOT DECISION]', decision);
-  debugLogger.log('RootNavigator_decision', decision);
-  console.log('[ROOT DIAGNOSTIC]', {
-    role: user?.role,
-    must_change_password: user?.must_change_password,
-    isStaffRole,
-    isProfileComplete: profileComplete,
-    selectedRootRoute: null,
-  });
-
   let screenName = '';
   if (passwordResetMode) {
     screenName = 'ResetPasswordScreen';
@@ -88,17 +60,6 @@ export default function RootNavigator() {
   } else {
     screenName = 'AdminNavigator';
   }
-
-  console.log('[ROOT DIAGNOSTIC]', {
-    role: user?.role,
-    must_change_password: user?.must_change_password,
-    isStaffRole,
-    isProfileComplete: profileComplete,
-    selectedRootRoute: screenName,
-  });
-
-  debugLogger.log('RootNavigator_screen', { screen: screenName });
-  console.log('[ROOT SCREEN]', screenName);
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>

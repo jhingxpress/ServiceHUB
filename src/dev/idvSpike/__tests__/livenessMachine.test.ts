@@ -3,6 +3,7 @@ import {
   createInitialState,
   FaceSample,
   LivenessState,
+  normalizeYaw,
   scoreFrame,
 } from '../livenessMachine';
 import { SPIKE_THRESHOLDS, SpikeThresholds } from '../spikeConfig';
@@ -310,23 +311,206 @@ describe('livenessMachine', () => {
     });
   });
 
-  describe('invertYaw', () => {
-    it('left and right are swapped when invertYaw is true', () => {
-      const invCfg: SpikeThresholds = { ...cfg, invertYaw: true };
-      const state0 = createInitialState(1000);
-      const s1 = advance(state0, makeFaceSample(), invCfg, 1000); // → blink
-      const s2 = advance(s1, makeFaceSample({ leftEyeOpen: 0.9, rightEyeOpen: 0.9 }), invCfg, 1100);
-      const s3 = advance(s2, makeFaceSample({ leftEyeOpen: 0.2, rightEyeOpen: 0.2 }), invCfg, 1200);
-      const s4 = advance(s3, makeFaceSample({ leftEyeOpen: 0.9, rightEyeOpen: 0.9 }), invCfg, 1300); // → turn_left
+  describe('normalizeYaw', () => {
+    it('returns raw yaw when invertYaw is false', () => {
+      expect(normalizeYaw(15, false)).toBe(15);
+      expect(normalizeYaw(-15, false)).toBe(-15);
+    });
 
-      // With invertYaw, a raw yaw of +15 becomes -15, which is a LEFT turn
-      const s5 = advance(s4, makeFaceSample({ yaw: 15 }), invCfg, 1400);
+    it('flips sign when invertYaw is true', () => {
+      expect(normalizeYaw(15, true)).toBe(-15);
+      expect(normalizeYaw(-15, true)).toBe(15);
+    });
+
+    it('leaves zero unchanged', () => {
+      expect(normalizeYaw(0, false)).toBe(0);
+      expect(normalizeYaw(0, true)).toBe(0);
+    });
+  });
+
+  describe('invertYaw = false (default)', () => {
+    it('raw negative yaw = logical LEFT turn', () => {
+      const state0 = createInitialState(1000);
+      const s1 = advance(state0, makeFaceSample(), cfg, 1000);
+      const s2 = advance(s1, makeFaceSample({ leftEyeOpen: 0.9, rightEyeOpen: 0.9 }), cfg, 1100);
+      const s3 = advance(s2, makeFaceSample({ leftEyeOpen: 0.2, rightEyeOpen: 0.2 }), cfg, 1200);
+      const s4 = advance(s3, makeFaceSample({ leftEyeOpen: 0.9, rightEyeOpen: 0.9 }), cfg, 1300);
+
+      const s5 = advance(s4, makeFaceSample({ yaw: -15 }), cfg, 1400);
       expect(s5.step).toBe('turn_left');
       expect(s5.turnHold).toBe(1);
 
-      const s6 = advance(s5, makeFaceSample({ yaw: 15 }), invCfg, 1500);
+      const s6 = advance(s5, makeFaceSample({ yaw: -15 }), cfg, 1500);
       expect(s6.step).toBe('turn_right');
       expect(s6.checks.leftTurn).toBe(true);
+    });
+
+    it('raw positive yaw = logical RIGHT turn (after left + neutral)', () => {
+      const state0 = createInitialState(1000);
+      const s1 = advance(state0, makeFaceSample(), cfg, 1000);
+      const s2 = advance(s1, makeFaceSample({ leftEyeOpen: 0.9, rightEyeOpen: 0.9 }), cfg, 1100);
+      const s3 = advance(s2, makeFaceSample({ leftEyeOpen: 0.2, rightEyeOpen: 0.2 }), cfg, 1200);
+      const s4 = advance(s3, makeFaceSample({ leftEyeOpen: 0.9, rightEyeOpen: 0.9 }), cfg, 1300);
+      const s5 = advance(s4, makeFaceSample({ yaw: -15 }), cfg, 1400);
+      const s6 = advance(s5, makeFaceSample({ yaw: -15 }), cfg, 1500);
+      const s7 = advance(s6, makeFaceSample({ yaw: 0 }), cfg, 1600);
+
+      const s8 = advance(s7, makeFaceSample({ yaw: 15 }), cfg, 1700);
+      expect(s8.step).toBe('turn_right');
+      expect(s8.turnHold).toBe(1);
+
+      const s9 = advance(s8, makeFaceSample({ yaw: 15 }), cfg, 1800);
+      expect(s9.step).toBe('hold_still');
+      expect(s9.checks.rightTurn).toBe(true);
+    });
+  });
+
+  describe('invertYaw = true', () => {
+    const invCfg: SpikeThresholds = { ...cfg, invertYaw: true };
+
+    function reachTurnLeftInv(): LivenessState {
+      const s0 = createInitialState(1000);
+      const s1 = advance(s0, makeFaceSample(), invCfg, 1000);
+      const s2 = advance(s1, makeFaceSample({ leftEyeOpen: 0.9, rightEyeOpen: 0.9 }), invCfg, 1100);
+      const s3 = advance(s2, makeFaceSample({ leftEyeOpen: 0.2, rightEyeOpen: 0.2 }), invCfg, 1200);
+      const s4 = advance(s3, makeFaceSample({ leftEyeOpen: 0.9, rightEyeOpen: 0.9 }), invCfg, 1300);
+      return s4;
+    }
+
+    it('raw positive yaw = logical LEFT turn (inverted)', () => {
+      let state = reachTurnLeftInv();
+      expect(state.step).toBe('turn_left');
+
+      // raw +15 → normalized -15 → logical LEFT
+      state = advance(state, makeFaceSample({ yaw: 15 }), invCfg, 1400);
+      expect(state.step).toBe('turn_left');
+      expect(state.turnHold).toBe(1);
+
+      state = advance(state, makeFaceSample({ yaw: 15 }), invCfg, 1500);
+      expect(state.step).toBe('turn_right');
+      expect(state.checks.leftTurn).toBe(true);
+    });
+
+    it('raw negative yaw = logical RIGHT turn (inverted, after left + neutral)', () => {
+      let state = reachTurnLeftInv();
+
+      // Complete left turn with raw +15 (inverted to -15)
+      state = advance(state, makeFaceSample({ yaw: 15 }), invCfg, 1400);
+      state = advance(state, makeFaceSample({ yaw: 15 }), invCfg, 1500);
+      expect(state.step).toBe('turn_right');
+      expect(state.awaitingNeutral).toBe(true);
+
+      // Return to neutral (raw 0 → normalized 0)
+      state = advance(state, makeFaceSample({ yaw: 0 }), invCfg, 1600);
+      expect(state.awaitingNeutral).toBe(false);
+
+      // raw -15 → normalized +15 → logical RIGHT
+      state = advance(state, makeFaceSample({ yaw: -15 }), invCfg, 1700);
+      expect(state.step).toBe('turn_right');
+      expect(state.turnHold).toBe(1);
+
+      state = advance(state, makeFaceSample({ yaw: -15 }), invCfg, 1800);
+      expect(state.step).toBe('hold_still');
+      expect(state.checks.rightTurn).toBe(true);
+    });
+
+    it('neutral requirement between turns is enforced under inversion', () => {
+      let state = reachTurnLeftInv();
+
+      // Complete left turn
+      state = advance(state, makeFaceSample({ yaw: 15 }), invCfg, 1400);
+      state = advance(state, makeFaceSample({ yaw: 15 }), invCfg, 1500);
+      expect(state.awaitingNeutral).toBe(true);
+
+      // Right yaw (raw -15) while awaiting neutral should NOT count
+      state = advance(state, makeFaceSample({ yaw: -15 }), invCfg, 1600);
+      expect(state.step).toBe('turn_right');
+      expect(state.awaitingNeutral).toBe(true);
+      expect(state.turnHold).toBe(0);
+
+      // Neutral clears the flag
+      state = advance(state, makeFaceSample({ yaw: 0 }), invCfg, 1700);
+      expect(state.awaitingNeutral).toBe(false);
+
+      // Now right yaw counts
+      state = advance(state, makeFaceSample({ yaw: -15 }), invCfg, 1800);
+      expect(state.turnHold).toBe(1);
+    });
+
+    it('positioning neutral-yaw check works under inversion', () => {
+      // raw yaw 0 → normalized 0 → neutral → passes positioning
+      const s1 = advance(createInitialState(1000), makeFaceSample({ yaw: 0 }), invCfg, 1000);
+      expect(s1.step).toBe('blink');
+
+      // raw yaw +20 → normalized -20 → NOT neutral → stays at positioning
+      const s2 = advance(createInitialState(1000), makeFaceSample({ yaw: 20 }), invCfg, 1000);
+      expect(s2.step).toBe('positioning');
+
+      // raw yaw -20 → normalized +20 → NOT neutral → stays at positioning
+      const s3 = advance(createInitialState(1000), makeFaceSample({ yaw: -20 }), invCfg, 1000);
+      expect(s3.step).toBe('positioning');
+    });
+
+    it('hold-still neutral-yaw check works under inversion', () => {
+      // Reach hold_still using inverted yaw values
+      let state = reachTurnLeftInv();
+      state = advance(state, makeFaceSample({ yaw: 15 }), invCfg, 1400);  // logical left
+      state = advance(state, makeFaceSample({ yaw: 15 }), invCfg, 1500);  // → turn_right
+      state = advance(state, makeFaceSample({ yaw: 0 }), invCfg, 1600);   // neutral
+      state = advance(state, makeFaceSample({ yaw: -15 }), invCfg, 1700); // logical right
+      state = advance(state, makeFaceSample({ yaw: -15 }), invCfg, 1800); // → hold_still
+      expect(state.step).toBe('hold_still');
+
+      // Stable with raw yaw 0 (normalized 0) — should start hold timer
+      state = advance(state, makeFaceSample({ yaw: 0, timestamp: 2000 }), invCfg, 2000);
+      expect(state.holdStillStartedAt).toBe(2000);
+
+      // Unstable with raw yaw +20 (normalized -20) — should reset
+      state = advance(state, makeFaceSample({ yaw: 20, timestamp: 2100 }), invCfg, 2100);
+      expect(state.holdStillStartedAt).toBe(null);
+      expect(state.step).toBe('hold_still');
+
+      // Stable again and hold for duration → captured
+      state = advance(state, makeFaceSample({ yaw: 0, timestamp: 2200 }), invCfg, 2200);
+      expect(state.holdStillStartedAt).toBe(2200);
+      state = advance(state, makeFaceSample({ yaw: 0, timestamp: 2910 }), invCfg, 2910);
+      expect(state.step).toBe('captured');
+      expect(state.shouldCapture).toBe(true);
+    });
+
+    it('full happy-path sequence works end-to-end with invertYaw', () => {
+      const samples: FaceSample[] = [
+        // positioning (raw 0 → neutral)
+        makeFaceSample({ yaw: 0, timestamp: 1000 }),
+        // blink: open → closed → open
+        makeFaceSample({ leftEyeOpen: 0.9, rightEyeOpen: 0.9, timestamp: 1100 }),
+        makeFaceSample({ leftEyeOpen: 0.2, rightEyeOpen: 0.2, timestamp: 1200 }),
+        makeFaceSample({ leftEyeOpen: 0.9, rightEyeOpen: 0.9, timestamp: 1300 }),
+        // logical turn left: raw +15 → normalized -15
+        makeFaceSample({ yaw: 15, timestamp: 1400 }),
+        makeFaceSample({ yaw: 15, timestamp: 1500 }),
+        // return to neutral: raw 0
+        makeFaceSample({ yaw: 0, timestamp: 1600 }),
+        // logical turn right: raw -15 → normalized +15
+        makeFaceSample({ yaw: -15, timestamp: 1700 }),
+        makeFaceSample({ yaw: -15, timestamp: 1800 }),
+        // hold still (stable for 700ms)
+        makeFaceSample({ yaw: 0, timestamp: 2000 }),
+        makeFaceSample({ yaw: 0, timestamp: 2500 }),
+        makeFaceSample({ yaw: 0, timestamp: 2710 }),
+      ];
+
+      let state = createInitialState(1000);
+      for (const s of samples) {
+        state = advance(state, s, invCfg, s.timestamp);
+      }
+      expect(state.step).toBe('captured');
+      expect(state.shouldCapture).toBe(true);
+      expect(state.checks.faceDetected).toBe(true);
+      expect(state.checks.blink).toBe(true);
+      expect(state.checks.leftTurn).toBe(true);
+      expect(state.checks.rightTurn).toBe(true);
+      expect(state.bestScore).toBeGreaterThan(0);
     });
   });
 

@@ -7,6 +7,7 @@ export type DocumentSide = 'front' | 'back';
 export type DocumentType =
   | 'valid_id'
   | 'government_id'
+  | 'verification_selfie'
   | 'barangay_clearance'
   | 'police_clearance'
   | 'nbi_clearance'
@@ -19,7 +20,6 @@ export type DocumentType =
   | 'prc_license'
   | 'employment_certificate'
   | 'professional_cert'
-  | 'selfie_with_id'
   | 'other_supporting';
 export type ProviderType = 'individual' | 'business';
 export type MarketplaceStatus = 'live' | 'hidden';
@@ -257,6 +257,19 @@ export interface ProviderDocument {
   uploaded_at: string;
   reviewed_at: string | null;
   reviewed_by: string | null;
+  // Phase 2C verification fields (nullable, additive)
+  verification_mode?: 'legacy_manual' | 'live_liveness' | 'manual_review' | null;
+  liveness_status?: 'passed' | 'manual_review' | 'failed' | 'skipped' | null;
+  blink_detected?: boolean | null;
+  left_turn_detected?: boolean | null;
+  right_turn_detected?: boolean | null;
+  capture_quality_score?: number | null;
+  best_selfie_storage_path?: string | null;
+  liveness_captured_at?: string | null;
+  manual_review_required?: boolean | null;
+  liveness_details?: Record<string, unknown> | null;
+  attempt_count?: number | null;
+  device_platform?: string | null;
 }
 
 export interface ProviderVerificationLog {

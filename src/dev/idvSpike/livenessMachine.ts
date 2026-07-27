@@ -3,14 +3,28 @@
  *
  * ISOLATED DEV SPIKE ONLY.
  *
- * This module contains NO native dependencies. It consumes normalized face
- * samples (produced on the JS thread from the ML Kit frame processor) and
- * advances a deterministic liveness sequence:
+ * This module contains NO native dependencies. It consumes face samples
+ * (produced on the JS thread from the ML Kit frame processor) and advances
+ * a deterministic liveness sequence:
  *
  *   positioning → blink → turn_left → turn_right → hold_still → captured
  *
  * Keeping this logic pure means it can be unit-tested on CI without a device
  * or camera, and reused unchanged when the feature is integrated in Phase 3.
+ *
+ * YAW CONVENTION:
+ *   FaceSample.yaw is the RAW yaw from the detector (before inversion).
+ *   The state machine applies `cfg.invertYaw` internally via `normalizeYaw()`
+ *   exactly once per sample, then uses the normalized value consistently.
+ *
+ *   Normalized yaw convention:
+ *     negative = logical LEFT turn
+ *     positive = logical RIGHT turn
+ *     ~0       = neutral / facing forward
+ *
+ *   When `invertYaw` is true, the raw sign is flipped so that a physical
+ *   left turn (which may report as positive on some front-camera devices)
+ *   is treated as negative (logical left) by the state machine.
  */
 
 import {
@@ -28,12 +42,25 @@ export interface FaceSample {
   centerY: number | null;
   /** Face width as a fraction of frame width (0..1), or null if no face. */
   sizeRatio: number | null;
+  /** Face height as a fraction of frame height (0..1), or null if unavailable. */
+  heightRatio: number | null;
   /** Left eye open probability (0..1), or -1 if unavailable. */
   leftEyeOpen: number;
   /** Right eye open probability (0..1), or -1 if unavailable. */
   rightEyeOpen: number;
-  /** Yaw angle in degrees AFTER inversion normalization (left negative). */
+  /** Raw yaw angle in degrees from the detector (before inversion). */
   yaw: number;
+  /**
+   * Raw pitch angle in degrees from the detector.
+   * ML Kit convention: positive = face tilted up (looking up); negative = tilted down.
+   * 0 when unavailable.
+   */
+  pitch: number;
+  /**
+   * Raw roll angle in degrees from the detector (in-plane head tilt).
+   * 0 when unavailable.
+   */
+  roll: number;
   /** Monotonic timestamp in ms. */
   timestamp: number;
 }
@@ -123,19 +150,51 @@ function lightingOk(s: FaceSample): boolean {
   return s.leftEyeOpen >= 0 && s.rightEyeOpen >= 0;
 }
 
-function neutralYaw(s: FaceSample, cfg: SpikeThresholds): boolean {
-  return Math.abs(s.yaw) <= cfg.neutralYawTolerance;
+function neutralYaw(yaw: number, cfg: SpikeThresholds): boolean {
+  return Math.abs(yaw) <= cfg.neutralYawTolerance;
 }
 
-/** Best-frame score: rewards centered, eyes-open, neutral, well-sized single face. */
+function heightOk(s: FaceSample, cfg: SpikeThresholds): boolean {
+  if (s.heightRatio == null) return true; // unavailable → skip check
+  return s.heightRatio >= cfg.minFaceHeightRatio && s.heightRatio <= cfg.maxFaceHeightRatio;
+}
+
+function pitchOk(s: FaceSample, cfg: SpikeThresholds): boolean {
+  return Math.abs(s.pitch) <= cfg.maxPitchAngle;
+}
+
+function rollOk(s: FaceSample, cfg: SpikeThresholds): boolean {
+  return Math.abs(s.roll) <= cfg.maxRollAngle;
+}
+
+/**
+ * Normalize raw yaw using the invertYaw flag.
+ * Returns yaw where negative = logical LEFT, positive = logical RIGHT.
+ */
+export function normalizeYaw(rawYaw: number, invertYaw: boolean): number {
+  const result = invertYaw ? -rawYaw : rawYaw;
+  return result === 0 ? 0 : result; // normalize -0 to +0
+}
+
+/** Best-frame score: rewards centered, eyes-open, neutral yaw/pitch/roll, well-sized single face. */
 export function scoreFrame(s: FaceSample, cfg: SpikeThresholds): number {
   if (!singleFace(s) || s.centerX == null || s.sizeRatio == null) return 0;
+  const ny = normalizeYaw(s.yaw, cfg.invertYaw);
   const centerScore = 1 - Math.min(1, Math.hypot(s.centerX - 0.5, (s.centerY ?? 0.5) - 0.5) * 2);
   const eyeScore = Math.max(0, Math.min(1, (s.leftEyeOpen + s.rightEyeOpen) / 2));
-  const yawScore = 1 - Math.min(1, Math.abs(s.yaw) / 45);
-  const sizeMid = (cfg.minFaceSizeRatio + cfg.maxFaceSizeRatio) / 2;
-  const sizeScore = 1 - Math.min(1, Math.abs(s.sizeRatio - sizeMid) / sizeMid);
-  return centerScore * 0.35 + eyeScore * 0.3 + yawScore * 0.2 + sizeScore * 0.15;
+  const yawScore   = 1 - Math.min(1, Math.abs(ny) / 45);
+  const sizeMid    = (cfg.minFaceSizeRatio + cfg.maxFaceSizeRatio) / 2;
+  const sizeScore  = 1 - Math.min(1, Math.abs(s.sizeRatio - sizeMid) / sizeMid);
+  const pitchScore = 1 - Math.min(1, Math.abs(s.pitch) / cfg.maxPitchAngle);
+  const rollScore  = 1 - Math.min(1, Math.abs(s.roll) / cfg.maxRollAngle);
+  return (
+    centerScore * 0.30 +
+    eyeScore    * 0.25 +
+    yawScore    * 0.20 +
+    sizeScore   * 0.10 +
+    pitchScore  * 0.10 +
+    rollScore   * 0.05
+  );
 }
 
 /**
@@ -160,6 +219,9 @@ export function advance(
 
   const state: LivenessState = { ...prev, checks: { ...prev.checks }, shouldCapture: false };
 
+  // Normalize yaw once: negative = logical LEFT, positive = logical RIGHT.
+  const ny = normalizeYaw(s.yaw, cfg.invertYaw);
+
   // Require a single, well-lit face for any progress; otherwise coach the user.
   if (!singleFace(s)) {
     state.hint = s.faceCount > 1 ? 'Only one person should be visible' : 'Center your face';
@@ -177,11 +239,45 @@ export function advance(
 
   switch (state.step) {
     case 'positioning': {
-      const ok = centered(s, cfg) && sizeOk(s, cfg) && neutralYaw(s, cfg) && state.checks.lighting;
+      const ok =
+        centered(s, cfg) &&
+        sizeOk(s, cfg) &&
+        heightOk(s, cfg) &&
+        neutralYaw(ny, cfg) &&
+        pitchOk(s, cfg) &&
+        rollOk(s, cfg) &&
+        state.checks.lighting;
       if (!ok) {
-        if (s.sizeRatio != null && s.sizeRatio < cfg.minFaceSizeRatio) state.hint = 'Move closer';
-        else if (s.sizeRatio != null && s.sizeRatio > cfg.maxFaceSizeRatio) state.hint = 'Move farther away';
-        else if (!centered(s, cfg)) state.hint = 'Center your face';
+        if (s.sizeRatio != null && s.sizeRatio < cfg.minFaceSizeRatio) {
+          state.hint = 'Move closer to the camera.';
+        } else if (s.sizeRatio != null && s.sizeRatio > cfg.maxFaceSizeRatio) {
+          state.hint = 'Move slightly farther away.';
+        } else if (s.heightRatio != null && s.heightRatio < cfg.minFaceHeightRatio) {
+          state.hint = 'Move closer to the camera.';
+        } else if (s.heightRatio != null && s.heightRatio > cfg.maxFaceHeightRatio) {
+          state.hint = 'Move slightly farther away.';
+        } else if (!pitchOk(s, cfg)) {
+          // Unified pitch guidance — direction-neutral to avoid guessing the ML Kit sign.
+          // ML Kit convention: +pitch = face tilted up; -pitch = tilted down.
+          // Verify on-device; swap condition to directional if sign is confirmed.
+          state.hint = 'Hold your phone at eye level.';
+        } else if (!rollOk(s, cfg)) {
+          state.hint = 'Keep your head level.';
+        } else if (!centered(s, cfg)) {
+          // Directional hints assume mirrored front-camera preview (standard Android).
+          // If left/right feels reversed on device, swap the X conditions.
+          if (s.centerX != null && s.centerX < 0.5 - cfg.faceCenteredToleranceX) {
+            state.hint = 'Move slightly left.';
+          } else if (s.centerX != null && s.centerX > 0.5 + cfg.faceCenteredToleranceX) {
+            state.hint = 'Move slightly right.';
+          } else if (s.centerY != null && s.centerY < 0.5 - cfg.faceCenteredToleranceY) {
+            state.hint = 'Raise your phone slightly.';
+          } else if (s.centerY != null && s.centerY > 0.5 + cfg.faceCenteredToleranceY) {
+            state.hint = 'Lower your phone slightly.';
+          } else {
+            state.hint = 'Center your face.';
+          }
+        }
         break;
       }
       state.checks.faceDetected = true;
@@ -221,7 +317,7 @@ export function advance(
     }
 
     case 'turn_left': {
-      const yawForLeft = s.yaw <= -cfg.leftYawThreshold;
+      const yawForLeft = ny <= -cfg.leftYawThreshold;
       if (yawForLeft) {
         state.turnHold += 1;
         if (state.turnHold >= cfg.turnConfirmFrames) {
@@ -238,10 +334,14 @@ export function advance(
 
     case 'turn_right': {
       if (state.awaitingNeutral) {
-        if (neutralYaw(s, cfg)) state.awaitingNeutral = false;
+        state.hint = 'Return to center';
+        if (neutralYaw(ny, cfg)) {
+          state.awaitingNeutral = false;
+          state.hint = null;
+        }
         break;
       }
-      const yawForRight = s.yaw >= cfg.rightYawThreshold;
+      const yawForRight = ny >= cfg.rightYawThreshold;
       if (yawForRight) {
         state.turnHold += 1;
         if (state.turnHold >= cfg.turnConfirmFrames) {
@@ -259,10 +359,24 @@ export function advance(
 
     case 'hold_still': {
       const stable =
-        centered(s, cfg) && sizeOk(s, cfg) && neutralYaw(s, cfg) && eyesOpen(s, cfg);
+        centered(s, cfg) &&
+        sizeOk(s, cfg) &&
+        heightOk(s, cfg) &&
+        neutralYaw(ny, cfg) &&
+        eyesOpen(s, cfg) &&
+        pitchOk(s, cfg) &&
+        rollOk(s, cfg);
       if (!stable) {
         state.holdStillStartedAt = null;
-        state.hint = neutralYaw(s, cfg) ? 'Hold still' : 'Face forward and hold still';
+        if (!pitchOk(s, cfg)) {
+          state.hint = 'Hold your phone at eye level.';
+        } else if (!rollOk(s, cfg)) {
+          state.hint = 'Keep your head level.';
+        } else if (!neutralYaw(ny, cfg)) {
+          state.hint = 'Face forward and hold still.';
+        } else {
+          state.hint = 'Hold still.';
+        }
         break;
       }
       if (state.holdStillStartedAt == null) state.holdStillStartedAt = now;

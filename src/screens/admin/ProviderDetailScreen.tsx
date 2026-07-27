@@ -71,6 +71,16 @@ interface DocRecord {
   file_url: string;
   status: string;
   uploaded_at: string;
+  liveness_status?: string | null;
+  verification_mode?: string | null;
+  blink_detected?: boolean | null;
+  left_turn_detected?: boolean | null;
+  right_turn_detected?: boolean | null;
+  capture_quality_score?: number | null;
+  manual_review_required?: boolean | null;
+  liveness_captured_at?: string | null;
+  attempt_count?: number | null;
+  device_platform?: string | null;
 }
 
 interface FeaturedPaymentRecord {
@@ -96,6 +106,7 @@ interface LogEntry {
 const DOC_LABELS: Record<string, string> = {
   valid_id: 'Valid ID',
   government_id: 'Government ID',
+  verification_selfie: 'Verification Selfie',
   barangay_clearance: 'Barangay Clearance',
   business_permit: 'Business Permit',
   dti_registration: 'DTI Registration',
@@ -121,7 +132,7 @@ const ID_TYPE_LABELS: Record<string, string> = {
 const KYC_DOC_TYPE_MAP: Record<string, { document_type: string; category_type: string; side: string | null }> = {
   gov_id_front: { document_type: 'valid_id', category_type: 'valid_id', side: 'front' },
   gov_id_back: { document_type: 'valid_id', category_type: 'valid_id', side: 'back' },
-  selfie_with_id: { document_type: 'selfie_with_id', category_type: 'valid_id', side: null },
+  selfie_with_id: { document_type: 'verification_selfie', category_type: 'valid_id', side: null },
   business_permit: { document_type: 'business_permit', category_type: 'business_permit', side: null },
   certifications: { document_type: 'other_supporting', category_type: 'other_supporting', side: null },
 };
@@ -755,7 +766,7 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
           <View style={styles.verifyChecklstRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.verifyChecklstSub}>Required</Text>
-              {['Government ID Front', 'Government ID Back', 'Selfie with ID', 'At least 1 supporting document'].map(r => (
+              {['Government ID Front', 'Government ID Back', 'Verification Selfie', 'At least 1 supporting document'].map(r => (
                 <Text key={r} style={styles.verifyChecklstPass}>✓ {r}</Text>
               ))}
             </View>
@@ -831,11 +842,157 @@ export default function ProviderDetailScreen({ route, navigation }: Props) {
                     )}
                   </View>
                 )}
-              </View>
-            );
+                </View>
+              );
             })
           }
         </View>
+
+        {/* Verification Selfie — Capture Checks */}
+        {(() => {
+          const livenessDoc = documents.find(d => d.liveness_status != null || d.verification_mode != null);
+          if (!livenessDoc) return null;
+          const status = livenessDoc.liveness_status;
+          const mode = livenessDoc.verification_mode;
+          const modeLabels: Record<string, string> = {
+            legacy_manual: 'Legacy Manual',
+            live_liveness: 'Live Guided Selfie',
+            manual_review: 'Manual Review',
+          };
+          const checkItems: { label: string; passed: boolean | null }[] = [
+            { label: 'Face detected', passed: livenessDoc.liveness_status != null ? true : null },
+            { label: 'One person detected', passed: livenessDoc.liveness_status === 'passed' ? true : null },
+            { label: 'Blink completed', passed: livenessDoc.blink_detected ?? null },
+            { label: 'Head movement completed', passed: (livenessDoc.left_turn_detected && livenessDoc.right_turn_detected) ?? null },
+            { label: 'Image quality passed', passed: livenessDoc.capture_quality_score != null ? (livenessDoc.capture_quality_score >= 0.5 ? true : false) : null },
+          ];
+          const docStatusLabels: Record<string, { label: string; bg: string; color: string }> = {
+            pending: { label: 'Pending Review', bg: COLORS.warningLight, color: '#92400E' },
+            approved: { label: 'Approved', bg: COLORS.successLight, color: '#065F46' },
+            rejected: { label: 'Rejected', bg: COLORS.errorLight, color: '#991B1B' },
+          };
+          const docStatusCfg = docStatusLabels[livenessDoc.status] ?? docStatusLabels.pending;
+          return (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Verification Selfie</Text>
+
+              {/* Capture Method */}
+              {mode && (
+                <View style={styles.infoCard}>
+                  <View style={styles.infoRow}>
+                    <Ionicons name="phone-portrait-outline" size={15} color={COLORS.primary} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.infoLabel}>Capture Method</Text>
+                      <Text style={styles.infoValue}>{modeLabels[mode] ?? mode}</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Automated Capture Checks */}
+              <View style={[styles.infoCard, { marginTop: SPACING.sm }]}>
+                <Text style={[styles.infoLabel, { marginBottom: SPACING.xs }]}>Automated Capture Checks</Text>
+                {checkItems.map((item, idx) => (
+                  <View key={item.label}>
+                    {idx > 0 && <View style={styles.divider} />}
+                    <View style={[styles.infoRow, { justifyContent: 'space-between' }]}>
+                      <Text style={styles.infoValue}>{item.label}</Text>
+                      {item.passed === true && (
+                        <View style={[styles.docStatus, { backgroundColor: COLORS.successLight }]}>
+                          <Text style={[styles.docStatusText, { color: '#065F46' }]}>✓ Pass</Text>
+                        </View>
+                      )}
+                      {item.passed === false && (
+                        <View style={[styles.docStatus, { backgroundColor: COLORS.errorLight }]}>
+                          <Text style={[styles.docStatusText, { color: '#991B1B' }]}>✗ Fail</Text>
+                        </View>
+                      )}
+                      {item.passed === null && (
+                        <View style={[styles.docStatus, { backgroundColor: COLORS.surfaceSecondary }]}>
+                          <Text style={[styles.docStatusText, { color: COLORS.textLight }]}>— N/A</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                ))}
+                {livenessDoc.capture_quality_score != null && (
+                  <>
+                    <View style={styles.divider} />
+                    <View style={styles.infoRow}>
+                      <Ionicons name="stats-chart-outline" size={15} color={COLORS.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.infoLabel}>Quality Score</Text>
+                        <Text style={styles.infoValue}>{livenessDoc.capture_quality_score.toFixed(2)} / 1.00</Text>
+                      </View>
+                    </View>
+                  </>
+                )}
+                {livenessDoc.manual_review_required && (
+                  <>
+                    <View style={styles.divider} />
+                    <View style={styles.infoRow}>
+                      <Ionicons name="alert-circle-outline" size={15} color={COLORS.warning} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.infoLabel}>Manual Fallback Used</Text>
+                        <Text style={[styles.infoValue, { color: COLORS.warning }]}>User submitted a manual selfie instead</Text>
+                      </View>
+                    </View>
+                  </>
+                )}
+                {livenessDoc.liveness_captured_at && (
+                  <>
+                    <View style={styles.divider} />
+                    <View style={styles.infoRow}>
+                      <Ionicons name="time-outline" size={15} color={COLORS.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.infoLabel}>Captured At</Text>
+                        <Text style={styles.infoValue}>{format(new Date(livenessDoc.liveness_captured_at), 'MMM d, yyyy h:mm a')}</Text>
+                      </View>
+                    </View>
+                  </>
+                )}
+                {livenessDoc.attempt_count != null && livenessDoc.attempt_count > 1 && (
+                  <>
+                    <View style={styles.divider} />
+                    <View style={styles.infoRow}>
+                      <Ionicons name="refresh-circle-outline" size={15} color={COLORS.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.infoLabel}>Attempts</Text>
+                        <Text style={styles.infoValue}>{livenessDoc.attempt_count}</Text>
+                      </View>
+                    </View>
+                  </>
+                )}
+                {livenessDoc.device_platform && (
+                  <>
+                    <View style={styles.divider} />
+                    <View style={styles.infoRow}>
+                      <Ionicons name="phone-portrait-outline" size={15} color={COLORS.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.infoLabel}>Device</Text>
+                        <Text style={styles.infoValue}>{livenessDoc.device_platform}</Text>
+                      </View>
+                    </View>
+                  </>
+                )}
+              </View>
+
+              {/* Administrator Review */}
+              <View style={[styles.infoCard, { marginTop: SPACING.sm }]}>
+                <Text style={[styles.infoLabel, { marginBottom: SPACING.xs }]}>Administrator Review</Text>
+                <View style={[styles.infoRow, { justifyContent: 'space-between' }]}>
+                  <Text style={styles.infoValue}>Decision</Text>
+                  <View style={[styles.docStatus, { backgroundColor: docStatusCfg.bg }]}>
+                    <Text style={[styles.docStatusText, { color: docStatusCfg.color }]}>{docStatusCfg.label}</Text>
+                  </View>
+                </View>
+                <Text style={[styles.infoValue, { color: COLORS.textLight, fontSize: FONTS.sizes.xs, marginTop: SPACING.xs }]}>
+                  The automated checks above only verify photo capture quality. Final identity verification is your responsibility as administrator.
+                </Text>
+              </View>
+            </View>
+          );
+        })()}
 
         {/* Action form */}
         {actionMode ? (

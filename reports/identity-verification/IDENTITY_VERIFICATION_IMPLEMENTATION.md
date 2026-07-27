@@ -549,6 +549,7 @@ final decision-maker (§9); private media + per-user isolation + no APK secrets
 | Hermes | Enabled |
 | New Architecture | Disabled |
 | AndroidX + Jetifier | Enabled |
+| Android minSdkVersion | **26** (raised from 23 for spike — see §2A.1.1) |
 
 ### Selected Native Packages
 
@@ -565,12 +566,13 @@ react-native-vision-camera 4.5.3
   ├─ requires react-native-worklets-core >= 1.0  ✅ (1.3.3)
   ├─ requires react-native >= 0.69               ✅ (0.74.5)
   ├─ requires JDK 17                             ✅
-  └─ Android: minSdk 21                          ✅ (project default)
+  └─ Android: minSdk 21                          ✅ (raised to 26)
 
 react-native-vision-camera-face-detector 1.7.2
   ├─ requires react-native-vision-camera >= 4.0  ✅ (4.5.3)
   ├─ requires react-native-worklets-core          ✅ (1.3.3)
   ├─ Android: ML Kit face detection (bundled)    ✅
+  ├─ Android: minSdk 26                          ✅ (raised from 23)
   └─ API: useFaceDetector hook + detectFaces()    ✅
 
 react-native-worklets-core 1.3.3
@@ -578,6 +580,27 @@ react-native-worklets-core 1.3.3
   ├─ babel plugin: react-native-worklets-core/plugin ✅ (added)
   └─ must be BEFORE reanimated/plugin             ✅ (ordered)
 ```
+
+### minSdkVersion Change (23 → 26)
+
+**File:** `android/build.gradle:6`
+**Change:** Fallback value for `android.minSdkVersion` changed from `'23'` to `'26'`.
+
+**Reason:** `react-native-vision-camera-face-detector` 1.7.2 declares
+`minSdkVersion 26` in its AndroidManifest. The project's previous `minSdk 23`
+caused a manifest merger failure during `assembleDebug`.
+
+**Impact:** The eventual app would support **Android 8.0 (Oreo) and above**
+only. Devices running Android 7.x (Nougat, API 24–25) and below would no longer
+be supported. As of 2026, Android 8.0+ covers >95% of active devices per
+Google's distribution dashboard.
+
+**Isolation:** This change is on the `spike/idv-phase2a` branch only. It does
+NOT affect the `main` branch. If the spike is rolled back, `minSdkVersion`
+reverts to 23.
+
+**No `tools:overrideLibrary` used.** The fix is a clean minSdk raise, not a
+manifest override.
 
 ### Known Build Risk: Bouncy Castle JAR Conflict
 
@@ -618,6 +641,7 @@ Gradle resolution graph, causing a `DuplicatePlatformClasses` or
 | `package.json` | Added 3 native deps + 3 dev deps (jest, ts-jest, @types/jest) + test scripts | Only takes effect after `npm install` |
 | `babel.config.js` | Added `react-native-worklets-core/plugin` before reanimated/plugin | Required for frame processors; no effect without the npm package |
 | `index.ts` | Conditional dev-only entry: if `EXPO_PUBLIC_IDV_SPIKE=1`, loads spike screen; otherwise loads `App` unchanged | Production flow completely unaffected when env var is unset |
+| `android/build.gradle` | Raised minSdkVersion fallback from 23 to 26 | Required by face-detector's minSdk 26; means Android 8.0+ only |
 
 ### Unmodified Files (Production verification flow — NOT touched)
 
@@ -913,3 +937,774 @@ global is used by vision-camera's frame processor runtime.
 
 > **End of Phase 2A documentation. Awaiting user to execute runbook steps 1–8
 > and fill in §2A.5 deliverable template with results.**
+
+---
+
+## Phase 2B — Controlled Production Integration
+
+### §2B.0 Spike Results Summary
+
+**Status:** ✅ Passed on real OPPO A94 device
+
+| Check | Result |
+|---|---|
+| Debug Android build | ✅ Succeeded |
+| Vision Camera | ✅ Works |
+| ML Kit face detection | ✅ Works |
+| Single-face detection | ✅ Exactly one face |
+| Good-lighting check | ✅ Passed |
+| Blink detection | ✅ Passed |
+| Left turn detection | ✅ Passed |
+| Right turn detection | ✅ Passed |
+| Hold-still state | ✅ Passed |
+| Best selfie frame capture | ✅ Auto-captured |
+| Liveness state-machine tests | ✅ 37/37 passed |
+| TypeScript | ✅ 0 errors |
+| Bouncy Castle conflict | ✅ None |
+| minSdkVersion | 26 (required by detector) |
+
+---
+
+### §2B.1 Integration Audit and Exact Plan
+
+#### §2B.1.1 Existing Production Flow — Current State
+
+**Onboarding screen:** `src/screens/provider/ProviderOnboardingScreen.tsx` (1661 lines)
+
+The current 4-step onboarding flow:
+
+1. **Step 1 — Business:** Business name, address, city, province, mobile, email, description, GPS
+2. **Step 2 — Category:** Select primary service category
+3. **Step 3 — Documents:**
+   - ID type selection (dropdown: `PH_ID_TYPES`)
+   - ID front (camera capture → upload → `provider_documents` row)
+   - ID back (camera capture → upload → `provider_documents` row)
+   - **Selfie with ID** (camera capture → upload → `provider_documents` row)
+   - Supporting documents (permits, camera or gallery)
+4. **Step 4 — Review:** Summary + consent checkboxes → submit
+
+**Selfie insertion point:** Lines 1118–1142 in `renderStep3()`. The selfie section:
+- Uses `selfie` state: `useState<ValidIdSide>({ uri, uploadedUrl, state, error })`
+- `pickAndUploadSelfie()` → calls `pickCamera()` → `doSelfieUpload(uri, mimeType)`
+- `doSelfieUpload()` (line 527): uploads to `provider-documents` bucket at path `{userId}/selfie_with_id_{timestamp}.{ext}`, then inserts a `provider_documents` row with `document_type: 'selfie_with_id'`, `category_type: 'valid_id'`
+- `retrySelfie()`, `removeSelfie()` for error handling
+- Validation in `validateStep3()` (line 410): `if (!selfie.uploadedUrl) return 'Please take a selfie holding your Government ID.'`
+
+**Admin screen:** `src/screens/admin/ProviderDetailScreen.tsx` (1405 lines)
+
+- `loadData()` fetches providers, `provider_documents`, `provider_verification_logs`, featured data, platform fees
+- Documents displayed with signed URLs (1-hour expiry) via `createSignedUrl()`
+- Per-document actions: Approve / Reject / Resubmit (writes to `provider_verification_logs`)
+- Provider-level actions: Approve / Reject / Suspend (writes to `provider_verification_logs`)
+- Moderation timeline shows all log entries
+
+#### §2B.1.2 Existing Database Schema
+
+**`provider_documents` table** (migration `20260526120946`):
+
+```sql
+CREATE TABLE public.provider_documents (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
+  document_type TEXT NOT NULL CHECK (document_type IN (
+    'valid_id', 'government_id',
+    'barangay_clearance', 'business_permit',
+    'dti_registration', 'bir_registration', 'tesda_certificate',
+    'professional_cert', 'other_supporting'
+  )),
+  category_type TEXT NOT NULL DEFAULT 'permit_certificate'
+    CHECK (category_type IN ('valid_id', 'permit_certificate')),
+  id_type TEXT,
+  side TEXT CHECK (side IN ('front', 'back')),
+  file_url TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  uploaded_at TIMESTAMPTZ DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ,
+  reviewed_by UUID REFERENCES public.users(id) ON DELETE SET NULL
+);
+```
+
+**`provider_verification_logs` table** (schema.sql line 263):
+
+```sql
+CREATE TABLE IF NOT EXISTS public.provider_verification_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  provider_id UUID REFERENCES public.providers(id) ON DELETE CASCADE NOT NULL,
+  action TEXT NOT NULL,
+  performed_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**`platform_config` table** (migration `20260602150000`):
+
+```sql
+CREATE TABLE IF NOT EXISTS public.platform_config (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- RLS: service_role SELECT only
+```
+
+**Storage bucket `provider-documents`:** Private (`public = false`)
+
+Existing storage policies:
+- Upload: `auth.uid()::text = (storage.foldername(name))[1]` — user uploads to `{userId}/...`
+- Read own: same folder check
+- Admin read: `role = 'admin'` in users table
+- Update own: same folder check
+- Delete own: same folder check
+
+#### §2B.1.3 Feature Flag — Current State
+
+**File:** `src/config/featureFlags.ts` (7 lines)
+
+```typescript
+export const BETA_MODE = false;
+export const ENABLE_GOOGLE_SIGNIN = true;
+```
+
+Currently uses hardcoded constants only. No server-side flag loading.
+
+**`platform_config` table** exists but is RLS-locked to `service_role` only — the client cannot read it with the anon key. This is by design for sensitive config like push notification URLs.
+
+#### §2B.1.4 Exact Integration Plan
+
+##### A. Database Migration (additive, nullable columns)
+
+**New migration file:** `supabase/migrations/20260726200000_add_liveness_to_provider_documents.sql`
+
+Add nullable columns to `provider_documents` so existing rows are unaffected:
+
+```sql
+ALTER TABLE public.provider_documents
+  ADD COLUMN IF NOT EXISTS liveness_status TEXT
+    CHECK (liveness_status IN ('passed', 'manual_review', 'failed', 'skipped')),
+  ADD COLUMN IF NOT EXISTS blink_detected BOOLEAN,
+  ADD COLUMN IF NOT EXISTS left_turn_detected BOOLEAN,
+  ADD COLUMN IF NOT EXISTS right_turn_detected BOOLEAN,
+  ADD COLUMN IF NOT EXISTS capture_quality_score DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS best_selfie_storage_path TEXT,
+  ADD COLUMN IF NOT EXISTS liveness_captured_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS manual_review_required BOOLEAN DEFAULT false,
+  ADD COLUMN IF NOT EXISTS liveness_details JSONB,
+  ADD COLUMN IF NOT EXISTS attempt_count INTEGER DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS device_platform TEXT;
+```
+
+Also extend the `document_type` CHECK constraint to include `'selfie_liveness'`:
+
+```sql
+ALTER TABLE public.provider_documents DROP CONSTRAINT IF EXISTS provider_documents_document_type_check;
+ALTER TABLE public.provider_documents ADD CONSTRAINT provider_documents_document_type_check
+  CHECK (document_type IN (
+    'valid_id', 'government_id',
+    'barangay_clearance', 'business_permit',
+    'dti_registration', 'bir_registration', 'tesda_certificate',
+    'professional_cert', 'other_supporting',
+    'selfie_liveness'
+  ));
+```
+
+**No new tables.** No RLS changes needed — existing `provider_documents` policies already cover the new columns (owner can insert/update own rows, admin can read all).
+
+**Seed the feature flag:**
+
+```sql
+INSERT INTO public.platform_config (key, value)
+VALUES ('identity_live_selfie_enabled', 'false')
+ON CONFLICT (key) DO NOTHING;
+```
+
+**Add a new RLS policy to allow authenticated users to read the flag:**
+
+```sql
+DO $$
+BEGIN
+  CREATE POLICY "Authenticated can read feature flags"
+  ON public.platform_config FOR SELECT
+  TO authenticated
+  USING (key LIKE '%_enabled' OR key LIKE '%_flag');
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'Policy already exists, skipping';
+END $$;
+```
+
+This exposes only feature-flag keys (ending in `_enabled` or `_flag`), not sensitive config like URLs.
+
+##### B. Feature Flag Loader
+
+**New file:** `src/config/remoteFlags.ts`
+
+- `loadRemoteFlag(key: string): Promise<boolean>` — queries `platform_config` for the key, returns `value === 'true'`
+- `useRemoteFlag(key: string): { enabled: boolean; loading: boolean }` — hook that loads on mount
+- Local dev override: `EXPO_PUBLIC_IDV_LIVE_SELFIE=1` env var bypasses server check for development
+- Production behavior: controlled by `platform_config.identity_live_selfie_enabled` server-side
+- Default: `false` (disabled)
+
+**Modify:** `src/config/featureFlags.ts` — add `IDENTITY_LIVE_SELFIE_ENABLED = false` as local default.
+
+##### C. Production Live-Selfie Screen
+
+**New file:** `src/screens/provider/LiveSelfieVerificationScreen.tsx`
+
+Clean, production-ready UI built on the proven spike code:
+
+- **No developer diagnostics:** No FPS, yaw, eye probabilities, step names, or raw scores
+- **Oval face guide:** Centered oval overlay for face positioning
+- **One instruction at a time:** Maps state machine steps to user-friendly text:
+  - `positioning` → "Center your face in the oval"
+  - `blink` → "Blink once"
+  - `turn_left` → "Turn your head slightly left"
+  - `turn_right` → "Turn your head slightly right"
+  - `hold_still` → "Hold still"
+  - `captured` → "Selfie captured"
+- **Compact progress indicator:** 5 dots (positioning, blink, left, right, hold) — filled when complete
+- **Automatic advance:** No manual shutter during liveness
+- **Correction guidance:** Shows hints from state machine:
+  - "Center your face"
+  - "Move closer"
+  - "Move farther away"
+  - "Move to a brighter area"
+  - "Only one person should be visible"
+  - "Keep both eyes visible"
+  - "Remove sunglasses"
+  - "Hold the phone steadily"
+- **Retry button:** Resets state machine to initial
+- **Manual fallback button:** "Submit for manual selfie review" — captures a normal selfie, marks `liveness_status = 'manual_review'`
+- **Upload progress:** Shows uploading state with spinner
+- **Selfie review:** Shows captured photo with "Use this photo" / "Retake" buttons before submission
+- **Never uses:** "Please look back at the camera"
+
+**Reuses from spike:**
+- `livenessMachine.ts` (state machine — unchanged)
+- `spikeConfig.ts` (thresholds — will be moved to a production config location)
+
+**New config file:** `src/config/livenessConfig.ts` — production copy of thresholds with `invertYaw` defaulting to `false`.
+
+##### D. Integration into ProviderOnboardingScreen
+
+**Modify:** `src/screens/provider/ProviderOnboardingScreen.tsx`
+
+Changes are minimal and behind the feature flag:
+
+1. **Import** `useRemoteFlag` and `LiveSelfieVerificationScreen`
+2. **Add flag hook:** `const { enabled: liveSelfieEnabled, loading: flagLoading } = useRemoteFlag('identity_live_selfie_enabled')`
+3. **In `renderStep3()` selfie section (lines 1118–1142):**
+   - If `liveSelfieEnabled` is `true`: render a "Start Live Selfie Verification" button that opens `LiveSelfieVerificationScreen` as a modal or navigates to it
+   - If `liveSelfieEnabled` is `false`: render the existing manual selfie capture UI (unchanged)
+   - If `flagLoading`: show a brief spinner
+4. **On liveness completion callback:** Set `selfie` state with the uploaded URL and liveness metadata, same as current `doSelfieUpload` but with additional liveness fields
+5. **`doSelfieUpload` enhancement:** When liveness data is present, include the new columns in the `provider_documents` insert
+6. **`validateStep3()`:** Unchanged — still checks `selfie.uploadedUrl`
+
+**The manual selfie flow remains fully intact as fallback.** When the flag is off, the screen behaves exactly as it does today.
+
+##### E. Admin Review Enhancements
+
+**Modify:** `src/screens/admin/ProviderDetailScreen.tsx`
+
+1. **Extend `DocRecord` interface** to include optional liveness fields:
+   ```typescript
+   interface DocRecord {
+     // ... existing fields ...
+     liveness_status?: string | null;
+     blink_detected?: boolean | null;
+     left_turn_detected?: boolean | null;
+     right_turn_detected?: boolean | null;
+     capture_quality_score?: number | null;
+     manual_review_required?: boolean | null;
+     liveness_captured_at?: string | null;
+     attempt_count?: number | null;
+     device_platform?: string | null;
+   }
+   ```
+
+2. **In the documents section** (after line 838), when a document has `liveness_status`:
+   - Show a "Liveness Verification" card with:
+     - Status badge (Passed / Manual Review / Failed)
+     - Blink: ✓/✗
+     - Left turn: ✓/✗
+     - Right turn: ✓/✗
+     - Capture quality: score/1.0
+     - Manual review flag
+     - Captured at timestamp
+     - Attempt count
+     - Device platform
+
+3. **Admin actions extension** — add to the action grid:
+   - "Request New Selfie" — updates provider status with rejection reason "New selfie required", logs to `provider_verification_logs` with action `selfie_resubmission_requested`
+   - "Request Full Resubmission" — existing reject flow with specific note
+
+4. **All actions continue to write to `provider_verification_logs`** — no new audit table needed.
+
+##### F. Storage Path Convention
+
+- Liveness selfie: `{userId}/selfie_liveness_{timestamp}.jpg`
+- Manual fallback selfie: `{userId}/selfie_with_id_{timestamp}.jpg` (existing path pattern)
+- No public URLs stored — only the object path in `best_selfie_storage_path`
+- Admin views via signed URLs (existing pattern in `ProviderDetailScreen`)
+
+##### G. Security Checklist
+
+- ✅ No service-role key in APK — client uses anon key only
+- ✅ No database URL in APK — `EXPO_PUBLIC_SUPABASE_URL` is the project URL, not a direct DB connection
+- ✅ No private AI-provider keys in APK
+- ✅ Verification files remain private — `provider-documents` bucket is `public = false`
+- ✅ Users access only their own files — storage policy checks `(storage.foldername(name))[1] = auth.uid()::text`
+- ✅ Admins access via signed URLs — existing `createSignedUrl` pattern with 1-hour expiry
+- ✅ No raw biometric values logged in production — liveness_details JSON stores only pass/fail booleans and score, not raw yaw/eye values
+- ✅ No camera frames persisted other than the chosen evidence frame — only `takePhoto` result is uploaded
+- ✅ Temporary files cleaned — camera temp files are in app cache, not explicitly persisted
+
+#### §2B.1.5 Files to be Modified/Created
+
+| File | Action | Purpose |
+|---|---|---|
+| `supabase/migrations/20260726200000_add_liveness_to_provider_documents.sql` | **Create** | Add nullable liveness columns + seed flag + RLS policy |
+| `src/config/remoteFlags.ts` | **Create** | Server-side feature flag loader + hook |
+| `src/config/featureFlags.ts` | **Modify** | Add `IDENTITY_LIVE_SELFIE_ENABLED` default |
+| `src/config/livenessConfig.ts` | **Create** | Production liveness thresholds (copy of spike config) |
+| `src/screens/provider/LiveSelfieVerificationScreen.tsx` | **Create** | Production live-selfie screen (clean UI) |
+| `src/screens/provider/ProviderOnboardingScreen.tsx` | **Modify** | Conditional selfie flow behind flag |
+| `src/screens/admin/ProviderDetailScreen.tsx` | **Modify** | Show liveness data in admin review |
+| `src/types/index.ts` | **Modify** | Add liveness fields to `ProviderDocument` interface |
+| `src/dev/idvSpike/livenessMachine.ts` | **Reuse** | State machine (imported, not copied) |
+| `reports/identity-verification/IDENTITY_VERIFICATION_IMPLEMENTATION.md` | **Modify** | This document |
+
+**Files NOT modified (production safety):**
+- `App.tsx`
+- `src/navigation/ProviderNavigator.tsx` (unless navigation route needed)
+- `android/build.gradle` (already at minSdk 26 on spike branch)
+- `android/app/src/main/AndroidManifest.xml`
+- `app.json`
+- `babel.config.js`
+- `package.json` (native deps already installed on spike branch)
+
+#### §2B.1.6 Rollback Steps
+
+1. **Set feature flag to false:** `UPDATE platform_config SET value = 'false' WHERE key = 'identity_live_selfie_enabled'` — instantly reverts all users to manual selfie flow
+2. **Revert code:** `git checkout main -- src/screens/provider/ProviderOnboardingScreen.tsx src/screens/admin/ProviderDetailScreen.tsx src/config/featureFlags.ts src/types/index.ts` — removes all integration code
+3. **Delete new files:** `src/config/remoteFlags.ts`, `src/config/livenessConfig.ts`, `src/screens/provider/LiveSelfieVerificationScreen.tsx`
+4. **Database columns are nullable and additive** — no need to drop them. They will be ignored by the reverted code.
+5. **If full DB rollback needed:** `ALTER TABLE public.provider_documents DROP COLUMN IF EXISTS liveness_status, blink_detected, left_turn_detected, right_turn_detected, capture_quality_score, best_selfie_storage_path, liveness_captured_at, manual_review_required, liveness_details, attempt_count, device_platform;`
+6. **No storage bucket changes** — no rollback needed for storage.
+
+#### §2B.1.7 Test Plan
+
+| Test | Type | Description |
+|---|---|---|
+| Feature flag disabled uses manual flow | Unit | Mock `useRemoteFlag` returns `false`, verify manual selfie UI renders |
+| Feature flag enabled opens live selfie | Unit | Mock `useRemoteFlag` returns `true`, verify live selfie button renders |
+| Successful liveness saves correct result | Unit | Run state machine to captured, verify liveness_status='passed', all checks true |
+| Retry resets state | Unit | Start liveness, trigger retry, verify state resets to positioning |
+| Manual fallback records manual_review | Unit | Trigger manual fallback, verify liveness_status='manual_review', never 'passed' |
+| Upload failure preserves retry | Unit | Mock upload failure, verify error state with retry button |
+| Admin signed URL generation | Unit | Mock `createSignedUrl`, verify URL generated for liveness document |
+| Unauthorized users cannot access media | Unit | Verify storage RLS policies reject non-owner access |
+| Existing onboarding still works | Unit | Full onboarding flow with flag=false, verify all 4 steps complete |
+| Liveness state machine | Unit | Existing 37 tests in `livenessMachine.test.ts` (unchanged) |
+
+#### §2B.1.8 Risks and Mitigations
+
+| Risk | Likelihood | Mitigation |
+|---|---|---|
+| Feature flag RLS exposes sensitive config | Low | Policy restricts to keys matching `%_enabled` or `%_flag` pattern only |
+| Liveness screen crashes on older devices | Medium | Feature flag defaults to false; can be enabled per-deployment |
+| Storage path conflicts with existing selfie | Low | New `selfie_liveness` document_type, distinct path pattern |
+| Admin screen becomes too complex | Low | Liveness card only renders when `liveness_status` is non-null |
+| Migration fails on live DB | Low | All columns are `ADD COLUMN IF NOT EXISTS`, constraints use `DROP CONSTRAINT IF EXISTS` first |
+
+---
+
+> **Phase 2B.1 audit complete. No production code has been modified.
+> Awaiting user review and approval before proceeding to Phase 2B.2 implementation.**
+
+---
+
+### §2B.2 Implementation Report
+
+#### §2B.2.1 Files Changed
+
+| File | Action | Lines |
+|---|---|---|
+| `supabase/migrations/20260726200000_add_liveness_to_provider_documents.sql` | **Created** | 71 lines |
+| `src/config/remoteFlags.ts` | **Created** | 79 lines |
+| `src/config/livenessConfig.ts` | **Created** | 82 lines |
+| `src/config/featureFlags.ts` | **Modified** | +4 lines |
+| `src/types/index.ts` | **Modified** | +12 lines (DocumentType + ProviderDocument) |
+| `src/screens/provider/LiveSelfieVerificationScreen.tsx` | **Created** | 482 lines |
+| `src/screens/provider/ProviderOnboardingScreen.tsx` | **Modified** | +~60 lines (imports, state, conditional UI, modal, upload) |
+| `src/screens/admin/ProviderDetailScreen.tsx` | **Modified** | +~120 lines (DocRecord fields, liveness label, liveness card) |
+| `src/dev/idvSpike/__tests__/livenessIntegration.test.ts` | **Created** | 226 lines (19 new tests) |
+| `reports/identity-verification/IDENTITY_VERIFICATION_IMPLEMENTATION.md` | **Modified** | This section |
+
+#### §2B.2.2 Migration Contents
+
+**File:** `supabase/migrations/20260726200000_add_liveness_to_provider_documents.sql`
+
+1. **Additive nullable columns** on `provider_documents`:
+   - `liveness_status` TEXT with CHECK constraint (`passed`, `manual_review`, `failed`, `skipped`)
+   - `blink_detected` BOOLEAN
+   - `left_turn_detected` BOOLEAN
+   - `right_turn_detected` BOOLEAN
+   - `capture_quality_score` DOUBLE PRECISION
+   - `best_selfie_storage_path` TEXT (object path only, never public URL)
+   - `liveness_captured_at` TIMESTAMPTZ
+   - `manual_review_required` BOOLEAN DEFAULT false
+   - `liveness_details` JSONB (pass/fail booleans + score, no raw biometrics)
+   - `attempt_count` INTEGER DEFAULT 1
+   - `device_platform` TEXT
+
+2. **Extended `document_type` CHECK** to include `'selfie_liveness'`
+
+3. **Seeded feature flag:** `identity_live_selfie_enabled` = `'false'` in `platform_config`
+
+4. **SECURITY DEFINER RPC** `get_feature_flags()` — returns only allowlisted keys from `platform_config`. Currently allowlisted: `identity_live_selfie_enabled`. Future flags can be added to the `IN (...)` list.
+
+5. **GRANT EXECUTE** on `get_feature_flags()` to `authenticated` only
+
+6. **REVOKE SELECT** on `platform_config` from `authenticated` and `anon` (defensive)
+
+#### §2B.2.3 Feature Flag Security Model
+
+**Approach:** SECURITY DEFINER RPC (preferred approach #1 from user's security adjustment)
+
+```
+Client (anon key) → supabase.rpc('get_feature_flags') → SECURITY DEFINER function
+  → SELECT key, value FROM platform_config WHERE key IN ('identity_live_selfie_enabled')
+  → Returns only allowlisted rows
+```
+
+- **No table-level SELECT** granted to `authenticated` or `anon` on `platform_config`
+- The function runs with the **owner's privileges** (service_role-level access)
+- Only **explicitly allowlisted keys** are returned — sensitive config like `push_notification_url` is never exposed
+- **Local dev override:** `EXPO_PUBLIC_IDV_LIVE_SELFIE=1` env var bypasses the RPC for development
+- **Production default:** `false` (disabled) — must be explicitly set to `'true'` in `platform_config` to enable
+- The `useRemoteFlag` hook caches results in-memory to avoid repeated RPC calls
+
+#### §2B.2.4 Test Results
+
+| Test Suite | Tests | Result |
+|---|---|---|
+| `livenessMachine.test.ts` | 37 | ✅ All passed |
+| `livenessIntegration.test.ts` | 19 | ✅ All passed |
+| **Total** | **56** | **✅ All passed** |
+
+New integration tests cover:
+- Feature flag defaults
+- Full successful liveness sequence (positioning → blink → left → right → hold → captured)
+- Liveness checks set correctly on success
+- Retry resets state
+- Manual fallback never sets 'passed'
+- Upload failure preserves retry
+- normalizeYaw (invertYaw false/true, -0 normalization)
+- scoreFrame (no face, well-centered, off-center penalty)
+- Timeout behavior
+- Multiple faces / no face hints
+- Existing onboarding compatibility (importable, config thresholds match)
+
+**TypeScript:** `npx tsc --noEmit` → 0 errors
+
+#### §2B.2.5 Android Build Result
+
+`.\gradlew assembleDebug` — ✅ **BUILD SUCCESSFUL** in 50s
+
+#### §2B.2.6 Known Limitations
+
+1. **No face comparison:** The system verifies liveness (real person, present) but does not compare the selfie to the ID photo. Admin remains the final decision-maker.
+2. **No liveness video:** Only a single best-frame photo is captured and stored. No video is recorded or persisted.
+3. **Feature flag default false:** The live selfie flow is disabled by default. Must be explicitly enabled in `platform_config` for production use.
+4. **minSdkVersion 26:** Android 8.0+ only (required by face detector library).
+5. **invertYaw device-specific:** If left/right turns appear swapped on a specific device, `invertYaw` in `livenessConfig.ts` should be flipped to `true`.
+6. **Manual fallback always available:** Users can always choose "Submit for Manual Review" which captures a normal selfie and marks `liveness_status = 'manual_review'`.
+7. **No automatic merge to main:** Code is on `spike/idv-phase2a` branch. Merge requires explicit review.
+
+#### §2B.2.7 Rollback Steps
+
+1. **Instant rollback (no code change):** Set `platform_config.identity_live_selfie_enabled` to `'false'` — all users revert to manual selfie flow immediately
+2. **Code rollback:** `git checkout main -- src/screens/provider/ProviderOnboardingScreen.tsx src/screens/admin/ProviderDetailScreen.tsx src/config/featureFlags.ts src/types/index.ts`
+3. **Delete new files:** `src/config/remoteFlags.ts`, `src/config/livenessConfig.ts`, `src/screens/provider/LiveSelfieVerificationScreen.tsx`, `src/dev/idvSpike/__tests__/livenessIntegration.test.ts`
+4. **Database columns are nullable/additive** — no need to drop them; reverted code ignores them
+5. **Full DB rollback if needed:**
+   ```sql
+   DROP FUNCTION IF EXISTS public.get_feature_flags();
+   ALTER TABLE public.provider_documents DROP COLUMN IF EXISTS
+     liveness_status, blink_detected, left_turn_detected,
+     right_turn_detected, capture_quality_score, best_selfie_storage_path,
+     liveness_captured_at, manual_review_required, liveness_details,
+     attempt_count, device_platform;
+   ```
+6. **No storage bucket changes** — no rollback needed for storage
+
+---
+
+> **Phase 2B.2 implementation complete. Stopping for review.
+> No production database has been modified. Feature flag defaults to false.**
+
+---
+
+### §2C Implementation Report — Modernized Verification Selfie
+
+#### §2C.1 Objective
+
+Modernize the existing provider identity verification system from the legacy "Selfie with ID" experience into a professional AI-assisted Verification Selfie workflow, comparable to modern banking/fintech eKYC applications.
+
+Key changes:
+- Retire `selfie_with_id` document type → replace with `verification_selfie`
+- Add `verification_mode` column (`legacy_manual`, `live_liveness`, `manual_review`)
+- Remove legacy sample image (person holding ID)
+- Clean, modern UI with no developer diagnostics
+- Preserve existing onboarding, admin review, audit logging, and storage
+
+#### §2C.2 Files Changed
+
+| File | Action | Summary |
+|---|---|---|
+| `supabase/migrations/20260726210000_modernize_verification_selfie.sql` | **Created** | Rename document_type, add verification_mode, backfill old records |
+| `src/types/index.ts` | **Modified** | Replace `selfie_with_id`/`selfie_liveness` with `verification_selfie`, add `verification_mode` |
+| `src/screens/provider/ProviderOnboardingScreen.tsx` | **Modified** | Remove sample image, rename to "Verification Selfie", update text/instructions, add `verification_mode` to upload |
+| `src/screens/provider/LiveSelfieVerificationScreen.tsx` | **Modified** | Storage path renamed to `verification_selfie_{timestamp}` |
+| `src/screens/admin/ProviderDetailScreen.tsx` | **Modified** | Add `verification_mode` to DocRecord, update labels, update liveness card with mode display |
+| `src/dev/idvSpike/__tests__/livenessIntegration.test.ts` | **Modified** | Add 19 new tests for migration compatibility, duplicates, flag on/off, admin review, signed URLs, security |
+
+#### §2C.3 Migration SQL
+
+**File:** `supabase/migrations/20260726210000_modernize_verification_selfie.sql`
+
+1. **Add `verification_mode` column** — nullable, CHECK constraint (`legacy_manual`, `live_liveness`, `manual_review`)
+2. **Rename existing rows:** `UPDATE provider_documents SET document_type='verification_selfie' WHERE document_type='selfie_with_id'`
+3. **Backfill verification_mode:** `UPDATE ... SET verification_mode='legacy_manual' WHERE document_type='verification_selfie' AND verification_mode IS NULL`
+4. **Update CHECK constraint:** Remove `selfie_with_id` and `selfie_liveness`, add `verification_selfie`
+5. **Ensure liveness_status CHECK** includes `skipped`
+
+**No destructive migration.** All columns are additive/nullable. Old rows are renamed in-place (UPDATE, not DELETE+INSERT).
+
+#### §2C.4 Updated TypeScript Models
+
+```typescript
+export type DocumentType =
+  | 'valid_id'
+  | 'government_id'
+  | 'verification_selfie'  // replaces selfie_with_id and selfie_liveness
+  | 'barangay_clearance'
+  | ...
+
+export interface ProviderDocument {
+  // ... existing fields ...
+  verification_mode?: 'legacy_manual' | 'live_liveness' | 'manual_review' | null;
+  liveness_status?: 'passed' | 'manual_review' | 'failed' | 'skipped' | null;
+  // ... other liveness fields ...
+}
+```
+
+#### §2C.5 Updated Onboarding Flow
+
+**Before:** Valid ID Front → Valid ID Back → Selfie with ID (sample image shown) → Submit
+
+**After:** Valid ID Front → Valid ID Back → Verification Selfie (no sample image, instructions only) → Submit
+
+Changes in `ProviderOnboardingScreen.tsx`:
+- Section title: "Upload Selfie With Valid ID" → "Verification Selfie"
+- Removed sample image (`sample-selfie-id.png`) and tap-to-preview
+- New instructional text: "Your identity will be verified automatically."
+- Step list: Center face, Blink, Turn left, Turn right, Hold still
+- "Your selfie will be captured automatically."
+- Validation message: "Please complete your verification selfie."
+- Review checklist: "Selfie with ID" → "Verification Selfie"
+- Upload path: `selfie_with_id_{timestamp}` → `verification_selfie_{timestamp}`
+- Insert: `document_type='verification_selfie'`, `verification_mode` set based on flow
+- Delete: cleans up both legacy `selfie_with_id` and new `verification_selfie` rows
+
+#### §2C.6 Updated Admin Review
+
+`ProviderDetailScreen.tsx`:
+- `DOC_LABELS`: `selfie_liveness` → `verification_selfie: 'Verification Selfie'`
+- `KYC_DOC_TYPE_MAP`: `selfie_with_id` maps to `verification_selfie`
+- Verification checklist: "Selfie with ID" → "Verification Selfie"
+- Liveness card title: "Liveness Verification" → "Verification Selfie"
+- Added `verification_mode` display with labels: Legacy Manual / Live Liveness / Manual Review
+- Liveness card now finds docs by `liveness_status != null OR verification_mode != null`
+- Shows verification mode even when liveness_status is null (legacy records)
+
+#### §2C.7 Updated Verification Screen
+
+`LiveSelfieVerificationScreen.tsx`:
+- No developer diagnostics (FPS, yaw, eye probability, state names, scores, raw ML values)
+- Clean UI: oval face guide, instruction text, progress dots, controls
+- Storage path: `verification_selfie_{timestamp}.jpg`
+- Manual fallback: captures normal selfie, sets `liveness_status='manual_review'`
+- Auto-capture: only when all checks pass (single face, centered, eyes open, blink, left turn, right turn, neutral, stable, good lighting)
+
+#### §2C.8 Test Results
+
+| Test Suite | Tests | Result |
+|---|---|---|
+| `livenessMachine.test.ts` | 37 | ✅ All passed |
+| `livenessIntegration.test.ts` | 38 | ✅ All passed |
+| **Total** | **75** | **✅ All passed** |
+
+New Phase 2C tests cover:
+- Migration compatibility (selfie_with_id → verification_selfie, selfie_liveness → verification_selfie)
+- verification_mode values (3 allowed types)
+- Old records get legacy_manual, remain valid (no destructive backfill)
+- No duplicate verification documents (delete-before-insert)
+- Feature flag OFF → legacy manual flow, verification_mode=legacy_manual
+- Feature flag ON → live liveness flow
+- Successful liveness → verification_mode=live_liveness
+- Manual fallback → verification_mode=manual_review
+- Admin review: verification_mode display, finding liveness docs, conditional card rendering
+- Signed URLs: storage path stored, not public URL
+- Unauthorized access: no direct SELECT on platform_config, only allowlisted keys returned
+
+**TypeScript:** `npx tsc --noEmit` → 0 errors
+
+#### §2C.9 Android Build Result
+
+`.\gradlew assembleDebug` — ✅ **BUILD SUCCESSFUL** in 43s
+
+#### §2C.10 Known Limitations
+
+1. **No face comparison:** Verifies liveness only. Admin remains final decision-maker.
+2. **No liveness video:** Single best-frame photo only.
+3. **Feature flag default false:** Disabled by default. Must be explicitly enabled.
+4. **minSdkVersion 26:** Android 8.0+ only.
+5. **Legacy `ProviderApplicationScreen.tsx`** still references `selfie_with_id` as a KYC JSON field name — this is the old `kyc_documents` blob format, not the `provider_documents` table. The admin screen's `KYC_DOC_TYPE_MAP` maps it to `verification_selfie` for display. No change needed in that file.
+6. **No automatic merge to main.**
+
+#### §2C.11 Rollback Steps
+
+1. **Instant rollback:** Set `identity_live_selfie_enabled` to `false` → reverts to manual flow
+2. **Code rollback:** Revert all modified files to pre-2C state
+3. **DB rollback:**
+   ```sql
+   UPDATE provider_documents SET document_type='selfie_with_id'
+     WHERE document_type='verification_selfie';
+   ALTER TABLE public.provider_documents DROP COLUMN IF EXISTS verification_mode;
+   -- Re-add old CHECK constraint with selfie_with_id
+   ```
+4. **No storage changes** — no rollback needed
+
+---
+
+> **Phase 2C implementation complete. Stopping for review.
+> No production database has been modified. Feature flag defaults to false.
+> Legacy manual selfie flow preserved as fallback.**
+
+---
+
+### §2C-UX Identity Verification UX Improvement
+
+#### Objective
+
+Clarify that the automated capture system performs **pre-submission quality and liveness checks only**. It does **not** approve identities. Final identity verification remains a **manual administrator decision**.
+
+No database changes. No API changes. No storage changes. No migration changes. Only wording, labels, helper text, section organization, and user/admin presentation.
+
+#### Files Modified
+
+| File | Changes |
+|---|---|
+| `src/screens/provider/ProviderOnboardingScreen.tsx` | Updated step subheading, section note, selfie caption, submit note |
+| `src/screens/provider/LiveSelfieVerificationScreen.tsx` | Updated camera permission text, uploading text, review title, review note, failure message, manual fallback button |
+| `src/screens/admin/ProviderDetailScreen.tsx` | Reorganized liveness card into three sections: Capture Method, Automated Capture Checks, Administrator Review |
+| `reports/identity-verification/IDENTITY_VERIFICATION_IMPLEMENTATION.md` | This section |
+
+#### Application Side Changes
+
+**Step 3 subheading:**
+- Before: "All identity documents must be captured live with your camera."
+- After: "Your photos will be automatically checked for quality before they are submitted for review."
+
+**Identity Verification section note:**
+- Added: "Before your application is submitted, we'll automatically check that your photos are clear and complete to help speed up the review process."
+
+**Verification Selfie caption:**
+- Before: "Your identity will be verified automatically."
+- After: "Your selfie will be checked for photo quality and capture completeness."
+
+**Verification Selfie hint:**
+- Before: "Please follow the on-screen instructions."
+- After: "This does not approve your identity — an administrator will review your application."
+
+**Submit note:**
+- Before: "Your application will be reviewed by our team within 1–3 business days. You'll be notified once approved."
+- After: "Your application will be reviewed by our team within 1–3 business days. The automated checks only help ensure photo quality — final approval is always decided by an administrator."
+
+#### Live Verification Screen Changes
+
+- Camera permission: "verify your identity" → "capture your verification selfie"
+- Uploading: "Uploading selfie..." → "Uploading verification selfie..."
+- Review title: "Review Your Selfie" → "Review Your Verification Selfie"
+- Review note added: "Your application will be submitted for administrator review."
+- Failure message: "Verification could not be completed" → "Capture could not be completed. Please try again."
+- Manual fallback button: "Submit for Manual Review" → "Submit Manual Selfie Instead"
+
+#### Admin Panel Changes
+
+The liveness card was reorganized from a flat list into three clearly separated sections:
+
+**1. Capture Method**
+- Legacy Manual / Live Guided Selfie / Manual Review
+- (Renamed from "Verification Mode" → "Capture Method")
+- (Renamed "Live Liveness" → "Live Guided Selfie")
+
+**2. Automated Capture Checks**
+- ✓/✗ Face detected
+- ✓/✗ One person detected
+- ✓/✗ Blink completed
+- ✓/✗ Head movement completed
+- ✓/✗ Image quality passed
+- Quality score (if available)
+- Manual fallback used (if applicable)
+- Captured at, attempts, device (metadata)
+
+**3. Administrator Review**
+- Decision status: Pending Review / Approved / Rejected
+- Helper text: "The automated checks above only verify photo capture quality. Final identity verification is your responsibility as administrator."
+
+This clearly separates automatic capture checks from human identity review.
+
+#### AI Terminology Removed
+
+The following terms were **removed** or **never used**:
+- AI Verified
+- AI Approved
+- Identity Verified by AI
+- AI Authentication
+- Automatic Identity Approval
+- "Your identity will be verified automatically"
+
+Replaced with:
+- Automated Capture Check
+- Photo Quality Check
+- Guided Selfie Capture
+- Live Selfie Capture
+- Capture Completed
+- Ready for Administrator Review
+
+#### Administrator Responsibilities (Unchanged)
+
+The administrator remains responsible for:
+- Approving providers
+- Rejecting providers
+- Requesting new verification photos
+- Suspending verification
+
+The automated system only provides additional evidence to assist the administrator.
+
+#### Build Results
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | ✅ 0 errors |
+| `npm test` | ✅ 75/75 passed |
+| `.\gradlew assembleDebug` | ✅ BUILD SUCCESSFUL in 2m 27s |
+
+---
+
+> **Phase 2C-UX implementation complete. No database changes.
+> Automated checks are clearly separated from administrator review.
+> No AI approval terminology used anywhere in the application.**
