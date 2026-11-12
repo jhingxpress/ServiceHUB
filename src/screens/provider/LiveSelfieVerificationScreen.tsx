@@ -203,10 +203,14 @@ export default function LiveSelfieVerificationScreen({
 
   const takeBestPhoto = useCallback(async () => {
     if (capturingRef.current) return;
+    const cam = cameraRef.current;
+    if (!cam) {
+      setErrorMessage('Camera is not ready. Tap Retry to try again.');
+      setPhase('error');
+      return;
+    }
     capturingRef.current = true;
     try {
-      const cam = cameraRef.current;
-      if (!cam) return;
       const photo: PhotoFile = await cam.takePhoto({
         flash: 'off',
         enableShutterSound: false,
@@ -454,6 +458,20 @@ export default function LiveSelfieVerificationScreen({
             <TouchableOpacity style={styles.tertiaryBtn} onPress={onCancel}>
               <Text style={styles.tertiaryBtnText}>Cancel</Text>
             </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+    );
+  }
+
+  // ── Manual Fallback Phase (camera picker launching) ─────
+  if (phase === 'manual_fallback') {
+    return (
+      <Modal visible={visible} animationType="slide" statusBarTranslucent>
+        <SafeAreaView style={styles.container}>
+          <View style={styles.centerContent}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.uploadingText}>Opening camera…</Text>
           </View>
         </SafeAreaView>
       </Modal>

@@ -355,7 +355,16 @@ export default function ProviderOnboardingScreen() {
       }
       const selfieDoc = docs.find((d) => d.document_type === 'verification_selfie' || d.document_type === 'selfie_with_id');
       if (selfieDoc?.file_url) {
-        setSelfie({ uri: null, uploadedUrl: selfieDoc.file_url, state: 'success', error: null });
+        // Live-liveness uploads store the raw storage path (private bucket);
+        // legacy uploads store a public URL. Sign path-style values for preview.
+        let displayUrl = selfieDoc.file_url;
+        if (!displayUrl.startsWith('http')) {
+          const { data: signed } = await supabase.storage
+            .from('provider-documents')
+            .createSignedUrl(displayUrl, 3600);
+          if (signed?.signedUrl) displayUrl = signed.signedUrl;
+        }
+        setSelfie({ uri: null, uploadedUrl: displayUrl, state: 'success', error: null });
       }
       setPermits(prev => prev.map(p => {
         const ex = docs.find((d) => d.document_type === p.key);

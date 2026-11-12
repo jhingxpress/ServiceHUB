@@ -16,9 +16,12 @@ function makeFaceSample(overrides: Partial<FaceSample> = {}): FaceSample {
     centerX: 0.5,
     centerY: 0.5,
     sizeRatio: 0.4,
+    heightRatio: 0.5,
     leftEyeOpen: 0.9,
     rightEyeOpen: 0.9,
     yaw: 0,
+    pitch: 0,
+    roll: 0,
     timestamp: 1000,
     ...overrides,
   };
@@ -54,19 +57,19 @@ describe('livenessMachine', () => {
     it('stays at positioning if face is too small', () => {
       const state = runSequence([makeFaceSample({ sizeRatio: 0.1 })]);
       expect(state.step).toBe('positioning');
-      expect(state.hint).toBe('Move closer');
+      expect(state.hint).toBe('Move closer to the camera.');
     });
 
     it('stays at positioning if face is too large', () => {
       const state = runSequence([makeFaceSample({ sizeRatio: 0.99 })]);
       expect(state.step).toBe('positioning');
-      expect(state.hint).toBe('Move farther away');
+      expect(state.hint).toBe('Move slightly farther away.');
     });
 
     it('stays at positioning if face is off-center', () => {
       const state = runSequence([makeFaceSample({ centerX: 0.9 })]);
       expect(state.step).toBe('positioning');
-      expect(state.hint).toBe('Center your face');
+      expect(state.hint).toBe('Move slightly right.');
     });
 
     it('stays at positioning if yaw is too large', () => {

@@ -28,9 +28,12 @@ function makeFaceSample(overrides: Partial<FaceSample> = {}): FaceSample {
     centerX: 0.5,
     centerY: 0.5,
     sizeRatio: 0.4,
+    heightRatio: 0.5,
     leftEyeOpen: 0.9,
     rightEyeOpen: 0.9,
     yaw: 0,
+    pitch: 0,
+    roll: 0,
     timestamp: Date.now(),
     ...overrides,
   };
