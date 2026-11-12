@@ -21,6 +21,7 @@ import ImageView from 'react-native-image-viewing';
 import { supabase } from '../../lib/supabase';
 import { validateImagePickerAsset } from '../../utils/fileValidation';
 import { uploadImageToStorage } from '../../utils/storageUpload';
+import { extractChatMediaObjectPath } from '../../utils/chatMedia';
 import { useAuthStore } from '../../stores/authStore';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../../constants/theme';
 import Avatar from '../../components/ui/Avatar';
@@ -74,11 +75,7 @@ export default function ChatRoomScreen() {
     const newMap: Record<string, string> = {};
     await Promise.all(
       imageMsgs.map(async (msg) => {
-        const url = msg.image_url!;
-        const marker = '/object/public/chat-media/';
-        const idx = url.indexOf(marker);
-        const path = idx !== -1 ? url.slice(idx + marker.length) : null;
-        console.log(`[ChatSigned] msg.id=${msg.id} path=${path}`);
+        const path = extractChatMediaObjectPath(msg.image_url);
         if (!path) return;
         try {
           const { data, error } = await supabase.storage
@@ -335,13 +332,15 @@ export default function ChatRoomScreen() {
       const filePath = `${bookingId}/${fileName}`;
 
       console.log('[ChatUpload] filePath:', filePath, 'mimeType:', mimeType);
-      const publicUrl = await uploadImageToStorage(
+      await uploadImageToStorage(
         'chat-media',
         filePath,
         uri,
         mimeType
       );
-      console.log('[ChatUpload] publicUrl returned:', publicUrl);
+      // chat-media is a private bucket: store the object path, not a URL.
+      // Viewers resolve it to a short-lived signed URL at render time.
+      const storedRef = filePath;
 
       const { data: insertData, error: insertError } = await supabase
         .from('messages')
@@ -350,7 +349,7 @@ export default function ChatRoomScreen() {
           sender_id: user.id,
           receiver_id: otherUserId,
           content: null,
-          image_url: publicUrl,
+          image_url: storedRef,
           message_type: 'image',
         })
         .select('id, booking_id, sender_id, receiver_id, content, image_url, message_type, is_read, created_at')
